@@ -261,7 +261,15 @@ else:
 bestand = os.path.join(base_path, "Gegevens.xlsx")
 
 # Open workbook
-wb = openpyxl.load_workbook(bestand)
+uploaded_file = st.file_uploader("Upload een Excel bestand", type=["xlsx"])
+
+if uploaded_file is not None:
+    # Streamlit geeft een bestand-like object terug
+    wb = openpyxl.load_workbook(BytesIO(uploaded_file.read()))
+    st.success("Bestand succesvol geladen!")
+else:
+    st.warning("Upload een Excel bestand om verder te gaan.")
+
 ws = wb["Blad1"]
 
 
