@@ -238,9 +238,12 @@ for i in range(max_extra):
 for col in range(1,len(open_uren)+2):
     ws_out.column_dimensions[get_column_letter(col)].width=15
 
-# Unieke bestandsnaam
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+planning_bestand = f"Planning_{timestamp}.xlsx"
 
+output = BytesIO()
+wb_out.save(output)
+output.seek(0)
 
 
 
