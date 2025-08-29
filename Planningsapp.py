@@ -469,6 +469,25 @@ def maak_planning(studenten_local):
     return dagplanning, extra_per_uur, selected, gebruik_per_attractie_student
 
 
+def planning_check(dagplanning, extra_per_uur):
+    """
+    Controleer of er geen lege plekken of onmogelijke situaties in de planning zitten.
+    """
+    # Voorbeeld: check of er geen studenten in extra_per_uur overblijven
+    for uur, extras in extra_per_uur.items():
+        if len(extras) > 0:
+            return False
+
+    # Check of alle uren in dagplanning gevuld zijn
+    for attractie, posities in dagplanning.items():
+        for pos in posities:
+            for uur, naam in pos.items():
+                if naam in ["", "NIEMAND"]:  # leeg vak
+                    return False
+
+    return True
+
+
 
 def swap_extra_met_student(dagplanning, extra_per_uur, studenten_local, gebruik_per_attractie_student, open_uren):
     """
@@ -592,23 +611,6 @@ def log_feedback(msg):
     """Voeg een regel toe in het feedback-werkblad."""
     next_row = ws_feedback.max_row + 1
     ws_feedback.cell(next_row, 1, msg)
-
-max_attempts = 150
-for attempt in range(max_attempts):
-    studenten_copy = copy.deepcopy(studenten)
-    dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
-
-    # ✅ Nieuw: probeer extra studenten naar vrije blokken te verplaatsen
-    verplaats_extra_in_blokken(dagplanning, extra_per_uur, studenten_copy, gebruik_per_attractie_student, open_uren)
-
-    # Controleer nu pas of planning volledig is
-    if planning_check(dagplanning, extra_per_uur):
-        log_feedback(f"✅ Planning geslaagd in {attempt+1} pogingen.")
-        studenten = studenten_copy  # originele lijst updaten met juiste status
-        break
-else:
-    log_feedback("⚠️ Geen geldige planning gevonden na veel pogingen!")
-
 
 
 
