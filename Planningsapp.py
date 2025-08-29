@@ -21,14 +21,14 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
     while i < len(uren):
         geplanned = False
-        for blok in [3, 2, 1]:
+        for blok in [3, 4, 2,1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
             kandidaten = []
             for s in studenten:
                 naam = s["naam"]
-                if gebruik_per_student_attractie[naam] + blok > 5:  # max 5 uur
+                if gebruik_per_student_attractie[naam] + blok > 4:  # max 5 uur
                     continue
                 if attractie not in s["attracties"]:
                     continue
@@ -55,7 +55,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             kandidaten_1 = []
             for s in studenten:
                 naam = s["naam"]
-                if gebruik_per_student_attractie[naam] >= 5:
+                if gebruik_per_student_attractie[naam] >= 4:
                     continue
                 if attractie not in s["attracties"]:
                     continue
@@ -281,14 +281,14 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
     while i < len(uren):
         geplanned = False
-        for blok in [3, 2, 1]:
+        for blok in [3, 4, 2, 1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
             kandidaten = []
             for s in studenten:
                 naam = s["naam"]
-                if gebruik_per_student_attractie[naam] + blok > 5:  # max 5 uur
+                if gebruik_per_student_attractie[naam] + blok > 4:  # max 5 uur
                     continue
                 if attractie not in s["attracties"]:
                     continue
@@ -313,7 +313,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             kandidaten_1 = []
             for s in studenten:
                 naam = s["naam"]
-                if gebruik_per_student_attractie[naam] >= 5:
+                if gebruik_per_student_attractie[naam] >= 4:
                     continue
                 if attractie not in s["attracties"]:
                     continue
