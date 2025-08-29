@@ -236,19 +236,6 @@ for uur in sorted(open_uren):
             extra_studenten.append(s["naam"])
     extra_per_uur[uur] = extra_studenten
 
-# -----------------------------
-# Excelbestand openen
-# -----------------------------
-uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
-if uploaded_file:
-    wb = load_workbook(uploaded_file)
-    ws = wb["Blad1"]
-else:
-    st.warning("Upload eerst een Excel-bestand om verder te gaan.")
-    st.stop()
-
-ws = wb["Blad1"]
-
 
 # -----------------------------
 # Hulpfunctie: plan 1 positie van 1 attractie
