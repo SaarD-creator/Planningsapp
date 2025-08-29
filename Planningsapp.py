@@ -133,6 +133,8 @@ for rij in range(2, 500):
         "pv_number": None
     })
 
+# Studenten sorteren: eerst de studenten die het minst aantal attracties kunnen
+studenten = sorted(studenten, key=lambda s: s["aantal_attracties"])
 
 
 # -----------------------------
@@ -387,8 +389,28 @@ import copy
 # -----------------------------
 # Functie: maak volledige planning
 # -----------------------------
+
+def plaats_student(student, dagplanning, student_bezet, gebruik_per_attractie_student, open_uren):
+    """
+    Probeer deze student in te plannen op een attractie en uur.
+    Retourneert True als gelukt, anders False.
+    """
+    for attractie, posities in dagplanning.items():
+        for pos in posities:  # pos is een dict {uur: naam}
+            for uur in open_uren:
+                if pos.get(uur, "NIEMAND") == "NIEMAND":
+                    if uur in student["uren_beschikbaar"] and attractie in student["attracties"]:
+                        if uur not in student_bezet[student["naam"]] and gebruik_per_attractie_student[attractie][student["naam"]] < 5:
+                            pos[uur] = student["naam"]
+                            student_bezet[student["naam"]].append(uur)
+                            gebruik_per_attractie_student[attractie][student["naam"]] += 1
+                            return True
+    return False
+
+
+
 def maak_planning(studenten_local):
-    # Pauzevlinders kiezen (BN2) – random uit geschikte kandidaten
+    # Pauzevlinders kiezen (BN2)
     raw_bn2 = ws['BN2'].value
     try:
         num_pauzevlinders = int(float(str(raw_bn2).replace(",", ".").strip())) if raw_bn2 else 0
@@ -409,29 +431,23 @@ def maak_planning(studenten_local):
         s["pv_number"] = idx
         s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
 
-    # Attracties plannen
+    # Attracties plannen: lege structuur opbouwen
     attracties_te_plannen = [naam for naam, aantal in aantallen.items() if aantal >= 1]
-
-    def kritieke_score(attr):
-        return sum(1 for s in studenten_local if attr in s['attracties'])
-
-    attracties_te_plannen.sort(key=kritieke_score)
+    dagplanning = {
+        attr: [{u: "NIEMAND" for u in open_uren} for _ in range(aantallen.get(attr, 1))]
+        for attr in attracties_te_plannen
+    }
 
     student_bezet = {s["naam"]: [] for s in studenten_local}
-    dagplanning = {}
-    gebruik_per_attractie_student = {attr: {s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
+    gebruik_per_attractie_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
-    # Ronde 1: eerste posities
-    for attractie in attracties_te_plannen:
-        dagplanning[attractie] = []
-        pos1 = plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=True)
-        dagplanning[attractie].append(pos1)
+    # Studenten sorteren op aantal attracties (minst eerst)
+    studenten_sorted = sorted(studenten_local, key=lambda s: s["aantal_attracties"])
 
-    # Ronde 2: tweede posities indien nodig
-    for attractie in attracties_te_plannen:
-        if aantallen.get(attractie, 1) >= 2:
-            pos2 = plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=False)
-            dagplanning[attractie].append(pos2)
+    # Studenten in volgorde inplannen
+    for student in studenten_sorted:
+        geplaatst = plaats_student(student, dagplanning, student_bezet, gebruik_per_attractie_student, open_uren)
+        # Als niet geplaatst -> later naar 'extra'
 
     # Wissel extra studenten naar lege posities
     uren_bezet = defaultdict(set)
@@ -468,6 +484,7 @@ def maak_planning(studenten_local):
                             break
 
     return dagplanning, extra_per_uur, selected
+
 
 # -----------------------------
 # Functie: check of planning volledig is
