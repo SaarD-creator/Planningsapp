@@ -226,19 +226,38 @@ for posities in dagplanning.values():
             if naam not in ["", "NIEMAND"]:
                 uren_bezet[u].add(naam)
 
+# Voeg pauzevlinders toe aan uren_bezet zodat ze niet ingepland worden bij attracties
 for pv in selected:
     for u in required_hours:
         uren_bezet[u].add(pv["naam"])
 
+# Bouw lijst van extra studenten per uur
 extra_per_uur = {}
 for uur in sorted(open_uren):
     extra_studenten = []
-    for s in studenten:
-        if s.get("is_pauzevlinder"):
+    for s in studenten_local:
+        # Pauzevlinders kunnen niet tijdens hun pauzeuren
+        if s.get("is_pauzevlinder") and uur in required_hours:
             continue
+        # Alleen studenten die beschikbaar zijn en nog niet ingepland
         if uur in s["uren_beschikbaar"] and s["naam"] not in uren_bezet[uur]:
             extra_studenten.append(s["naam"])
     extra_per_uur[uur] = extra_studenten
+
+# Vul lege posities ("NIEMAND") met extra studenten, met dezelfde blokkering voor pauzevlinders
+for uur in sorted(open_uren):
+    for attractie, posities in dagplanning.items():
+        for pos in posities:
+            if pos.get(uur, "") == "NIEMAND":
+                for naam_extra in extra_per_uur[uur][:]:
+                    student_obj = next(s for s in studenten_local if s['naam'] == naam_extra)
+                    # Controleer pauzevlinderstatus en max gebruik
+                    if (uur not in required_hours) and (attractie in student_obj['attracties']) and (gebruik_per_attractie_student[attractie][naam_extra] < 5):
+                        pos[uur] = naam_extra
+                        student_bezet[naam_extra].append(uur)
+                        gebruik_per_attractie_student[attractie][naam_extra] += 1
+                        extra_per_uur[uur].remove(naam_extra)
+                        break
 
 
 import openpyxl
@@ -253,19 +272,8 @@ import openpyxl
 import datetime
 
 
-# Vind de map van de exe (of script)
-if getattr(sys, 'frozen', False):
-    # draaien als exe
-    base_path = sys._MEIPASS  # tijdelijke folder van PyInstaller
-else:
-    # draaien als script
-    base_path = os.path.dirname(os.path.abspath(__file__))
 
-# Excelbestand in die map
-bestand = os.path.join(base_path, "Gegevens.xlsx")
 
-# Open workbook
-uploaded_file = st.file_uploader("Upload een Excel bestand", type=["xlsx"])
 
 if uploaded_file is not None:
     # Streamlit geeft een bestand-like object terug
