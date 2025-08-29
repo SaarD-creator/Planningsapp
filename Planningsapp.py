@@ -100,13 +100,13 @@ for rij in range(4,11):
 # -----------------------------
 # Functie: plan blokken bij attractie
 # -----------------------------
-def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, max_per_student=6, max_aaneengesloten=4):
+def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, max_per_student=6, max_aaneengesloten=4):
     planning = {}
     uren = sorted(open_uren)
     i = 0
     while i < len(uren):
         geplanned = False
-        for blok in [3,4,2,1]:
+        for blok in [3,4,2,1]:  # Prioriteit: 3 uur
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
@@ -122,16 +122,15 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 if gebruik_per_student_attractie[naam] + blok > max_per_student:
                     continue
                 bestaand = sorted([u for u,a in student_bezet.get(f"{naam}_{attractie}", []) if a==attractie])
+                gecombineerde = sorted(bestaand + blokuren)
                 max_reeks=1
-                if bestaand:
-                    gecombineerde = sorted(bestaand+blokuren)
-                    reeks=1
-                    for idx in range(1,len(gecombineerde)):
-                        if gecombineerde[idx]==gecombineerde[idx-1]+1:
-                            reeks+=1
-                            max_reeks=max(max_reeks,reeks)
-                        else:
-                            reeks=1
+                reeks=1
+                for idx in range(1,len(gecombineerde)):
+                    if gecombineerde[idx]==gecombineerde[idx-1]+1:
+                        reeks+=1
+                        max_reeks=max(max_reeks,reeks)
+                    else:
+                        reeks=1
                 if max_reeks>max_aaneengesloten:
                     continue
                 kandidaten.append(s)
@@ -150,7 +149,6 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 geplanned=True
                 break
         if not geplanned:
-            # laatste optie 1 uur
             u = uren[i]
             kandidaten_1=[]
             for s in studenten:
@@ -164,16 +162,15 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 if gebruik_per_student_attractie[naam]>=max_per_student:
                     continue
                 bestaand=sorted([hour for hour,a in student_bezet.get(f"{naam}_{attractie}",[]) if a==attractie])
+                gecombineerde=sorted(bestaand+[u])
                 max_reeks=1
-                if bestaand:
-                    gecombineerde=sorted(bestaand+[u])
-                    reeks=1
-                    for idx in range(1,len(gecombineerde)):
-                        if gecombineerde[idx]==gecombineerde[idx-1]+1:
-                            reeks+=1
-                            max_reeks=max(max_reeks,reeks)
-                        else:
-                            reeks=1
+                reeks=1
+                for idx in range(1,len(gecombineerde)):
+                    if gecombineerde[idx]==gecombineerde[idx-1]+1:
+                        reeks+=1
+                        max_reeks=max(max_reeks,reeks)
+                    else:
+                        reeks=1
                 if max_reeks>max_aaneengesloten:
                     continue
                 kandidaten_1.append(s)
@@ -200,14 +197,14 @@ def maak_planning(studenten_local):
 
     # Eerste posities
     for attractie in attracties_te_plannen:
-        dagplanning[attractie]=[plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren)]
+        dagplanning[attractie]=[plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie])]
 
     # Tweede posities
     for attractie in attracties_te_plannen:
         if aantallen.get(attractie,1)>=2:
-            dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren))
+            dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie]))
 
-    # Iteratief schuiven voor lege plekken
+    # Iteratief schuiven totdat NIEMAND-plekken gevuld zijn
     while True:
         swapped=False
         for uur in open_uren:
@@ -234,7 +231,6 @@ def maak_planning(studenten_local):
                                     reeks=1
                             if max_reeks>4:
                                 continue
-                            # swap
                             pos[uur]=naam
                             student_bezet[naam].append(uur)
                             if f"{naam}_{attractie}" not in student_bezet:
@@ -246,7 +242,7 @@ def maak_planning(studenten_local):
         if not swapped:
             break
 
-    # Extra
+    # Extra pas invullen als echt geen andere plek beschikbaar
     extra_per_uur=defaultdict(list)
     for uur in open_uren:
         for s in studenten_local:
@@ -285,8 +281,8 @@ for col_idx, uur in enumerate(sorted(open_uren),start=2):
     ws_out.cell(1,col_idx).alignment=center_align
     ws_out.cell(1,col_idx).border=thin_border
 
-rij_out=2
 # Attracties
+rij_out=2
 for attractie,posities in dagplanning.items():
     for idx,planning in enumerate(posities,start=1):
         naam_attr = attractie if len(posities)==1 else f"{attractie} {idx}"
@@ -319,7 +315,7 @@ for pv_idx in range(1,len(selected)+1):
         ws_out.cell(rij_out,col_idx).border=thin_border
     rij_out+=1
 
-# Extra
+# Extra (alleen overgebleven)
 rij_out+=1
 max_extra=max(len(names) for names in extra_per_uur.values()) if extra_per_uur else 0
 for i in range(max_extra):
@@ -337,12 +333,11 @@ for i in range(max_extra):
 for col in range(1,len(open_uren)+2):
     ws_out.column_dimensions[get_column_letter(col)].width=15
 
-# In-memory bestand
-output=BytesIO()
+# Opslaan in geheugen
+output = BytesIO()
 wb_out.save(output)
 output.seek(0)
-st.download_button("Download planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-
+st.download_button("Download Planning Excel", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
 
 
