@@ -210,12 +210,12 @@ gebruik_per_attractie_student = {attr: {s["naam"]: 0 for s in studenten} for att
 
 for attractie in attracties_te_plannen:
     dagplanning[attractie] = []
-    pos1 = plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=True)
+    pos1 = plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_attractie_student[attractie], open_uren)
     dagplanning[attractie].append(pos1)
 
 for attractie in attracties_te_plannen:
     if aantallen.get(attractie, 1) >= 2:
-        pos2 = plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=False)
+        pos2 = plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_attractie_student[attractie], open_uren)
         dagplanning[attractie].append(pos2)
 
 
