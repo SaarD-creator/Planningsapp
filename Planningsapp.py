@@ -152,22 +152,6 @@ if not open_uren:
 open_uren = sorted(set(open_uren))
 
 
-# Pauzevlinders kiezen uit kolom BN (rij 4 t/m 10)
-required_hours = [12, 13, 14, 15, 16, 17]
-pauzevlinder_namen = [ws[f'BN{r}'].value for r in range(4, 11) if ws[f'BN{r}'].value]
-
-selected = []
-for idx, naam in enumerate(pauzevlinder_namen, start=1):
-    # Zoek student met deze naam
-    s_match = next((s for s in studenten_local if s['naam'] == naam), None)
-    if s_match:
-        s_match["is_pauzevlinder"] = True
-        s_match["pv_number"] = idx
-        # Verwijder required_hours uit beschikbaarheid
-        s_match["uren_beschikbaar"] = [u for u in s_match["uren_beschikbaar"] if u not in required_hours]
-        selected.append(s_match)
-
-
 # -----------------------------
 # Attracties plannen (AU:BL)
 # -----------------------------
@@ -325,27 +309,30 @@ import copy
 # Functie: maak volledige planning
 # -----------------------------
 def maak_planning(studenten_local):
-    # Pauzevlinders kiezen (BN2) – random uit geschikte kandidaten
-    raw_bn2 = ws['BN2'].value
-    try:
-        num_pauzevlinders = int(float(str(raw_bn2).replace(",", ".").strip())) if raw_bn2 else 0
-    except:
-        num_pauzevlinders = 0
+    """
+    Maakt een volledige dagplanning:
+    - Pauzevlinders exact uit BN4 t/m BN10
+    - Attracties plannen (max 2 per attractie)
+    - Extra studenten plaatsen bij lege posities
+    """
 
+    # -----------------------------
+    # Pauzevlinders kiezen uit kolom BN (rij 4 t/m 10)
     required_hours = [12, 13, 14, 15, 16, 17]
+    pauzevlinder_namen = [ws[f'BN{r}'].value for r in range(4, 11) if ws[f'BN{r}'].value]
 
-    # Filter kandidaten: beschikbaar in alle required_hours en minstens 8 attracties
-    candidates = [s for s in studenten_local if all(u in s['uren_beschikbaar'] for u in required_hours) and s['aantal_attracties'] >= 8]
+    selected = []
+    for idx, naam in enumerate(pauzevlinder_namen, start=1):
+        # Zoek student met deze naam in studenten_local
+        s_match = next((s for s in studenten_local if s['naam'] == naam), None)
+        if s_match:
+            s_match["is_pauzevlinder"] = True
+            s_match["pv_number"] = idx
+            # Verwijder required_hours uit beschikbaarheid
+            s_match["uren_beschikbaar"] = [u for u in s_match["uren_beschikbaar"] if u not in required_hours]
+            selected.append(s_match)
 
-    # Kies random het gewenste aantal pauzevlinders
-    selected = random.sample(candidates, min(num_pauzevlinders, len(candidates))) if num_pauzevlinders > 0 else []
-
-    # Markeer de gekozen pauzevlinders en verwijder hun required_hours uit beschikbaarheid
-    for idx, s in enumerate(selected, start=1):
-        s["is_pauzevlinder"] = True
-        s["pv_number"] = idx
-        s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
-
+    # -----------------------------
     # Attracties plannen
     attracties_te_plannen = [naam for naam, aantal in aantallen.items() if aantal >= 1]
 
@@ -370,6 +357,7 @@ def maak_planning(studenten_local):
             pos2 = plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=False)
             dagplanning[attractie].append(pos2)
 
+    # -----------------------------
     # Wissel extra studenten naar lege posities
     uren_bezet = defaultdict(set)
     for posities in dagplanning.values():
@@ -377,6 +365,7 @@ def maak_planning(studenten_local):
             for u, naam in pos.items():
                 if naam not in ["", "NIEMAND"]:
                     uren_bezet[u].add(naam)
+
     for pv in selected:
         for u in required_hours:
             uren_bezet[u].add(pv["naam"])
@@ -391,6 +380,7 @@ def maak_planning(studenten_local):
                 extra_studenten.append(s["naam"])
         extra_per_uur[uur] = extra_studenten
 
+    # Plaats extra studenten bij lege posities
     for uur in sorted(open_uren):
         for attractie, posities in dagplanning.items():
             for pos in posities:
