@@ -551,6 +551,16 @@ def swap_extra_met_student(dagplanning, extra_per_uur, studenten_local, gebruik_
     return False
 
 
+# Feedbackblad aanmaken
+ws_feedback = wb_out.create_sheet("Feedback")
+
+# Functie om feedback te loggen
+def log_feedback(msg):
+    """Voeg een regel toe in het feedback-werkblad."""
+    next_row = ws_feedback.max_row + 1
+    ws_feedback.cell(next_row, 1, msg)
+
+
 
 # -----------------------------
 # Herhaal planning totdat volledig
