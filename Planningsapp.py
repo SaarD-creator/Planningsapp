@@ -26,28 +26,23 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             kandidaten = []
             for s in studenten:
                 naam = s["naam"]
-                # Pauzevlinder kan niet gekozen worden
-                if s.get("is_pauzevlinder", False):
+                # Pauzevlinder kan niet gekozen worden in hun pauze-uren
+                if s.get("is_pauzevlinder", False) and any(u in [12,13,14,15,16,17] for u in blokuren):
                     continue
-                # Max 5 uur per attractie
                 if gebruik_per_student_attractie[naam] + blok > 5:
                     continue
-                # Alleen studenten die deze attractie kunnen
                 if attractie not in s["attracties"]:
                     continue
-                # Alle uren in blok moeten beschikbaar zijn
                 if not all(u in s["uren_beschikbaar"] for u in blokuren):
                     continue
-                # Controleer of student al bezet is in die uren
                 if any(u in student_bezet[naam] for u in blokuren):
                     continue
                 kandidaten.append(s)
 
             if kandidaten:
-                # Kies student met minst aantal attracties (AG)
                 min_attracties = min(s["aantal_attracties"] for s in kandidaten)
                 beste = [s for s in kandidaten if s["aantal_attracties"] == min_attracties]
-                gekozen = beste[0]  # kies de eerste (of willekeurig als je wilt)
+                gekozen = beste[0]
                 for u in blokuren:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
@@ -57,12 +52,11 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 break
 
         if not geplanned:
-            # fallback: 1 uur
             u = uren[i]
             kandidaten_1 = []
             for s in studenten:
                 naam = s["naam"]
-                if s.get("is_pauzevlinder", False):
+                if s.get("is_pauzevlinder", False) and u in [12,13,14,15,16,17]:
                     continue
                 if gebruik_per_student_attractie[naam] >= 5:
                     continue
@@ -86,6 +80,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             i += 1
 
     return planning
+
 
 # -----------------------------
 # Excelbestand openen
@@ -299,28 +294,23 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             kandidaten = []
             for s in studenten:
                 naam = s["naam"]
-                # Pauzevlinder kan niet gekozen worden
-                if s.get("is_pauzevlinder", False):
+                # Pauzevlinder kan niet gekozen worden in hun pauze-uren
+                if s.get("is_pauzevlinder", False) and any(u in [12,13,14,15,16,17] for u in blokuren):
                     continue
-                # Max 5 uur per attractie
                 if gebruik_per_student_attractie[naam] + blok > 5:
                     continue
-                # Alleen studenten die deze attractie kunnen
                 if attractie not in s["attracties"]:
                     continue
-                # Alle uren in blok moeten beschikbaar zijn
                 if not all(u in s["uren_beschikbaar"] for u in blokuren):
                     continue
-                # Controleer of student al bezet is in die uren
                 if any(u in student_bezet[naam] for u in blokuren):
                     continue
                 kandidaten.append(s)
 
             if kandidaten:
-                # Kies student met minst aantal attracties (AG)
                 min_attracties = min(s["aantal_attracties"] for s in kandidaten)
                 beste = [s for s in kandidaten if s["aantal_attracties"] == min_attracties]
-                gekozen = beste[0]  # kies de eerste (of willekeurig als je wilt)
+                gekozen = beste[0]
                 for u in blokuren:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
@@ -330,12 +320,11 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 break
 
         if not geplanned:
-            # fallback: 1 uur
             u = uren[i]
             kandidaten_1 = []
             for s in studenten:
                 naam = s["naam"]
-                if s.get("is_pauzevlinder", False):
+                if s.get("is_pauzevlinder", False) and u in [12,13,14,15,16,17]:
                     continue
                 if gebruik_per_student_attractie[naam] >= 5:
                     continue
@@ -359,6 +348,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             i += 1
 
     return planning
+
 
 
 # -----------------------------
