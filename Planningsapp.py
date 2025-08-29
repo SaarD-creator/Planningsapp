@@ -321,7 +321,7 @@ def maak_planning(studenten_local):
     required_hours = [12, 13, 14, 15, 16, 17]
     pauzevlinder_namen = [ws[f'BN{r}'].value for r in range(4, 11) if ws[f'BN{r}'].value]
 
-    selected = []
+    selected = []  # altijd definiëren
     for idx, naam in enumerate(pauzevlinder_namen, start=1):
         # Zoek student met deze naam in studenten_local
         s_match = next((s for s in studenten_local if s['naam'] == naam), None)
@@ -331,6 +331,9 @@ def maak_planning(studenten_local):
             # Verwijder required_hours uit beschikbaarheid
             s_match["uren_beschikbaar"] = [u for u in s_match["uren_beschikbaar"] if u not in required_hours]
             selected.append(s_match)
+        else:
+            # Optioneel: feedback/log dat naam niet gevonden is
+            print(f"⚠️ Pauzevlinder '{naam}' niet gevonden in studentenlijst.")
 
     # -----------------------------
     # Attracties plannen
@@ -395,6 +398,7 @@ def maak_planning(studenten_local):
                             break
 
     return dagplanning, extra_per_uur, selected
+
 
 # -----------------------------
 # Functie: check of planning volledig is
