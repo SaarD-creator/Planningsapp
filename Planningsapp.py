@@ -133,6 +133,23 @@ for rij in range(2, 500):
         "pv_number": None
     })
 
+# -----------------------------
+# Pauzevlinders kiezen uit Excel: kolom BN, rijen 4–10
+# -----------------------------
+required_hours = [12, 13, 14, 15, 16, 17]
+
+selected = []  # ✅ zorg dat deze lijst altijd bestaat
+for rij in range(4, 11):  # BN4 t/m BN10
+    naam_pv = ws[f'BN{rij}'].value
+    if naam_pv:
+        # Vind de student in de lijst
+        student_obj = next((s for s in studenten if s["naam"] == naam_pv), None)
+        if student_obj:
+            student_obj["is_pauzevlinder"] = True
+            student_obj["pv_number"] = len(selected) + 1
+            # Verwijder hun pauze-uren uit beschikbaarheid
+            student_obj["uren_beschikbaar"] = [u for u in student_obj["uren_beschikbaar"] if u not in required_hours]
+            selected.append(student_obj)
 
 
 # -----------------------------
@@ -309,23 +326,6 @@ import copy
 # -----------------------------
 # Functie: maak volledige planning
 # -----------------------------
-
-# Pauzevlinders kiezen uit Excel: kolom BN, rijen 4–10
-required_hours = [12, 13, 14, 15, 16, 17]
-
-selected = []
-for rij in range(4, 11):  # BN4 t/m BN10
-    naam_pv = ws[f'BN{rij}'].value
-    if naam_pv:
-        # Vind de student in de lijst
-        student_obj = next((s for s in studenten_local if s["naam"] == naam_pv), None)
-        if student_obj:
-            student_obj["is_pauzevlinder"] = True
-            student_obj["pv_number"] = len(selected) + 1
-            # Verwijder hun pauze-uren uit beschikbaarheid
-            student_obj["uren_beschikbaar"] = [u for u in student_obj["uren_beschikbaar"] if u not in required_hours]
-            selected.append(student_obj)
-
 
 
 def maak_planning(studenten_local):
