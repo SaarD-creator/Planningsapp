@@ -9,8 +9,6 @@ from openpyxl.utils import get_column_letter
 import datetime
 from io import BytesIO
 
-
-
 # Datum van vandaag opmaken
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
@@ -155,25 +153,16 @@ open_uren = sorted(set(open_uren))
 
 
 # -----------------------------
-# Pauzevlinders kiezen uit Excel (BN4:BN10)
+# Pauzevlinders kiezen (BN2)
 # -----------------------------
-required_hours = [12, 13, 14, 15, 16, 17]
-selected = []
 
-# BN4 t/m BN10 zijn de namen van de gekozen pauzevlinders
-for rij in range(4, 11):
-    naam_pv = ws[f'BN{rij}'].value
-    if naam_pv:
-        # zoek de student met die naam in de lijst studenten
-        student_obj = next((s for s in studenten if s["naam"] == naam_pv), None)
-        if student_obj:
-            student_obj["is_pauzevlinder"] = True
-            student_obj["pv_number"] = len(selected) + 1
-            # verwijder verplichte pauze-uren uit hun beschikbaarheid
-            student_obj["uren_beschikbaar"] = [
-                u for u in student_obj["uren_beschikbaar"] if u not in required_hours
-            ]
-            selected.append(student_obj)
+
+selected = candidates[:num_pauzevlinders] if num_pauzevlinders > 0 else []
+for idx, s in enumerate(selected, start=1):
+    s["is_pauzevlinder"] = True
+    s["pv_number"] = idx
+    s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
+
 
 # -----------------------------
 # Attracties plannen (AU:BL)
@@ -391,7 +380,22 @@ import copy
 # Functie: maak volledige planning
 # -----------------------------
 def maak_planning(studenten_local):
+    # Pauzevlinders kiezen (BN4:BN10) – rechtstreeks uit Excel
+    selected = []
+    for rij in range(4, 11):  # BN4 t/m BN10
+        naam_pv = ws[f'BN{rij}'].value
+        if naam_pv:
+            student_obj = next((s for s in studenten_local if s["naam"] == naam_pv), None)
+            if student_obj:
+                selected.append(student_obj)
+
     required_hours = [12, 13, 14, 15, 16, 17]
+
+    # Markeer de gekozen pauzevlinders en verwijder hun required_hours uit beschikbaarheid
+    for idx, s in enumerate(selected, start=1):
+        s["is_pauzevlinder"] = True
+        s["pv_number"] = idx
+        s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
 
     # Attracties plannen
     attracties_te_plannen = [naam for naam, aantal in aantallen.items() if aantal >= 1]
@@ -403,24 +407,18 @@ def maak_planning(studenten_local):
 
     student_bezet = {s["naam"]: [] for s in studenten_local}
     dagplanning = {}
-    gebruik_per_attractie_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
+    gebruik_per_attractie_student = {attr: {s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
 
     # Ronde 1: eerste posities
     for attractie in attracties_te_plannen:
         dagplanning[attractie] = []
-        pos1 = plan_attractie_pos(
-            attractie, studenten_local, student_bezet,
-            gebruik_per_attractie_student[attractie], open_uren, verplicht=True
-        )
+        pos1 = plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=True)
         dagplanning[attractie].append(pos1)
 
     # Ronde 2: tweede posities indien nodig
     for attractie in attracties_te_plannen:
         if aantallen.get(attractie, 1) >= 2:
-            pos2 = plan_attractie_pos(
-                attractie, studenten_local, student_bezet,
-                gebruik_per_attractie_student[attractie], open_uren, verplicht=False
-            )
+            pos2 = plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=False)
             dagplanning[attractie].append(pos2)
 
     # Wissel extra studenten naar lege posities
@@ -430,13 +428,10 @@ def maak_planning(studenten_local):
             for u, naam in pos.items():
                 if naam not in ["", "NIEMAND"]:
                     uren_bezet[u].add(naam)
-
-    # Markeer pauzevlinders als bezet in hun verplichte pauze-uren
-    for pv in [s for s in studenten_local if s.get("is_pauzevlinder")]:
+    for pv in selected:
         for u in required_hours:
             uren_bezet[u].add(pv["naam"])
 
-    # Extra studenten die nog geplaatst kunnen worden
     extra_per_uur = {}
     for uur in sorted(open_uren):
         extra_studenten = []
@@ -447,27 +442,21 @@ def maak_planning(studenten_local):
                 extra_studenten.append(s["naam"])
         extra_per_uur[uur] = extra_studenten
 
-    # Vul lege plekken met extra studenten
     for uur in sorted(open_uren):
         for attractie, posities in dagplanning.items():
             for pos in posities:
                 if pos.get(uur, "") == "NIEMAND":
                     for naam_extra in extra_per_uur[uur][:]:
                         student_obj = next(s for s in studenten_local if s['naam'] == naam_extra)
-                        if (uur in student_obj['uren_beschikbaar']
-                            and attractie in student_obj['attracties']
-                            and gebruik_per_attractie_student[attractie][naam_extra] < 5):
+                        if uur in student_obj['uren_beschikbaar'] and attractie in student_obj['attracties'] and gebruik_per_attractie_student[attractie][naam_extra] < 5:
                             pos[uur] = naam_extra
                             student_bezet[naam_extra].append(uur)
                             gebruik_per_attractie_student[attractie][naam_extra] += 1
                             extra_per_uur[uur].remove(naam_extra)
                             break
 
-    # ⚠️ selected hoeft hier niet meer gekozen te worden,
-    # maar voor consistentie kun je het wel teruggeven
-    selected = [s for s in studenten_local if s.get("is_pauzevlinder")]
-
     return dagplanning, extra_per_uur, selected
+
 
 # -----------------------------
 # Functie: check of planning volledig is
@@ -1212,5 +1201,4 @@ st.download_button(
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
-
 
