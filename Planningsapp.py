@@ -57,6 +57,9 @@ for rij in range(4, 11):
     if naam:
         pauzevlinders.append({"naam": naam.strip()})
 
+# Zorg dat DEEL 2–5 hetzelfde gebruikt
+selected = pauzevlinders
+
 # Pauzevlinders uit algemene studenten verwijderen
 studenten = [s for s in studenten if s["naam"] not in [pv["naam"] for pv in pauzevlinders]]
 
