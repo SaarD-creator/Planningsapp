@@ -196,7 +196,7 @@ gebruik_per_attractie_student = {attr: {s["naam"]: 0 for s in studenten} for att
 
 for attractie in attracties_te_plannen:
     dagplanning[attractie] = []
-    pos1 = plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=True)
+    pos1 = plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_attractie_student[attractie], open_uren, blokvolgorde=[3,4,2,1])
     dagplanning[attractie].append(pos1)
 
 for attractie in attracties_te_plannen:
