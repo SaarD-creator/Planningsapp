@@ -466,7 +466,8 @@ def maak_planning(studenten_local):
                             extra_per_uur[uur].remove(naam_extra)
                             break
 
-    return dagplanning, extra_per_uur, selected
+    return dagplanning, extra_per_uur, selected, gebruik_per_attractie_student
+
 
 
 def swap_extra_met_student(dagplanning, extra_per_uur, studenten_local, gebruik_per_attractie_student, open_uren):
@@ -533,23 +534,41 @@ def swap_extra_met_student(dagplanning, extra_per_uur, studenten_local, gebruik_
 
 
 # -----------------------------
-# Functie: check of planning volledig is
+# Herhaal planning totdat volledig
 # -----------------------------
-def planning_check(dagplanning, extra_per_uur):
-    for attractie, posities in dagplanning.items():
-        for pos in posities:
-            for uur, naam in pos.items():
-                if naam == "NIEMAND" and extra_per_uur.get(uur):
-                    return False
-    return True
+max_attempts = 150
+for attempt in range(max_attempts):
+    studenten_copy = copy.deepcopy(studenten)
 
-# ✅ Eerst proberen lege blokken op te vullen
-verplaats_extra_in_blokken(dagplanning, extra_per_uur, studenten_copy, gebruik_per_attractie_student, open_uren)
+    # ✅ LET OP: nu ook gebruik_per_attractie_student mee teruggeven
+    dagplanning, extra_per_uur, selected, gebruik_per_attractie_student = maak_planning(studenten_copy)
 
-# ✅ Dan proberen te wisselen met andere studenten
-while swap_extra_met_student(dagplanning, extra_per_uur, studenten_copy, gebruik_per_attractie_student, open_uren):
-    # Blijf wisselen totdat er geen verbeteringen meer zijn
-    pass
+    # ✅ Eerst extra’s in lege blokken plaatsen
+    verplaats_extra_in_blokken(
+        dagplanning,
+        extra_per_uur,
+        studenten_copy,
+        gebruik_per_attractie_student,
+        open_uren
+    )
+
+    # ✅ Daarna proberen te swappen totdat er geen verbeteringen meer zijn
+    while swap_extra_met_student(
+        dagplanning,
+        extra_per_uur,
+        studenten_copy,
+        gebruik_per_attractie_student,
+        open_uren
+    ):
+        pass
+
+    # ✅ Nu pas checken of de planning volledig is
+    if planning_check(dagplanning, extra_per_uur):
+        log_feedback(f"✅ Planning geslaagd in {attempt+1} pogingen.")
+        studenten = studenten_copy  # originele lijst updaten met juiste status
+        break
+else:
+    log_feedback("⚠️ Geen geldige planning gevonden na veel pogingen!")
 
 
 
