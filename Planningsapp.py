@@ -254,6 +254,20 @@ import datetime
 
 
 
+# Vind de map van de exe (of script)
+if getattr(sys, 'frozen', False):
+    # draaien als exe
+    base_path = sys._MEIPASS  # tijdelijke folder van PyInstaller
+else:
+    # draaien als script
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+# Excelbestand in die map
+bestand = os.path.join(base_path, "Gegevens.xlsx")
+
+# Open workbook
+uploaded_file = st.file_uploader("Upload een Excel bestand", type=["xlsx"])
+
 
 
 if uploaded_file is not None:
