@@ -152,24 +152,20 @@ if not open_uren:
 open_uren = sorted(set(open_uren))
 
 
-# -----------------------------
-# Pauzevlinders kiezen (BN2)
-# -----------------------------
-raw_bn2 = ws['BN2'].value
-try:
-    num_pauzevlinders = int(float(str(raw_bn2).replace(",", ".").strip())) if raw_bn2 else 0
-except:
-    num_pauzevlinders = 0
-
+# Pauzevlinders kiezen uit kolom BN (rij 4 t/m 10)
 required_hours = [12, 13, 14, 15, 16, 17]
-candidates = [s for s in studenten if all(u in s['uren_beschikbaar'] for u in required_hours) and s['aantal_attracties'] >= 8]
-candidates.sort(key=lambda x: (-x["aantal_attracties"], -len(x["uren_beschikbaar"]), x["naam"]))
+pauzevlinder_namen = [ws[f'BN{r}'].value for r in range(4, 11) if ws[f'BN{r}'].value]
 
-selected = candidates[:num_pauzevlinders] if num_pauzevlinders > 0 else []
-for idx, s in enumerate(selected, start=1):
-    s["is_pauzevlinder"] = True
-    s["pv_number"] = idx
-    s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
+selected = []
+for idx, naam in enumerate(pauzevlinder_namen, start=1):
+    # Zoek student met deze naam
+    s_match = next((s for s in studenten_local if s['naam'] == naam), None)
+    if s_match:
+        s_match["is_pauzevlinder"] = True
+        s_match["pv_number"] = idx
+        # Verwijder required_hours uit beschikbaarheid
+        s_match["uren_beschikbaar"] = [u for u in s_match["uren_beschikbaar"] if u not in required_hours]
+        selected.append(s_match)
 
 
 # -----------------------------
