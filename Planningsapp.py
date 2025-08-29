@@ -155,14 +155,21 @@ open_uren = sorted(set(open_uren))
 # -----------------------------
 # Pauzevlinders kiezen (BN2)
 # -----------------------------
+raw_bn2 = ws['BN2'].value
+try:
+    num_pauzevlinders = int(float(str(raw_bn2).replace(",", ".").strip())) if raw_bn2 else 0
+except:
+    num_pauzevlinders = 0
 
+required_hours = [12, 13, 14, 15, 16, 17]
+candidates = [s for s in studenten if all(u in s['uren_beschikbaar'] for u in required_hours) and s['aantal_attracties'] >= 8]
+candidates.sort(key=lambda x: (-x["aantal_attracties"], -len(x["uren_beschikbaar"]), x["naam"]))
 
 selected = candidates[:num_pauzevlinders] if num_pauzevlinders > 0 else []
 for idx, s in enumerate(selected, start=1):
     s["is_pauzevlinder"] = True
     s["pv_number"] = idx
     s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
-
 
 # -----------------------------
 # Attracties plannen (AU:BL)
