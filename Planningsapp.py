@@ -462,6 +462,11 @@ wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 
+ws_feedback = wb_out.create_sheet("Feedback")
+def log_feedback(msg):
+    """Voeg een regel toe in het feedback-werkblad."""
+    next_row = ws_feedback.max_row + 1
+    ws_feedback.cell(next_row, 1, msg)
 
 
 log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek (B–G) in {planning_bestand}")
