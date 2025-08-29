@@ -8,23 +8,20 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 import datetime
 from io import BytesIO
-import openpyxl
 
-# -----------------------------
-# Datum en header
-# -----------------------------
+# Datum van vandaag
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
 # -----------------------------
-# Upload Excelbestand
+# Excelbestand openen
 # -----------------------------
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
-if uploaded_file:
-    wb = load_workbook(uploaded_file)
-    ws = wb["Blad1"]
-else:
+if not uploaded_file:
     st.warning("Upload eerst een Excel-bestand om verder te gaan.")
     st.stop()
+
+wb = load_workbook(uploaded_file)
+ws = wb["Blad1"]
 
 # -----------------------------
 # Studenten inlezen
@@ -34,14 +31,12 @@ for rij in range(2, 500):
     naam = ws.cell(rij, 12).value
     if not naam:
         continue
-
     uren_beschikbaar = []
     for kol in range(3, 12):
         val = ws.cell(rij, kol).value
         if val in [1, True, "WAAR", "X"]:
             uur = 10 + (kol - 3)
             uren_beschikbaar.append(uur)
-
     attracties = []
     for kol in range(14, 32):
         val = ws.cell(rij, kol).value
@@ -49,13 +44,11 @@ for rij in range(2, 500):
             attr_naam = ws.cell(1, kol).value
             if attr_naam:
                 attracties.append(attr_naam)
-
     raw_ag = ws['AG' + str(rij)].value
     try:
         aantal_attracties = int(raw_ag) if raw_ag is not None else len(attracties)
     except:
         aantal_attracties = len(attracties)
-
     studenten.append({
         "naam": naam,
         "uren_beschikbaar": uren_beschikbaar,
@@ -82,28 +75,28 @@ open_uren = sorted(set(open_uren))
 # -----------------------------
 # Pauzevlinders selecteren (BN4-BN10)
 # -----------------------------
-required_hours = [12, 13, 14, 15, 16, 17]  # 12-18u
+required_hours = [12,13,14,15,16,17]  # 12u-18u
 pauzevlinders_namen = []
-for rij in range(4, 11):
-    naam = ws['BN' + str(rij)].value
-    if naam:
-        pauzevlinders_namen.append(naam)
+for rij in range(4,11):
+    val = ws['BN'+str(rij)].value
+    if val:
+        pauzevlinders_namen.append(val.strip())
 
-# Markeer pauzevlinders en verwijder uren uit beschikbaarheid
 selected_pauzevlinders = []
-for idx, naam in enumerate(pauzevlinders_namen, start=1):
+pv_counter = 1
+for naam in pauzevlinders_namen:
     for s in studenten:
-        if s["naam"] == naam:
-            s["is_pauzevlinder"] = True
-            s["pv_number"] = idx
-            s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
+        if s['naam'] == naam:
+            s['is_pauzevlinder'] = True
+            s['pv_number'] = pv_counter
+            s['uren_beschikbaar'] = [u for u in s['uren_beschikbaar'] if u not in required_hours]
             selected_pauzevlinders.append(s)
+            pv_counter += 1
             break
 
 # -----------------------------
-# Attracties plannen
+# Attracties inlezen (AU:BL)
 # -----------------------------
-# Aantal attracties per positie (AU:BL)
 aantallen = {}
 attracties_te_plannen = []
 for kol in range(47, 65):
@@ -120,75 +113,54 @@ for kol in range(47, 65):
         attracties_te_plannen.append(naam)
 
 # -----------------------------
-# Functie: plan 1 student
+# Functie om student in te plannen
 # -----------------------------
 def plan_student(student, dagplanning, student_bezet, gebruik_per_attractie_student, open_uren):
-    uren = sorted(student['uren_beschikbaar'])
-    mogelijke_attracties = student['attracties']
-
-    # Sorteer attracties op 'kritieke score' (minst beschikbaar studenten eerst)
-    def kritieke_score(attr):
-        return sum(1 for s in studenten if attr in s['attracties'])
-    mogelijke_attracties.sort(key=kritieke_score)
-
-    i = 0
-    while i < len(uren):
+    uren_student = sorted(student['uren_beschikbaar'])
+    # Sorteer attracties op "kritiek" (minst beschikbaarheid)
+    mogelijke_attracties = sorted(
+        [a for a in student['attracties'] if a in dagplanning],
+        key=lambda x: sum(1 for s in studenten if x in s['attracties'])
+    )
+    for uur_idx in range(len(uren_student)):
+        u = uren_student[uur_idx]
         geplanned = False
         for blok in [3,2,1]:
-            if i + blok > len(uren):
+            if uur_idx+blok > len(uren_student):
                 continue
-            blokuren = uren[i:i+blok]
+            blokuren = uren_student[uur_idx:uur_idx+blok]
             for attr in mogelijke_attracties:
+                if student['naam'] not in gebruik_per_attractie_student[attr]:
+                    gebruik_per_attractie_student[attr][student['naam']] = 0
                 if gebruik_per_attractie_student[attr][student['naam']] + blok > 5:
                     continue
-                posities = dagplanning[attr] if dagplanning[attr] else [{}]
-                pos = posities[0]
-                if all(u not in pos for u in blokuren):
-                    for u in blokuren:
-                        pos[u] = student['naam']
-                        student_bezet[student['naam']].append(u)
-                        gebruik_per_attractie_student[attr][student['naam']] += 1
-                    if not dagplanning[attr]:
-                        dagplanning[attr].append(pos)
-                    i += blok
-                    geplanned = True
-                    break
+                if any(u_b in student_bezet[student['naam']] for u_b in blokuren):
+                    continue
+                # Vul planning
+                for bu in blokuren:
+                    dagplanning[attr][0][bu] = student['naam']
+                    student_bezet[student['naam']].append(bu)
+                    gebruik_per_attractie_student[attr][student['naam']] += 1
+                geplanned = True
+                break
             if geplanned:
                 break
-        if not geplanned:
-            i += 1
 
 # -----------------------------
-# Initialiseer planning datastructuren
+# Planning opstellen
 # -----------------------------
-dagplanning = {attr: [] for attr in attracties_te_plannen}
-student_bezet = {s["naam"]: [] for s in studenten}
-gebruik_per_attractie_student = {attr: {s["naam"]: 0 for s in studenten} for attr in attracties_te_plannen}
+dagplanning = {attr: [{}] for attr in attracties_te_plannen}  # 1ste positie init
+student_bezet = {s['naam']: [] for s in studenten}
+gebruik_per_attractie_student = {attr: {s['naam']:0 for s in studenten} for attr in attracties_te_plannen}
 
-# Sorteer studenten op aantal attracties (minst eerst)
-studenten_te_plannen = sorted([s for s in studenten if not s["is_pauzevlinder"]], key=lambda x: x['aantal_attracties'])
+# Sorteer studenten op aantal attracties (weinigste eerst)
+studenten_sorted = sorted([s for s in studenten if not s['is_pauzevlinder']], key=lambda x: x['aantal_attracties'])
 
-# -----------------------------
-# Plan studenten
-# -----------------------------
-for student in studenten_te_plannen:
+for student in studenten_sorted:
     plan_student(student, dagplanning, student_bezet, gebruik_per_attractie_student, open_uren)
 
 # -----------------------------
-# Voeg tweede studenten toe als nodig
-# -----------------------------
-for attr in attracties_te_plannen:
-    if aantallen[attr] >= 2:
-        # tweede positie toevoegen indien eerste al gevuld
-        pos1 = dagplanning[attr][0]
-        pos2 = {}
-        for uur in open_uren:
-            if uur not in pos1:
-                pos2[uur] = "NIEMAND"
-        dagplanning[attr].append(pos2)
-
-# -----------------------------
-# Extra studenten voor lege posities
+# Extra uren vullen
 # -----------------------------
 uren_bezet = defaultdict(set)
 for posities in dagplanning.values():
@@ -196,9 +168,6 @@ for posities in dagplanning.values():
         for u, naam in pos.items():
             if naam not in ["", "NIEMAND"]:
                 uren_bezet[u].add(naam)
-for pv in selected_pauzevlinders:
-    for u in required_hours:
-        uren_bezet[u].add(pv["naam"])
 
 extra_per_uur = {}
 for uur in sorted(open_uren):
@@ -210,26 +179,12 @@ for uur in sorted(open_uren):
             extra_studenten.append(s["naam"])
     extra_per_uur[uur] = extra_studenten
 
-for uur in sorted(open_uren):
-    for attr, posities in dagplanning.items():
-        for pos in posities:
-            if pos.get(uur, "") == "NIEMAND":
-                for naam_extra in extra_per_uur[uur][:]:
-                    student_obj = next(s for s in studenten if s['naam']==naam_extra)
-                    if uur in student_obj['uren_beschikbaar'] and attr in student_obj['attracties'] and gebruik_per_attractie_student[attr][naam_extra]<5:
-                        pos[uur] = naam_extra
-                        student_bezet[naam_extra].append(uur)
-                        gebruik_per_attractie_student[attr][naam_extra]+=1
-                        extra_per_uur[uur].remove(naam_extra)
-                        break
-
 # -----------------------------
-# Excel output
+# Excel-output
 # -----------------------------
 wb_out = Workbook()
 ws_out = wb_out.active
 ws_out.title = "Planning"
-
 header_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
 attr_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
 pv_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
@@ -244,7 +199,7 @@ def log_feedback(msg):
     ws_feedback.cell(next_row, 1, msg)
 
 # Header
-ws_out.cell(1,1,vandaag).font=Font(bold=True)
+ws_out.cell(1,1,vandaag).font = Font(bold=True)
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
     ws_out.cell(1,col_idx,f"{uur}:00").font=Font(bold=True)
     ws_out.cell(1,col_idx).fill=header_fill
@@ -266,11 +221,9 @@ for attractie, posities in dagplanning.items():
             ws_out.cell(rij_out,col_idx,naam)
             ws_out.cell(rij_out,col_idx).alignment=center_align
             ws_out.cell(rij_out,col_idx).border=thin_border
-        rij_out+=1
+        rij_out +=1
 
-# Scheidingsrij
-rij_out+=1
-
+rij_out +=1
 # Pauzevlinders
 for pv_idx in range(1,len(selected_pauzevlinders)+1):
     ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font=Font(bold=True)
@@ -285,45 +238,34 @@ for pv_idx in range(1,len(selected_pauzevlinders)+1):
         ws_out.cell(rij_out,col_idx,pv_name if uur in required_hours else "")
         ws_out.cell(rij_out,col_idx).alignment=center_align
         ws_out.cell(rij_out,col_idx).border=thin_border
-    rij_out+=1
+    rij_out +=1
 
-# Extra studenten
-rij_out+=1
+rij_out +=1
+# Extra
 max_extra = max(len(names) for names in extra_per_uur.values()) if extra_per_uur else 0
 for i in range(max_extra):
     ws_out.cell(rij_out,1,"Extra").font=Font(bold=True)
     ws_out.cell(rij_out,1).fill=extra_fill
     ws_out.cell(rij_out,1).border=thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
-        naam = extra_per_uur[uur][i] if i<len(extra_per_uur[uur]) else ""
+        naam = extra_per_uur[uur][i] if i < len(extra_per_uur[uur]) else ""
         ws_out.cell(rij_out,col_idx,naam)
         ws_out.cell(rij_out,col_idx).alignment=center_align
         ws_out.cell(rij_out,col_idx).border=thin_border
-    rij_out+=1
+    rij_out +=1
 
-# Kolombreedte
+# Kolombreedtes
 for col in range(1,len(open_uren)+2):
     ws_out.column_dimensions[get_column_letter(col)].width=15
 
-# Bestandsnaam en in-memory
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-planning_bestand = f"Planning_{timestamp}.xlsx"
+# In-memory bestand maken
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
 
-# Feedback
 log_feedback(f"Aantal studenten ingeladen: {len(studenten)}")
-log_feedback(f"Aantal pauzevlinders: {len(selected_pauzevlinders)}")
-
-# Streamlit download
-st.download_button(
-    label="Download Planning",
-    data=output,
-    file_name=planning_bestand,
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
+st.success("Planning aangemaakt!")
+st.download_button("Download planning", data=output, file_name=f"Planning_{vandaag}.xlsx")
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
