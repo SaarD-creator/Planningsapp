@@ -201,7 +201,7 @@ for attractie in attracties_te_plannen:
 
 for attractie in attracties_te_plannen:
     if aantallen.get(attractie, 1) >= 2:
-        pos2 = plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_attractie_student[attractie], open_uren, verplicht=False)
+        pos1 = plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_attractie_student[attractie], open_uren, blokvolgorde=[3,4,2,1])
         dagplanning[attractie].append(pos2)
 
 
