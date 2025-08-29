@@ -9,6 +9,10 @@ from openpyxl.utils import get_column_letter
 import datetime
 from io import BytesIO
 
+# Globale variabele voor pauzevlinders
+selected = []
+
+
 # Datum van vandaag opmaken
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
