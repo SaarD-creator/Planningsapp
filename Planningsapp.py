@@ -5,6 +5,8 @@ from collections import defaultdict
 from openpyxl import load_workbook
 import datetime
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
 
 # -----------------------------
 # Datum
