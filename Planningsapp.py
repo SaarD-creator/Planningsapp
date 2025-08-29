@@ -86,16 +86,16 @@ attracties_te_plannen.sort(key=kritieke_score)
 # -----------------------------
 # Pauzevlinders uit Excel BN4:BN10
 # -----------------------------
+# Pauzevlinders inlezen uit Excel (kolom BN, rij 4 t/m 10)
 pauzevlinders = []
 for rij in range(4, 11):
-    naam = ws[f'BN{rij}'].value
+    naam = ws.cell(rij, 66).value  # BN = kolom 66
     if naam:
-        s_match = next((s for s in studenten if s["naam"] == naam), None)
-        if s_match:
-            s_match["is_pauzevlinder"] = True
-            pauzevlinders.append(s_match)
+        pauzevlinders.append({"naam": naam.strip()})
 
-selected = pauzevlinders  # compatibel met DEEL 2–5
+# Haal pauzevlinders uit de algemene studentenlijst
+studenten = [s for s in studenten if s["naam"] not in [pv["naam"] for pv in pauzevlinders]]
+
 
 # -----------------------------
 # Hulpfunctie: plan blokken bij attractie
