@@ -16,16 +16,34 @@ vandaag = datetime.date.today().strftime("%d-%m-%Y")
 # Pauzevlinders kiezen uit Excel: kolom BN, rijen 4–10
 # -----------------------------
 required_hours = [12, 13, 14, 15, 16, 17]
-selected = []
-for rij in range(4, 11):  # BN4 t/m BN10
-    naam_pv = ws[f'BN{rij}'].value
-    if naam_pv:
-        student_obj = next((s for s in studenten if s["naam"] == naam_pv), None)
-        if student_obj:
-            student_obj["is_pauzevlinder"] = True
-            student_obj["pv_number"] = len(selected) + 1
-            student_obj["uren_beschikbaar"] = [u for u in student_obj["uren_beschikbaar"] if u not in required_hours]
-            selected.append(student_obj)
+selected = []  # altijd definiëren, voorkomt NameError
+
+uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
+
+if uploaded_file:
+    wb = load_workbook(uploaded_file)
+    ws = wb["Blad1"]
+    
+    # hier pas studenten inlezen en pauzevlinders selecteren
+    studenten = []
+    for rij in range(2, 500):
+        # ... inleeslogica ...
+        studenten.append({...})
+
+    required_hours = [12, 13, 14, 15, 16, 17]
+    for rij in range(4, 11):
+        naam_pv = ws[f'BN{rij}'].value
+        if naam_pv:
+            student_obj = next((s for s in studenten if s["naam"] == naam_pv), None)
+            if student_obj:
+                student_obj["is_pauzevlinder"] = True
+                student_obj["pv_number"] = len(selected) + 1
+                student_obj["uren_beschikbaar"] = [u for u in student_obj["uren_beschikbaar"] if u not in required_hours]
+                selected.append(student_obj)
+else:
+    st.warning("Upload eerst een Excel-bestand om verder te gaan.")
+    # selected blijft lege lijst
+
 
 
 
