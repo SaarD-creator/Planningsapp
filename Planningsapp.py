@@ -25,34 +25,60 @@ wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
 
 # -----------------------------
-# Hulpfunctie: plan blokken bij attractie
+# Hulpfunctie: plan blokken bij attractie (max 4 uur aaneengesloten)
 # -----------------------------
-def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, max_per_student=6):
+def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, max_per_student=6, max_aaneengesloten=4):
     planning = {}
     uren = sorted(open_uren)
     i = 0
     while i < len(uren):
         geplanned = False
-        # Probeer eerst blok van 3, daarna 4 of 2, dan 1
         for blok in [3,4,2,1]:
             if i + blok > len(uren):
                 continue
+            # check aaneengesloten limiet
+            u_start = uren[i]
+            u_end = uren[i + blok - 1]
             blokuren = uren[i:i+blok]
-            kandidaten = [
-                s for s in studenten
-                if attractie in s["attracties"]
-                and all(u in s["uren_beschikbaar"] for u in blokuren)
-                and not any(u in student_bezet[s["naam"]] for u in blokuren)
-                and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
-            ]
+            kandidaten = []
+            for s in studenten:
+                naam = s["naam"]
+                if attractie not in s["attracties"]:
+                    continue
+                if any(u in student_bezet[naam] for u in blokuren):
+                    continue
+                if not all(u in s["uren_beschikbaar"] for u in blokuren):
+                    continue
+                if gebruik_per_student_attractie[naam] + blok > max_per_student:
+                    continue
+                # Check bestaande aaneengesloten blokken van dezelfde attractie
+                bestaande_uren = sorted([u for u, a in student_bezet.get(f"{naam}_{attractie}", []) if a==attractie])
+                max_reeks = 0
+                if bestaande_uren:
+                    # Voeg nieuw blokuren erbij en check max aaneengesloten
+                    gecombineerde = sorted(bestaande_uren + blokuren)
+                    reeks = 1
+                    max_reeks = 1
+                    for idx in range(1, len(gecombineerde)):
+                        if gecombineerde[idx] == gecombineerde[idx-1]+1:
+                            reeks +=1
+                            max_reeks = max(max_reeks, reeks)
+                        else:
+                            reeks =1
+                if max_reeks > max_aaneengesloten:
+                    continue
+                kandidaten.append(s)
             if kandidaten:
-                # Kies student met min gebruik
                 min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
                 beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
                 gekozen = random.choice(beste)
                 for u in blokuren:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
+                    # Bewaar ook per attractie voor aaneengesloten check
+                    if f"{gekozen['naam']}_{attractie}" not in student_bezet:
+                        student_bezet[f"{gekozen['naam']}_{attractie}"] = []
+                    student_bezet[f"{gekozen['naam']}_{attractie}"].append((u, attractie))
                 gebruik_per_student_attractie[gekozen["naam"]] += blok
                 i += blok
                 geplanned = True
@@ -60,21 +86,44 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
         if not geplanned:
             # Laatste optie: 1 uur
             u = uren[i]
-            kandidaten_1 = [
-                s for s in studenten
-                if attractie in s["attracties"]
-                and u in s["uren_beschikbaar"]
-                and u not in student_bezet[s["naam"]]
-                and gebruik_per_student_attractie[s["naam"]] < max_per_student
-            ]
+            kandidaten_1 = []
+            for s in studenten:
+                naam = s["naam"]
+                if attractie not in s["attracties"]:
+                    continue
+                if u not in s["uren_beschikbaar"]:
+                    continue
+                if u in student_bezet[naam]:
+                    continue
+                if gebruik_per_student_attractie[naam] >= max_per_student:
+                    continue
+                # Check max aaneengesloten
+                bestaande_uren = sorted([hour for hour, a in student_bezet.get(f"{naam}_{attractie}", []) if a==attractie])
+                max_reeks = 1
+                if bestaande_uren:
+                    gecombineerde = sorted(bestaande_uren + [u])
+                    reeks = 1
+                    max_reeks = 1
+                    for idx in range(1, len(gecombineerde)):
+                        if gecombineerde[idx] == gecombineerde[idx-1]+1:
+                            reeks +=1
+                            max_reeks = max(max_reeks, reeks)
+                        else:
+                            reeks=1
+                if max_reeks > max_aaneengesloten:
+                    continue
+                kandidaten_1.append(s)
             if kandidaten_1:
                 gekozen = random.choice(kandidaten_1)
                 planning[u] = gekozen["naam"]
                 student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student_attractie[gekozen["naam"]] += 1
+                if f"{gekozen['naam']}_{attractie}" not in student_bezet:
+                    student_bezet[f"{gekozen['naam']}_{attractie}"]=[]
+                student_bezet[f"{gekozen['naam']}_{attractie}"].append((u, attractie))
+                gebruik_per_student_attractie[gekozen["naam"]] +=1
             else:
                 planning[u] = "NIEMAND"
-            i += 1
+            i +=1
     return planning
 
 # -----------------------------
