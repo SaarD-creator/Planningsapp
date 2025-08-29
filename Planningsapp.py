@@ -33,7 +33,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 naam = s["naam"]
                 if gebruik_per_student_attractie[naam] + blok > 5:
                     continue
-                if attractie not in s["attracties"]:
+                if attractie not in s["attracties"] or s.get("is_pauzevlinder", False):
                     continue
                 if not all(u in s["uren_beschikbaar"] for u in blokuren):
                     continue
@@ -301,7 +301,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 naam = s["naam"]
                 if gebruik_per_student_attractie[naam] + blok > 5:
                     continue
-                if attractie not in s["attracties"]:
+                if attractie not in s["attracties"] or s.get("is_pauzevlinder", False):
                     continue
                 if not all(u in s["uren_beschikbaar"] for u in blokuren):
                     continue
