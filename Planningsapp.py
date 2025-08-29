@@ -12,23 +12,19 @@ from io import BytesIO
 # Datum van vandaag opmaken
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
-def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, verplicht=True):
+def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, verplicht=True, kies_student_func=None):
     planning = {}
     uren = sorted(open_uren)
     i = 0
-    blokken = [3, 4, 2, 1]  # prioriteit blokgrootte
     while i < len(uren):
         geplanned = False
-        for blok in blokken:
+        for blok in [3, 4, 2, 1]:  # jouw blokvolgorde
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
             kandidaten = []
             for s in studenten:
                 naam = s["naam"]
-                # Pauzevlinder kan niet gekozen worden in hun pauze-uren
-                if s.get("is_pauzevlinder", False) and any(u in [12,13,14,15,16,17] for u in blokuren):
-                    continue
                 if gebruik_per_student_attractie[naam] + blok > 5:
                     continue
                 if attractie not in s["attracties"]:
@@ -40,9 +36,13 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 kandidaten.append(s)
 
             if kandidaten:
-                min_attracties = min(s["aantal_attracties"] for s in kandidaten)
-                beste = [s for s in kandidaten if s["aantal_attracties"] == min_attracties]
-                gekozen = beste[0]
+                if kies_student_func:
+                    gekozen = kies_student_func(kandidaten, gebruik_per_student_attractie)
+                else:
+                    min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
+                    beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
+                    gekozen = random.choice(beste)
+
                 for u in blokuren:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
@@ -56,8 +56,6 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             kandidaten_1 = []
             for s in studenten:
                 naam = s["naam"]
-                if s.get("is_pauzevlinder", False) and u in [12,13,14,15,16,17]:
-                    continue
                 if gebruik_per_student_attractie[naam] >= 5:
                     continue
                 if attractie not in s["attracties"]:
@@ -69,16 +67,17 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 kandidaten_1.append(s)
 
             if kandidaten_1:
-                min_attracties = min(s["aantal_attracties"] for s in kandidaten_1)
-                beste = [s for s in kandidaten_1 if s["aantal_attracties"] == min_attracties]
-                gekozen = beste[0]
+                if kies_student_func:
+                    gekozen = kies_student_func(kandidaten_1, gebruik_per_student_attractie)
+                else:
+                    gekozen = random.choice(kandidaten_1)
+
                 planning[u] = gekozen["naam"]
                 student_bezet[gekozen["naam"]].append(u)
                 gebruik_per_student_attractie[gekozen["naam"]] += 1
             else:
                 planning[u] = "NIEMAND"
             i += 1
-
     return planning
 
 
@@ -283,23 +282,19 @@ ws = wb["Blad1"]
 # -----------------------------
 # Hulpfunctie: plan 1 positie van 1 attractie
 # -----------------------------
-def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, verplicht=True):
+def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, verplicht=True, kies_student_func=None):
     planning = {}
     uren = sorted(open_uren)
     i = 0
-    blokken = [3, 4, 2, 1]  # prioriteit blokgrootte
     while i < len(uren):
         geplanned = False
-        for blok in blokken:
+        for blok in [3, 4, 2, 1]:  # jouw blokvolgorde
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
             kandidaten = []
             for s in studenten:
                 naam = s["naam"]
-                # Pauzevlinder kan niet gekozen worden in hun pauze-uren
-                if s.get("is_pauzevlinder", False) and any(u in [12,13,14,15,16,17] for u in blokuren):
-                    continue
                 if gebruik_per_student_attractie[naam] + blok > 5:
                     continue
                 if attractie not in s["attracties"]:
@@ -311,9 +306,13 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 kandidaten.append(s)
 
             if kandidaten:
-                min_attracties = min(s["aantal_attracties"] for s in kandidaten)
-                beste = [s for s in kandidaten if s["aantal_attracties"] == min_attracties]
-                gekozen = beste[0]
+                if kies_student_func:
+                    gekozen = kies_student_func(kandidaten, gebruik_per_student_attractie)
+                else:
+                    min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
+                    beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
+                    gekozen = random.choice(beste)
+
                 for u in blokuren:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
@@ -327,8 +326,6 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             kandidaten_1 = []
             for s in studenten:
                 naam = s["naam"]
-                if s.get("is_pauzevlinder", False) and u in [12,13,14,15,16,17]:
-                    continue
                 if gebruik_per_student_attractie[naam] >= 5:
                     continue
                 if attractie not in s["attracties"]:
@@ -340,17 +337,19 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 kandidaten_1.append(s)
 
             if kandidaten_1:
-                min_attracties = min(s["aantal_attracties"] for s in kandidaten_1)
-                beste = [s for s in kandidaten_1 if s["aantal_attracties"] == min_attracties]
-                gekozen = beste[0]
+                if kies_student_func:
+                    gekozen = kies_student_func(kandidaten_1, gebruik_per_student_attractie)
+                else:
+                    gekozen = random.choice(kandidaten_1)
+
                 planning[u] = gekozen["naam"]
                 student_bezet[gekozen["naam"]].append(u)
                 gebruik_per_student_attractie[gekozen["naam"]] += 1
             else:
                 planning[u] = "NIEMAND"
             i += 1
-
     return planning
+
 
 
 
