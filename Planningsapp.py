@@ -77,6 +77,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     return planning
 
 
+
 # -----------------------------
 # Excelbestand openen
 # -----------------------------
@@ -468,6 +469,69 @@ def maak_planning(studenten_local):
     return dagplanning, extra_per_uur, selected
 
 
+def swap_extra_met_student(dagplanning, extra_per_uur, studenten_local, gebruik_per_attractie_student, open_uren):
+    """
+    Probeer extra-studenten te wisselen met andere studenten zodat blokken van 3 (of 2) gevuld worden.
+    """
+    for uur in sorted(extra_per_uur.keys()):
+        extra_namen = extra_per_uur[uur][:]  # kopie
+        for naam_extra in extra_namen:
+            student_extra = next(s for s in studenten_local if s['naam'] == naam_extra)
+
+            # Zoek blokken van 3, dan 2
+            for blok in [3,2]:
+                for attractie, posities in dagplanning.items():
+                    for pos_idx, pos in enumerate(posities):
+                        uren = sorted(open_uren)
+                        i = 0
+                        while i <= len(uren) - blok:
+                            blokuren = uren[i:i+blok]
+
+                            # Staat hier iemand anders in dit blok?
+                            huidige_studenten = [pos.get(u, "") for u in blokuren]
+                            if all(s != "NIEMAND" and s != naam_extra for s in huidige_studenten):
+                                andere_student = huidige_studenten[0]
+                                if all(s == andere_student for s in huidige_studenten):
+                                    # Dit is een blok van dezelfde student
+                                    student_andere = next(s for s in studenten_local if s['naam'] == andere_student)
+
+                                    # Kan extra dit blok doen?
+                                    if (attractie in student_extra['attracties']
+                                        and all(u in student_extra['uren_beschikbaar'] for u in blokuren)
+                                        and gebruik_per_attractie_student[attractie][naam_extra] + len(blokuren) <= 5):
+
+                                        # Kan de andere student elders geplaatst worden? (vrije plek of extra)
+                                        geslaagd = False
+                                        for uur_vrij in blokuren:
+                                            # Zoek een vrij vakje
+                                            for attr2, posities2 in dagplanning.items():
+                                                for pos_idx2, pos2 in enumerate(posities2):
+                                                    if pos2.get(uur_vrij, "NIEMAND") in ["", "NIEMAND"]:
+                                                        if attr2 in student_andere['attracties'] and uur_vrij in student_andere['uren_beschikbaar']:
+                                                            # Wissel uitvoeren
+                                                            for u in blokuren:
+                                                                pos[u] = naam_extra
+                                                                student_extra['uren_beschikbaar'].remove(u)
+                                                                gebruik_per_attractie_student[attractie][naam_extra] += 1
+                                                                if naam_extra in extra_per_uur[u]:
+                                                                    extra_per_uur[u].remove(naam_extra)
+
+                                                            pos2[uur_vrij] = andere_student
+                                                            student_andere['uren_beschikbaar'].remove(uur_vrij)
+                                                            gebruik_per_attractie_student[attr2][andere_student] += 1
+
+                                                            geslaagd = True
+                                                            break
+                                                if geslaagd: break
+                                            if geslaagd: break
+
+                                        if geslaagd:
+                                            return True  # een wissel gedaan
+                            i += 1
+    return False
+
+
+
 # -----------------------------
 # Functie: check of planning volledig is
 # -----------------------------
@@ -478,6 +542,15 @@ def planning_check(dagplanning, extra_per_uur):
                 if naam == "NIEMAND" and extra_per_uur.get(uur):
                     return False
     return True
+
+# ✅ Eerst proberen lege blokken op te vullen
+verplaats_extra_in_blokken(dagplanning, extra_per_uur, studenten_copy, gebruik_per_attractie_student, open_uren)
+
+# ✅ Dan proberen te wisselen met andere studenten
+while swap_extra_met_student(dagplanning, extra_per_uur, studenten_copy, gebruik_per_attractie_student, open_uren):
+    # Blijf wisselen totdat er geen verbeteringen meer zijn
+    pass
+
 
 
 # -----------------------------
