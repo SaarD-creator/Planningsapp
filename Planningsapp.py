@@ -8,14 +8,8 @@ from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
 
-# -----------------------------
-# Datum
-# -----------------------------
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
-# -----------------------------
-# Excelbestand uploaden
-# -----------------------------
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
 if not uploaded_file:
     st.warning("Upload eerst een Excel-bestand om verder te gaan.")
@@ -23,6 +17,57 @@ if not uploaded_file:
 
 wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
+
+# -----------------------------
+# Hulpfunctie: plan blokken bij attractie
+# -----------------------------
+def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, max_per_student=6, max_per_rij=4):
+    planning = {}
+    uren = sorted(open_uren)
+    i = 0
+    while i < len(uren):
+        geplanned = False
+        for blok in [3,4,2,1]:
+            if i + blok > len(uren):
+                continue
+            blokuren = uren[i:i+blok]
+            kandidaten = [
+                s for s in studenten
+                if attractie in s["attracties"]
+                and all(u in s["uren_beschikbaar"] for u in blokuren)
+                and not any(u in student_bezet[s["naam"]] for u in blokuren)
+                and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
+                and max([student_bezet[s["naam"]].count(u) for u in blokuren] + [0]) + blok <= max_per_rij
+            ]
+            if kandidaten:
+                min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
+                beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
+                gekozen = random.choice(beste)
+                for u in blokuren:
+                    planning[u] = gekozen["naam"]
+                    student_bezet[gekozen["naam"]].append(u)
+                gebruik_per_student_attractie[gekozen["naam"]] += blok
+                i += blok
+                geplanned = True
+                break
+        if not geplanned:
+            u = uren[i]
+            kandidaten_1 = [
+                s for s in studenten
+                if attractie in s["attracties"]
+                and u in s["uren_beschikbaar"]
+                and u not in student_bezet[s["naam"]]
+                and gebruik_per_student_attractie[s["naam"]] < max_per_student
+            ]
+            if kandidaten_1:
+                gekozen = random.choice(kandidaten_1)
+                planning[u] = gekozen["naam"]
+                student_bezet[gekozen["naam"]].append(u)
+                gebruik_per_student_attractie[gekozen["naam"]] += 1
+            else:
+                planning[u] = "NIEMAND"
+            i += 1
+    return planning
 
 # -----------------------------
 # Studenten inlezen
@@ -83,75 +128,23 @@ def kritieke_score(attr):
 attracties_te_plannen.sort(key=kritieke_score)
 
 # -----------------------------
-# Hulpfunctie: plan blokken bij attractie
+# Pauzevlinders uit Excel (BN4:BN10)
 # -----------------------------
-def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, max_per_student=6):
-    planning = {}
-    uren = sorted(open_uren)
-    i = 0
-    while i < len(uren):
-        geplanned = False
-        # Probeer blokken: 3 → 4/2 → 1
-        for blok in [3,4,2,1]:
-            if i + blok > len(uren):
-                continue
-            blokuren = uren[i:i+blok]
-            kandidaten = [
-                s for s in studenten
-                if attractie in s["attracties"]
-                and all(u in s["uren_beschikbaar"] for u in blokuren)
-                and not any(u in student_bezet[s["naam"]] for u in blokuren)
-                and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
-                # max 4 uur aaneengesloten
-                and all(not (uur in student_bezet[s["naam"]] and abs(u - uur) < 4) for u in blokuren for uur in student_bezet[s["naam"]])
-            ]
-            if kandidaten:
-                min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
-                beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
-                gekozen = random.choice(beste)
-                for u in blokuren:
-                    planning[u] = gekozen["naam"]
-                    student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student_attractie[gekozen["naam"]] += blok
-                i += blok
-                geplanned = True
+pauzevlinders = []
+for rij in range(4, 11):
+    naam = ws.cell(rij, 66).value  # kolom BN = 66
+    if naam:
+        for s in studenten:
+            if s["naam"] == naam:
+                s["is_pauzevlinder"] = True
+                pauzevlinders.append(s)
                 break
-        if not geplanned:
-            u = uren[i]
-            kandidaten_1 = [
-                s for s in studenten
-                if attractie in s["attracties"]
-                and u in s["uren_beschikbaar"]
-                and u not in student_bezet[s["naam"]]
-                and gebruik_per_student_attractie[s["naam"]] < max_per_student
-            ]
-            if kandidaten_1:
-                gekozen = random.choice(kandidaten_1)
-                planning[u] = gekozen["naam"]
-                student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student_attractie[gekozen["naam"]] += 1
-            else:
-                planning[u] = "NIEMAND"
-            i += 1
-    return planning
 
 # -----------------------------
-# Maak planning
+# Planning maken
 # -----------------------------
 def maak_planning(studenten_local):
-    # Pauzevlinders: exact uit Excel BN4 t/m BN10
-    pauzevlinders = []
-    for rij in range(4, 11):
-        naam_pv = ws[f'BN{rij}'].value
-        if naam_pv:
-            student_obj = next((s for s in studenten_local if s["naam"]==naam_pv), None)
-            if student_obj:
-                student_obj["is_pauzevlinder"] = True
-                pauzevlinders.append(student_obj)
     student_bezet = {s["naam"]: [] for s in studenten_local}
-    for pv in pauzevlinders:
-        student_bezet[pv["naam"]].extend(range(12,18))  # 12u-17u bezet
-
     dagplanning = {}
     gebruik_per_attractie_student = {attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
 
@@ -164,7 +157,7 @@ def maak_planning(studenten_local):
         if aantallen.get(attractie,1) >= 2:
             dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren))
 
-    # --- Iteratief schuiven om lege plekken te vullen, geen extra's als er lege posities zijn ---
+    # --- Iteratief schuiven om 'NIEMAND' te vermijden ---
     while True:
         wijziging = False
         uren_bezet = defaultdict(set)
@@ -173,14 +166,13 @@ def maak_planning(studenten_local):
                 for u, naam in pos.items():
                     if naam not in ["","NIEMAND"]:
                         uren_bezet[u].add(naam)
-        for pv in pauzevlinders:
-            for u in range(12,18):
-                uren_bezet[u].add(pv["naam"])
+        # Extra studenten
         extra_per_uur = defaultdict(list)
         for uur in open_uren:
             for s in studenten_local:
                 if uur in s["uren_beschikbaar"] and s["naam"] not in uren_bezet[uur] and not s.get("is_pauzevlinder"):
                     extra_per_uur[uur].append(s["naam"])
+        # Plaats extra in vrije plekken
         for uur in open_uren:
             for attractie,posities in dagplanning.items():
                 for pos in posities:
@@ -200,18 +192,19 @@ def maak_planning(studenten_local):
         if not wijziging:
             break
 
-    return dagplanning, extra_per_uur, pauzevlinders
+    return dagplanning, extra_per_uur
 
 # -----------------------------
-# Planning genereren
+# Herhaal tot volledige planning
 # -----------------------------
 max_attempts = 150
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
-    dagplanning, extra_per_uur, pauzevlinders = maak_planning(studenten_copy)
+    dagplanning, extra_per_uur = maak_planning(studenten_copy)
     if all(pos.get(u,"")!="NIEMAND" or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
         studenten = studenten_copy
         break
+
 
 # -----------------------------
 # Excel output
