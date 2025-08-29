@@ -130,15 +130,16 @@ attracties_te_plannen.sort(key=kritieke_score)
 # -----------------------------
 # Pauzevlinders uit Excel (BN4:BN10)
 # -----------------------------
-pauzevlinders = []
+selected = []
 for rij in range(4, 11):
     naam = ws.cell(rij, 66).value  # kolom BN = 66
     if naam:
         for s in studenten:
             if s["naam"] == naam:
                 s["is_pauzevlinder"] = True
-                pauzevlinders.append(s)
+                selected.append(s)
                 break
+
 
 # -----------------------------
 # Planning maken
