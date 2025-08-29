@@ -33,10 +33,8 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
     while i < len(uren):
         geplanned = False
-        # Probeer blokken in volgorde 3,4,2,1
+        # Probeer eerst blok van 3, daarna 4 of 2, dan 1
         for blok in [3,4,2,1]:
-            if blok > 4:  # geen blok langer dan 4 uur aaneengesloten
-                continue
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
@@ -46,7 +44,6 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and all(u in s["uren_beschikbaar"] for u in blokuren)
                 and not any(u in student_bezet[s["naam"]] for u in blokuren)
                 and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
-                and (len(blokuren) <= 4)
             ]
             if kandidaten:
                 min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
@@ -137,22 +134,18 @@ def kritieke_score(attr):
 attracties_te_plannen.sort(key=kritieke_score)
 
 # -----------------------------
-# Maak planning
+# Maak planning inclusief schuiven en swaps
 # -----------------------------
 def maak_planning(studenten_local):
-    # Pauzevlinders (BN4-BN10)
+    # Pauzevlinders rechtstreeks uit Excel BN4 t/m BN10
     selected = []
     for rij in range(4, 11):
         naam_pv = ws[f'BN{rij}'].value
         if naam_pv:
-            s_obj = next((s for s in studenten_local if s["naam"]==naam_pv), None)
-            if s_obj:
-                selected.append(s_obj)
-    required_hours = [12,13,14,15,16,17]
-    for idx,s in enumerate(selected,start=1):
-        s["is_pauzevlinder"] = True
-        s["pv_number"] = idx
-        s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
+            student_obj = next((s for s in studenten_local if s["naam"]==naam_pv), None)
+            if student_obj:
+                student_obj["is_pauzevlinder"] = True
+                selected.append(student_obj)
 
     student_bezet = {s["naam"]: [] for s in studenten_local}
     dagplanning = {}
@@ -167,7 +160,7 @@ def maak_planning(studenten_local):
         if aantallen.get(attractie,1) >= 2:
             dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren))
 
-    # --- Iteratief schuiven tot niemand meer bij Extra hoeft ---
+    # --- Iteratief schuiven en swaps totdat niemand bij extra staat als er nog plekken vrij zijn ---
     while True:
         wijziging = False
         uren_bezet = defaultdict(set)
@@ -177,7 +170,7 @@ def maak_planning(studenten_local):
                     if naam not in ["","NIEMAND"]:
                         uren_bezet[u].add(naam)
         for pv in selected:
-            for u in required_hours:
+            for u in pv["uren_beschikbaar"]:
                 uren_bezet[u].add(pv["naam"])
 
         # Extra studenten
@@ -264,7 +257,7 @@ for pv_idx,s in enumerate(selected,start=1):
     ws_out.cell(rij_out,1).fill=pv_fill
     ws_out.cell(rij_out,1).border=thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
-        ws_out.cell(rij_out,col_idx,s["naam"] if uur in required_hours else "").alignment=center_align
+        ws_out.cell(rij_out,col_idx,s["naam"]).alignment=center_align
         ws_out.cell(rij_out,col_idx).border=thin_border
     rij_out+=1
 
@@ -289,7 +282,11 @@ for col in range(1,len(open_uren)+2):
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
-st.download_button("Download planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+st.download_button(
+    "Download planning", 
+    data=output, 
+    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+)
 
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
