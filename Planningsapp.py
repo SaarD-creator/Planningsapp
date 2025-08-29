@@ -44,20 +44,9 @@ for rij in range(2, 500):
         "uren_beschikbaar": uren_beschikbaar,
         "attracties": attracties,
         "aantal_attracties": aantal_attracties,
-        "is_pauzevlinder": False
+        "is_pauzevlinder": False,
+        "pv_number": None
     })
-
-# -----------------------------
-# Pauzevlinders uit Excel (BN4–BN10)
-# -----------------------------
-pauzevlinders = []
-for rij in range(4, 11):
-    naam_pv = ws[f'BN{rij}'].value
-    if naam_pv:
-        for s in studenten:
-            if s["naam"] == naam_pv:
-                s["is_pauzevlinder"] = True
-                pauzevlinders.append(s)
 
 # -----------------------------
 # Openingsuren
@@ -102,18 +91,19 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
     while i < len(uren):
         geplanned = False
-        # Probeer eerst blok van 3, daarna 4 of 2, dan 1
+        # Probeer blokken: 3 → 4/2 → 1
         for blok in [3,4,2,1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
             kandidaten = [
                 s for s in studenten
-                if not s.get("is_pauzevlinder")  # skip pauzevlinders
-                and attractie in s["attracties"]
+                if attractie in s["attracties"]
                 and all(u in s["uren_beschikbaar"] for u in blokuren)
                 and not any(u in student_bezet[s["naam"]] for u in blokuren)
                 and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
+                # max 4 uur aaneengesloten
+                and all(not (uur in student_bezet[s["naam"]] and abs(u - uur) < 4) for u in blokuren for uur in student_bezet[s["naam"]])
             ]
             if kandidaten:
                 min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
@@ -130,8 +120,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             u = uren[i]
             kandidaten_1 = [
                 s for s in studenten
-                if not s.get("is_pauzevlinder")
-                and attractie in s["attracties"]
+                if attractie in s["attracties"]
                 and u in s["uren_beschikbaar"]
                 and u not in student_bezet[s["naam"]]
                 and gebruik_per_student_attractie[s["naam"]] < max_per_student
@@ -147,10 +136,22 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     return planning
 
 # -----------------------------
-# Maak planning inclusief schuiven
+# Maak planning
 # -----------------------------
 def maak_planning(studenten_local):
+    # Pauzevlinders: exact uit Excel BN4 t/m BN10
+    pauzevlinders = []
+    for rij in range(4, 11):
+        naam_pv = ws[f'BN{rij}'].value
+        if naam_pv:
+            student_obj = next((s for s in studenten_local if s["naam"]==naam_pv), None)
+            if student_obj:
+                student_obj["is_pauzevlinder"] = True
+                pauzevlinders.append(student_obj)
     student_bezet = {s["naam"]: [] for s in studenten_local}
+    for pv in pauzevlinders:
+        student_bezet[pv["naam"]].extend(range(12,18))  # 12u-17u bezet
+
     dagplanning = {}
     gebruik_per_attractie_student = {attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
 
@@ -163,7 +164,7 @@ def maak_planning(studenten_local):
         if aantallen.get(attractie,1) >= 2:
             dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren))
 
-    # --- Iteratief schuiven zodat geen extra-studenten nodig zijn ---
+    # --- Iteratief schuiven om lege plekken te vullen, geen extra's als er lege posities zijn ---
     while True:
         wijziging = False
         uren_bezet = defaultdict(set)
@@ -172,15 +173,14 @@ def maak_planning(studenten_local):
                 for u, naam in pos.items():
                     if naam not in ["","NIEMAND"]:
                         uren_bezet[u].add(naam)
-
-        # Extra studenten
+        for pv in pauzevlinders:
+            for u in range(12,18):
+                uren_bezet[u].add(pv["naam"])
         extra_per_uur = defaultdict(list)
         for uur in open_uren:
             for s in studenten_local:
                 if uur in s["uren_beschikbaar"] and s["naam"] not in uren_bezet[uur] and not s.get("is_pauzevlinder"):
                     extra_per_uur[uur].append(s["naam"])
-
-        # Plaats extra-studenten in NIEMAND plekken
         for uur in open_uren:
             for attractie,posities in dagplanning.items():
                 for pos in posities:
@@ -203,15 +203,14 @@ def maak_planning(studenten_local):
     return dagplanning, extra_per_uur, pauzevlinders
 
 # -----------------------------
-# Herhaal tot volledige planning
+# Planning genereren
 # -----------------------------
 max_attempts = 150
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
-    dagplanning, extra_per_uur, pauzevlinders_copy = maak_planning(studenten_copy)
+    dagplanning, extra_per_uur, pauzevlinders = maak_planning(studenten_copy)
     if all(pos.get(u,"")!="NIEMAND" or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
         studenten = studenten_copy
-        pauzevlinders = pauzevlinders_copy
         break
 
 # -----------------------------
@@ -253,17 +252,16 @@ for attractie,posities in dagplanning.items():
 
 # Pauzevlinders
 rij_out+=1
-for idx, pv in enumerate(pauzevlinders,start=1):
-    ws_out.cell(rij_out,1,f"Pauzevlinder {idx}").font=Font(bold=True)
+for pv_idx, pv in enumerate(pauzevlinders, start=1):
+    ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font=Font(bold=True)
     ws_out.cell(rij_out,1).fill=pv_fill
     ws_out.cell(rij_out,1).border=thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
-        # vul naam van pauzevlinder
-        ws_out.cell(rij_out, col_idx, pv["naam"] if 12 <= uur <= 17 else "").alignment = center_align
+        ws_out.cell(rij_out, col_idx, pv["naam"] if 12 <= uur <= 17 else "").alignment=center_align
         ws_out.cell(rij_out, col_idx).border=thin_border
     rij_out+=1
 
-# Extra studenten (zou nu leeg moeten zijn)
+# Extra studenten
 rij_out+=1
 max_extra=max(len(names) for names in extra_per_uur.values()) if extra_per_uur else 0
 for i in range(max_extra):
@@ -280,12 +278,11 @@ for i in range(max_extra):
 for col in range(1,len(open_uren)+2):
     ws_out.column_dimensions[get_column_letter(col)].width=15
 
-# Download in Streamlit
+# Download
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
 st.download_button("Download planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
