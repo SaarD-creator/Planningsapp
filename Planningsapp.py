@@ -140,7 +140,8 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             kandidaten = []
             for s in studenten:
                 naam = s["naam"]
-                if gebruik_per_student_attractie[naam] + blok > 5:  # max 5 uur
+                # Max 5 uur per student per attractie
+                if gebruik_per_student_attractie[naam] + blok > 5:
                     continue
                 if attractie not in s["attracties"]:
                     continue
@@ -151,9 +152,10 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 kandidaten.append(s)
 
             if kandidaten:
-                # Kies student die het minst aantal attracties kan bedienen (AG), bij gelijkstand minst vaak al ingezet
+                # Kies student: minst aantal attracties (AG), dan minst gebruik bij deze attractie
                 kandidaten.sort(key=lambda s: (s["aantal_attracties"], gebruik_per_student_attractie[s["naam"]]))
                 gekozen = kandidaten[0]
+
                 for u in blokuren:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
@@ -188,6 +190,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             i += 1
 
     return planning
+
 
 
 
