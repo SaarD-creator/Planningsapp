@@ -446,7 +446,7 @@ def log_feedback(msg):
 # -----------------------------
 # Herhaal planning totdat volledig
 # -----------------------------
-max_attempts = 20000
+max_attempts = 2000
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
     dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
