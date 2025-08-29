@@ -323,6 +323,67 @@ open_uren = sorted(set(open_uren))
 
 import copy
 
+def vind_vrije_blokken(dagplanning, studenten_local, open_uren):
+    """
+    Bouw een mapping van uur -> lijst van (attractie, pos_idx) waar iemand nog kan staan.
+    """
+    vrije_plekken = defaultdict(list)
+    for attractie, posities in dagplanning.items():
+        for pos_idx, pos in enumerate(posities):
+            uren = sorted(open_uren)
+            i = 0
+            while i < len(uren):
+                # Kijk of er blok van 3,2,1 vrij is
+                for blok in [3,2,1]:
+                    if i + blok > len(uren):
+                        continue
+                    blokuren = uren[i:i+blok]
+                    if all(pos.get(u,"NIEMAND") in ["", "NIEMAND"] for u in blokuren):
+                        vrije_plekken[tuple(blokuren)].append((attractie, pos_idx))
+                        i += blok
+                        break
+                else:
+                    i += 1
+    return vrije_plekken
+def verplaats_extra_in_blokken(dagplanning, extra_per_uur, studenten_local, gebruik_per_attractie_student, open_uren):
+    """
+    Probeer extra-studenten te verplaatsen naar vrije blokken zodat ze niet bij 'extra' hoeven te staan.
+    """
+    vrije_blokken = vind_vrije_blokken(dagplanning, studenten_local, open_uren)
+
+    for uur in sorted(extra_per_uur.keys()):
+        extra_namen = extra_per_uur[uur][:]  # kopie
+        for naam in extra_namen:
+            student_obj = next(s for s in studenten_local if s['naam'] == naam)
+            geplaatste = False
+
+            # Zoek eerst blok van 3 uur, dan 2, dan 1
+            for blok in [3,2,1]:
+                for blokuren, plekken in vrije_blokken.items():
+                    if len(blokuren) != blok or uur not in blokuren:
+                        continue
+                    for (attr, pos_idx) in plekken:
+                        pos = dagplanning[attr][pos_idx]
+                        # Check of student kan in dit blok
+                        if all(u in student_obj['uren_beschikbaar'] and attr in student_obj['attracties']
+                               and gebruik_per_attractie_student[attr][naam] < 5 for u in blokuren):
+                            # Plaats student in dit blok
+                            for u in blokuren:
+                                pos[u] = naam
+                                student_obj['uren_beschikbaar'].remove(u)
+                                gebruik_per_attractie_student[attr][naam] += 1
+                                if u in extra_per_uur and naam in extra_per_uur[u]:
+                                    extra_per_uur[u].remove(naam)
+                            geplaatste = True
+                            break
+                    if geplaatste:
+                        break
+                if geplaatste:
+                    break
+
+
+
+
 # -----------------------------
 # Functie: maak volledige planning
 # -----------------------------
@@ -346,7 +407,7 @@ def maak_planning(studenten_local):
 
     # Attracties plannen
     attracties_te_plannen = [naam for naam, aantal in aantallen.items() if aantal >= 1]
-
+    
     def kritieke_score(attr):
         return sum(1 for s in studenten_local if attr in s['attracties'])
 
@@ -388,6 +449,8 @@ def maak_planning(studenten_local):
             if uur in s["uren_beschikbaar"] and s["naam"] not in uren_bezet[uur]:
                 extra_studenten.append(s["naam"])
         extra_per_uur[uur] = extra_studenten
+
+    verplaats_extra_in_blokken(dagplanning, extra_per_uur, studenten, gebruik_per_attractie_student, open_uren)
 
     for uur in sorted(open_uren):
         for attractie, posities in dagplanning.items():
@@ -438,20 +501,21 @@ def log_feedback(msg):
     next_row = ws_feedback.max_row + 1
     ws_feedback.cell(next_row, 1, msg)
 
-# -----------------------------
-# Herhaal planning totdat volledig
-# -----------------------------
-max_attempts = 300
+max_attempts = 150
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
     dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
+
+    # ✅ Nieuw: probeer extra studenten naar vrije blokken te verplaatsen
+    verplaats_extra_in_blokken(dagplanning, extra_per_uur, studenten_copy, gebruik_per_attractie_student, open_uren)
+
+    # Controleer nu pas of planning volledig is
     if planning_check(dagplanning, extra_per_uur):
         log_feedback(f"✅ Planning geslaagd in {attempt+1} pogingen.")
         studenten = studenten_copy  # originele lijst updaten met juiste status
         break
 else:
     log_feedback("⚠️ Geen geldige planning gevonden na veel pogingen!")
-
 
 
 
