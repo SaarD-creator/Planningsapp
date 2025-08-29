@@ -410,7 +410,24 @@ def log_feedback(msg):
 max_attempts = 150
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
-    dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
+
+    # Maak eerst de extra_per_uur structuur
+    uren_bezet = defaultdict(set)
+    for s in studenten_copy:
+        for u in s["uren_beschikbaar"]:
+            uren_bezet[u].add(s["naam"])
+    extra_per_uur = {}
+    for uur in sorted(open_uren):
+        extra_studenten = []
+        for s in studenten_copy:
+            if uur in s["uren_beschikbaar"] and s["naam"] not in uren_bezet[uur]:
+                extra_studenten.append(s["naam"])
+        extra_per_uur[uur] = extra_studenten
+
+    # Nieuwe maak_planning functie oproepen
+    dagplanning = maak_planning(attracties_te_plannen, studenten_copy, open_uren, extra_per_uur)
+
+    # Check of planning volledig is
     if planning_check(dagplanning, extra_per_uur):
         log_feedback(f"✅ Planning geslaagd in {attempt+1} pogingen.")
         studenten = studenten_copy  # originele lijst updaten met juiste status
