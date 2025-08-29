@@ -332,7 +332,7 @@ a1.border = thin_border
 # Pauzevlinders en namen
 # -----------------------------
 rij_out = 2
-for pv_idx, pv in enumerate(selected, start=1):
+for pv_idx, pv in enumerate(selected_pauzevlinders, start=1):
     # Titel: Pauzevlinder X
     title_cell = ws_pauze.cell(rij_out, 1, f"Pauzevlinder {pv_idx}")
     title_cell.font = Font(bold=True)
