@@ -152,25 +152,6 @@ if not open_uren:
 open_uren = sorted(set(open_uren))
 
 
-# -----------------------------
-# Pauzevlinders kiezen (BN2)
-# -----------------------------
-raw_bn2 = ws['BN2'].value
-try:
-    num_pauzevlinders = int(float(str(raw_bn2).replace(",", ".").strip())) if raw_bn2 else 0
-except:
-    num_pauzevlinders = 0
-
-required_hours = [12, 13, 14, 15, 16, 17]
-candidates = [s for s in studenten if all(u in s['uren_beschikbaar'] for u in required_hours) and s['aantal_attracties'] >= 8]
-candidates.sort(key=lambda x: (-x["aantal_attracties"], -len(x["uren_beschikbaar"]), x["naam"]))
-
-selected = candidates[:num_pauzevlinders] if num_pauzevlinders > 0 else []
-for idx, s in enumerate(selected, start=1):
-    s["is_pauzevlinder"] = True
-    s["pv_number"] = idx
-    s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
-
 
 # -----------------------------
 # Attracties plannen (AU:BL)
@@ -328,27 +309,27 @@ import copy
 # -----------------------------
 # Functie: maak volledige planning
 # -----------------------------
+
+# Pauzevlinders kiezen uit Excel: kolom BN, rijen 4–10
+required_hours = [12, 13, 14, 15, 16, 17]
+
+selected = []
+for rij in range(4, 11):  # BN4 t/m BN10
+    naam_pv = ws[f'BN{rij}'].value
+    if naam_pv:
+        # Vind de student in de lijst
+        student_obj = next((s for s in studenten_local if s["naam"] == naam_pv), None)
+        if student_obj:
+            student_obj["is_pauzevlinder"] = True
+            student_obj["pv_number"] = len(selected) + 1
+            # Verwijder hun pauze-uren uit beschikbaarheid
+            student_obj["uren_beschikbaar"] = [u for u in student_obj["uren_beschikbaar"] if u not in required_hours]
+            selected.append(student_obj)
+
+
+
 def maak_planning(studenten_local):
-    # Pauzevlinders kiezen (BN2) – random uit geschikte kandidaten
-    raw_bn2 = ws['BN2'].value
-    try:
-        num_pauzevlinders = int(float(str(raw_bn2).replace(",", ".").strip())) if raw_bn2 else 0
-    except:
-        num_pauzevlinders = 0
-
-    required_hours = [12, 13, 14, 15, 16, 17]
-
-    # Filter kandidaten: beschikbaar in alle required_hours en minstens 8 attracties
-    candidates = [s for s in studenten_local if all(u in s['uren_beschikbaar'] for u in required_hours) and s['aantal_attracties'] >= 8]
-
-    # Kies random het gewenste aantal pauzevlinders
-    selected = random.sample(candidates, min(num_pauzevlinders, len(candidates))) if num_pauzevlinders > 0 else []
-
-    # Markeer de gekozen pauzevlinders en verwijder hun required_hours uit beschikbaarheid
-    for idx, s in enumerate(selected, start=1):
-        s["is_pauzevlinder"] = True
-        s["pv_number"] = idx
-        s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
+    
 
     # Attracties plannen
     attracties_te_plannen = [naam for naam, aantal in aantallen.items() if aantal >= 1]
