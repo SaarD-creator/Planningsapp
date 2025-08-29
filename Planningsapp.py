@@ -1,6 +1,3 @@
-import streamlit as st
-import pandas as pd
-import copy
 import random
 from collections import defaultdict
 from openpyxl import Workbook, load_workbook
@@ -11,41 +8,6 @@ from io import BytesIO
 
 # Datum van vandaag opmaken
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
-
-# -----------------------------
-# Pauzevlinders kiezen uit Excel: kolom BN, rijen 4–10
-# -----------------------------
-required_hours = [12, 13, 14, 15, 16, 17]
-selected = []  # altijd definiëren, voorkomt NameError
-
-uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
-
-if uploaded_file:
-    wb = load_workbook(uploaded_file)
-    ws = wb["Blad1"]
-    
-    # hier pas studenten inlezen en pauzevlinders selecteren
-    studenten = []
-    for rij in range(2, 500):
-        # ... inleeslogica ...
-        studenten.append({...})
-
-    required_hours = [12, 13, 14, 15, 16, 17]
-    for rij in range(4, 11):
-        naam_pv = ws[f'BN{rij}'].value
-        if naam_pv:
-            student_obj = next((s for s in studenten if s["naam"] == naam_pv), None)
-            if student_obj:
-                student_obj["is_pauzevlinder"] = True
-                student_obj["pv_number"] = len(selected) + 1
-                student_obj["uren_beschikbaar"] = [u for u in student_obj["uren_beschikbaar"] if u not in required_hours]
-                selected.append(student_obj)
-else:
-    st.warning("Upload eerst een Excel-bestand om verder te gaan.")
-    # selected blijft lege lijst
-
-
-
 
 # -----------------------------
 # Hulpfunctie: plan 1 positie van 1 attractie
@@ -187,6 +149,25 @@ if not open_uren:
 open_uren = sorted(set(open_uren))
 
 
+# -----------------------------
+# Pauzevlinders kiezen (BN2)
+# -----------------------------
+raw_bn2 = ws['BN2'].value
+try:
+    num_pauzevlinders = int(float(str(raw_bn2).replace(",", ".").strip())) if raw_bn2 else 0
+except:
+    num_pauzevlinders = 0
+
+required_hours = [12, 13, 14, 15, 16, 17]
+candidates = [s for s in studenten if all(u in s['uren_beschikbaar'] for u in required_hours) and s['aantal_attracties'] >= 8]
+candidates.sort(key=lambda x: (-x["aantal_attracties"], -len(x["uren_beschikbaar"]), x["naam"]))
+
+selected = candidates[:num_pauzevlinders] if num_pauzevlinders > 0 else []
+for idx, s in enumerate(selected, start=1):
+    s["is_pauzevlinder"] = True
+    s["pv_number"] = idx
+    s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
+
 
 # -----------------------------
 # Attracties plannen (AU:BL)
@@ -265,14 +246,106 @@ import openpyxl
 import datetime
 
 
+# Vind de map van de exe (of script)
+if getattr(sys, 'frozen', False):
+    # draaien als exe
+    base_path = sys._MEIPASS  # tijdelijke folder van PyInstaller
+else:
+    # draaien als script
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+# Excelbestand in die map
+bestand = os.path.join(base_path, "Gegevens.xlsx")
+
+# Open workbook
+uploaded_file = st.file_uploader("Upload een Excel bestand", type=["xlsx"])
+
+if uploaded_file is not None:
+    # Streamlit geeft een bestand-like object terug
+    wb = openpyxl.load_workbook(BytesIO(uploaded_file.read()))
+    st.success("Bestand succesvol geladen!")
+else:
+    st.warning("Upload een Excel bestand om verder te gaan.")
+
+ws = wb["Blad1"]
+
+
+
+# -----------------------------
+# Studenten inlezen
+# -----------------------------
+studenten = []
+for rij in range(2, 500):
+    naam = ws.cell(rij, 12).value
+    if not naam:
+        continue
+    uren_beschikbaar = []
+    for kol in range(3, 12):
+        val = ws.cell(rij, kol).value
+        if val in [1, True, "WAAR", "X"]:
+            uur = 10 + (kol - 3)
+            uren_beschikbaar.append(uur)
+    attracties = []
+    for kol in range(14, 32):
+        val = ws.cell(rij, kol).value
+        if val in [1, True, "WAAR", "X"]:
+            attr_naam = ws.cell(1, kol).value
+            if attr_naam:
+                attracties.append(attr_naam)
+    raw_ag = ws['AG' + str(rij)].value
+    try:
+        aantal_attracties = int(raw_ag) if raw_ag is not None else len(attracties)
+    except:
+        aantal_attracties = len(attracties)
+    studenten.append({
+        "naam": naam,
+        "uren_beschikbaar": uren_beschikbaar,
+        "attracties": attracties,
+        "aantal_attracties": aantal_attracties,
+        "is_pauzevlinder": False,
+        "pv_number": None
+    })
+
+# -----------------------------
+# Openingsuren inlezen (AJ:AR)
+# -----------------------------
+open_uren = []
+for kol in range(36, 45):
+    uur_raw = ws.cell(1, kol).value
+    vink = ws.cell(2, kol).value
+    if vink in [1, True, "WAAR", "X"]:
+        uur = int(str(uur_raw).replace("u","").strip()) if not isinstance(uur_raw,int) else uur_raw
+        open_uren.append(uur)
+if not open_uren:
+    open_uren = list(range(10, 19))
+open_uren = sorted(set(open_uren))
+
+import copy
 
 # -----------------------------
 # Functie: maak volledige planning
 # -----------------------------
-
-
 def maak_planning(studenten_local):
-    
+    # Pauzevlinders kiezen (BN2) – random uit geschikte kandidaten
+    raw_bn2 = ws['BN2'].value
+    try:
+        num_pauzevlinders = int(float(str(raw_bn2).replace(",", ".").strip())) if raw_bn2 else 0
+    except:
+        num_pauzevlinders = 0
+
+    required_hours = [12, 13, 14, 15, 16, 17]
+
+    # Filter kandidaten: beschikbaar in alle required_hours en minstens 8 attracties
+    candidates = [s for s in studenten_local if all(u in s['uren_beschikbaar'] for u in required_hours) and s['aantal_attracties'] >= 8]
+
+    # Kies random het gewenste aantal pauzevlinders
+    selected = random.sample(candidates, min(num_pauzevlinders, len(candidates))) if num_pauzevlinders > 0 else []
+
+    # Markeer de gekozen pauzevlinders en verwijder hun required_hours uit beschikbaarheid
+    for idx, s in enumerate(selected, start=1):
+        s["is_pauzevlinder"] = True
+        s["pv_number"] = idx
+        s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
 
     # Attracties plannen
     attracties_te_plannen = [naam for naam, aantal in aantallen.items() if aantal >= 1]
@@ -370,7 +443,7 @@ def log_feedback(msg):
 # -----------------------------
 # Herhaal planning totdat volledig
 # -----------------------------
-max_attempts = 2000
+max_attempts = 150
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
     dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
@@ -1077,3 +1150,4 @@ st.download_button(
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
