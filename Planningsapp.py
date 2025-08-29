@@ -296,6 +296,95 @@ st.download_button("Download planning", data=output, file_name=f"Planning_{datet
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
+#DEEL 2
+#oooooooooooooooooooo
+#oooooooooooooooooooo
+
+# -----------------------------
+# DEEL 2: Pauzevlinder overzicht
+# -----------------------------
+ws_pauze = wb_out.create_sheet(title="Pauzevlinders")
+
+light_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+center_align = Alignment(horizontal="center", vertical="center")
+thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
+                     top=Side(style="thin"), bottom=Side(style="thin"))
+
+# -----------------------------
+# Rij 1: Uren
+# -----------------------------
+uren_rij1 = []
+
+# Halve uren 12:00 tot 14:30
+u = 12
+m = 0
+while u < 15 or (u == 14 and m <= 30):
+    uren_rij1.append(f"{u:02d}:{m:02d}")
+    m += 30
+    if m >= 60:
+        u += 1
+        m = 0
+
+# Lege kolom tussen 14:30 en 15:30
+uren_rij1.append("")  # lege kolom
+
+# Start vanaf 15:30 met kwartier tot 17:15
+u = 15
+m = 30
+while u < 17 or (u == 17 and m <= 15):
+    uren_rij1.append(f"{u:02d}:{m:02d}")
+    m += 15
+    if m >= 60:
+        u += 1
+        m = 0
+
+# Schrijf uren in rij 1, start in kolom B
+for col_idx, uur in enumerate(uren_rij1, start=2):
+    c = ws_pauze.cell(1, col_idx, uur)
+    c.fill = light_fill
+    c.alignment = center_align
+    c.border = thin_border
+
+# Zet cel A1 ook in licht kleurtje
+a1 = ws_pauze.cell(1, 1, "")
+a1.fill = light_fill
+a1.border = thin_border
+
+# -----------------------------
+# Pauzevlinders en namen
+# -----------------------------
+rij_out = 2
+for pv_idx, pv in enumerate(selected, start=1):
+    # Titel: Pauzevlinder X
+    title_cell = ws_pauze.cell(rij_out, 1, f"Pauzevlinder {pv_idx}")
+    title_cell.font = Font(bold=True)
+    title_cell.fill = light_fill
+    title_cell.alignment = center_align
+    title_cell.border = thin_border
+
+    # Naam eronder (zelfde stijl en kleur)
+    naam_cel = ws_pauze.cell(rij_out + 1, 1, pv["naam"])
+    naam_cel.fill = light_fill
+    naam_cel.alignment = center_align
+    naam_cel.border = thin_border
+
+    rij_out += 3  # lege rij ertussen
+
+# -----------------------------
+# Kolombreedte voor overzicht
+# -----------------------------
+for col in range(1, len(uren_rij1) + 2):
+    ws_pauze.column_dimensions[get_column_letter(col)].width = 10
+
+# Opslaan met dezelfde unieke naam
+
+# Maak in-memory bestand
+output = BytesIO()
+wb_out.save(output)
+output.seek(0)  # Zorg dat lezen vanaf begin kan
+
+
+#oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
 
 #DEEL 3
