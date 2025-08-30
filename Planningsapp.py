@@ -211,7 +211,7 @@ def maak_planning(studenten_local):
 # -----------------------------
 # Herhaal tot volledige planning
 # -----------------------------
-max_attempts = 150
+max_attempts = 1500
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
     dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
