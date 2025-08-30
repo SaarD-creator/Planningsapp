@@ -33,7 +33,8 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
     while i < len(uren):
         geplanned = False
-        for blok in [4,3,2,1]:  # max 4 uur aaneengesloten
+        # Probeer eerst blok van 3, daarna 4 of 2, dan 1
+        for blok in [3,4,2,1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
@@ -45,6 +46,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
             ]
             if kandidaten:
+                # Kies student met min gebruik
                 min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
                 beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
                 gekozen = random.choice(beste)
@@ -56,6 +58,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 geplanned = True
                 break
         if not geplanned:
+            # Laatste optie: 1 uur
             u = uren[i]
             kandidaten_1 = [
                 s for s in studenten
@@ -133,22 +136,28 @@ def kritieke_score(attr):
 attracties_te_plannen.sort(key=kritieke_score)
 
 # -----------------------------
-# Maak planning inclusief schuiven
+# Maak planning inclusief schuiven en swaps
 # -----------------------------
 def maak_planning(studenten_local):
-    # Pauzevlinders (BN2)
-    try:
-        num_pauzevlinders = int(str(ws['BN2'].value).replace(",", ".").strip())
-    except:
-        num_pauzevlinders = 0
+    # Pauzevlinders inlezen uit Excel (BN4:BN10)
+    pauzevlinder_namen = []
+    for rij in range(4, 11):
+        naam = ws[f'BN{rij}'].value
+        if naam:
+            pauzevlinder_namen.append(str(naam).strip())
+
     required_hours = [12,13,14,15,16,17]
-    candidates = [s for s in studenten_local if all(u in s['uren_beschikbaar'] for u in required_hours) and s['aantal_attracties']>=8]
-    candidates.sort(key=lambda x: (-x["aantal_attracties"], -len(x["uren_beschikbaar"]), x["naam"]))
-    selected = candidates[:num_pauzevlinders] if num_pauzevlinders>0 else []
-    for idx,s in enumerate(selected,start=1):
-        s["is_pauzevlinder"] = True
-        s["pv_number"] = idx
-        s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
+
+    selected = []
+    for idx, naam in enumerate(pauzevlinder_namen, start=1):
+        for s in studenten_local:
+            if s["naam"] == naam:
+                s["is_pauzevlinder"] = True
+                s["pv_number"] = idx
+                # Zorg dat pauze-uren niet meer beschikbaar zijn
+                s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
+                selected.append(s)
+                break
 
     student_bezet = {s["naam"]: [] for s in studenten_local}
     dagplanning = {}
@@ -163,7 +172,7 @@ def maak_planning(studenten_local):
         if aantallen.get(attractie,1) >= 2:
             dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren))
 
-    # --- Iteratief schuiven van extra studenten ---
+    # --- Iteratief schuiven en swaps ---
     while True:
         wijziging = False
         uren_bezet = defaultdict(set)
@@ -176,28 +185,35 @@ def maak_planning(studenten_local):
             for u in required_hours:
                 uren_bezet[u].add(pv["naam"])
 
-        for uur in sorted(open_uren):
-            for attractie, posities in dagplanning.items():
+        # Extra studenten
+        extra_per_uur = defaultdict(list)
+        for uur in open_uren:
+            for s in studenten_local:
+                if uur in s["uren_beschikbaar"] and s["naam"] not in uren_bezet[uur] and not s.get("is_pauzevlinder"):
+                    extra_per_uur[uur].append(s["naam"])
+
+        # Plaats extra-studenten in NIEMAND plekken
+        for uur in open_uren:
+            for attractie,posities in dagplanning.items():
                 for pos in posities:
                     if pos.get(uur,"NIEMAND")=="NIEMAND":
-                        for s in studenten_local:
-                            if s["naam"] not in uren_bezet[uur] and uur in s["uren_beschikbaar"] and attractie in s["attracties"] and gebruik_per_attractie_student[attractie][s["naam"]]<6:
-                                pos[uur] = s["naam"]
-                                student_bezet[s["naam"]].append(uur)
-                                gebruik_per_attractie_student[attractie][s["naam"]] += 1
-                                wijziging = True
+                        for s_naam in extra_per_uur[uur][:]:
+                            if s_naam in uren_bezet[uur]:
+                                continue
+                            s_obj = next(s for s in studenten_local if s["naam"]==s_naam)
+                            if uur in s_obj["uren_beschikbaar"] and attractie in s_obj["attracties"] and gebruik_per_attractie_student[attractie][s_naam]<6:
+                                pos[uur]=s_naam
+                                student_bezet[s_naam].append(uur)
+                                gebruik_per_attractie_student[attractie][s_naam]+=1
+                                uren_bezet[uur].add(s_naam)
+                                extra_per_uur[uur].remove(s_naam)
+                                wijziging=True
                                 break
         if not wijziging:
             break
 
-    # Extra per uur voor output
-    extra_per_uur = defaultdict(list)
-    for uur in sorted(open_uren):
-        for s in studenten_local:
-            if s["naam"] not in uren_bezet[uur] and not s.get("is_pauzevlinder") and uur in s["uren_beschikbaar"]:
-                extra_per_uur[uur].append(s["naam"])
-
     return dagplanning, extra_per_uur, selected
+
 
 # -----------------------------
 # Herhaal tot volledige planning
@@ -280,95 +296,6 @@ output = BytesIO()
 wb_out.save(output)
 output.seek(0)
 st.download_button("Download planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-
-#ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
-
-#DEEL 2
-#oooooooooooooooooooo
-#oooooooooooooooooooo
-
-# -----------------------------
-# DEEL 2: Pauzevlinder overzicht
-# -----------------------------
-ws_pauze = wb_out.create_sheet(title="Pauzevlinders")
-
-light_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-center_align = Alignment(horizontal="center", vertical="center")
-thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
-                     top=Side(style="thin"), bottom=Side(style="thin"))
-
-# -----------------------------
-# Rij 1: Uren
-# -----------------------------
-uren_rij1 = []
-
-# Halve uren 12:00 tot 14:30
-u = 12
-m = 0
-while u < 15 or (u == 14 and m <= 30):
-    uren_rij1.append(f"{u:02d}:{m:02d}")
-    m += 30
-    if m >= 60:
-        u += 1
-        m = 0
-
-# Lege kolom tussen 14:30 en 15:30
-uren_rij1.append("")  # lege kolom
-
-# Start vanaf 15:30 met kwartier tot 17:15
-u = 15
-m = 30
-while u < 17 or (u == 17 and m <= 15):
-    uren_rij1.append(f"{u:02d}:{m:02d}")
-    m += 15
-    if m >= 60:
-        u += 1
-        m = 0
-
-# Schrijf uren in rij 1, start in kolom B
-for col_idx, uur in enumerate(uren_rij1, start=2):
-    c = ws_pauze.cell(1, col_idx, uur)
-    c.fill = light_fill
-    c.alignment = center_align
-    c.border = thin_border
-
-# Zet cel A1 ook in licht kleurtje
-a1 = ws_pauze.cell(1, 1, "")
-a1.fill = light_fill
-a1.border = thin_border
-
-# -----------------------------
-# Pauzevlinders en namen
-# -----------------------------
-rij_out = 2
-for pv_idx, pv in enumerate(selected, start=1):
-    # Titel: Pauzevlinder X
-    title_cell = ws_pauze.cell(rij_out, 1, f"Pauzevlinder {pv_idx}")
-    title_cell.font = Font(bold=True)
-    title_cell.fill = light_fill
-    title_cell.alignment = center_align
-    title_cell.border = thin_border
-
-    # Naam eronder (zelfde stijl en kleur)
-    naam_cel = ws_pauze.cell(rij_out + 1, 1, pv["naam"])
-    naam_cel.fill = light_fill
-    naam_cel.alignment = center_align
-    naam_cel.border = thin_border
-
-    rij_out += 3  # lege rij ertussen
-
-# -----------------------------
-# Kolombreedte voor overzicht
-# -----------------------------
-for col in range(1, len(uren_rij1) + 2):
-    ws_pauze.column_dimensions[get_column_letter(col)].width = 10
-
-# Opslaan met dezelfde unieke naam
-
-# Maak in-memory bestand
-output = BytesIO()
-wb_out.save(output)
-output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 
 #oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
