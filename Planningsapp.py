@@ -8,6 +8,7 @@ from io import BytesIO
 import datetime
 import copy
 
+
 # -----------------------------
 # Datum
 # -----------------------------
@@ -238,6 +239,76 @@ for attempt in range(max_attempts):
         studenten = studenten_copy
         break
 
+# -----------------------------
+# Excel output
+# -----------------------------
+wb_out = Workbook()
+ws_out = wb_out.active
+ws_out.title = "Planning"
+header_fill = PatternFill(start_color="BDD7EE", fill_type="solid")
+attr_fill = PatternFill(start_color="E2EFDA", fill_type="solid")
+pv_fill = PatternFill(start_color="FFF2CC", fill_type="solid")
+extra_fill = PatternFill(start_color="FCE4D6", fill_type="solid")
+center_align = Alignment(horizontal="center", vertical="center")
+thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
+                     top=Side(style="thin"), bottom=Side(style="thin"))
+
+# Header
+ws_out.cell(1,1,vandaag).font = Font(bold=True)
+for col_idx, uur in enumerate(sorted(open_uren), start=2):
+    ws_out.cell(1,col_idx,f"{uur}:00").font=Font(bold=True)
+    ws_out.cell(1,col_idx).fill=header_fill
+    ws_out.cell(1,col_idx).alignment=center_align
+    ws_out.cell(1,col_idx).border=thin_border
+
+rij_out=2
+# Attracties
+for attractie,posities in dagplanning.items():
+    for idx,planning in enumerate(posities,start=1):
+        naam_attr = attractie if len(posities)==1 else f"{attractie} {idx}"
+        ws_out.cell(rij_out,1,naam_attr).font=Font(bold=True)
+        ws_out.cell(rij_out,1).fill=attr_fill
+        ws_out.cell(rij_out,1).border=thin_border
+        for col_idx, uur in enumerate(sorted(open_uren), start=2):
+            naam = planning.get(uur,"")
+            if naam=="NIEMAND": naam=""
+            ws_out.cell(rij_out,col_idx,naam).alignment=center_align
+            ws_out.cell(rij_out,col_idx).border=thin_border
+        rij_out+=1
+
+# Pauzevlinders
+rij_out+=1
+for pv_idx,s in enumerate(selected,start=1):
+    ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font=Font(bold=True)
+    ws_out.cell(rij_out,1).fill=pv_fill
+    ws_out.cell(rij_out,1).border=thin_border
+    for col_idx, uur in enumerate(sorted(open_uren), start=2):
+        ws_out.cell(rij_out,col_idx,s["naam"] if uur in [12,13,14,15,16,17] else "").alignment=center_align
+        ws_out.cell(rij_out,col_idx).border=thin_border
+    rij_out+=1
+
+# Extra studenten
+rij_out+=1
+max_extra=max(len(names) for names in extra_per_uur.values()) if extra_per_uur else 0
+for i in range(max_extra):
+    ws_out.cell(rij_out,1,"Extra").font=Font(bold=True)
+    ws_out.cell(rij_out,1).fill=extra_fill
+    ws_out.cell(rij_out,1).border=thin_border
+    for col_idx, uur in enumerate(sorted(open_uren), start=2):
+        naam = extra_per_uur[uur][i] if i<len(extra_per_uur[uur]) else ""
+        ws_out.cell(rij_out,col_idx,naam).alignment=center_align
+        ws_out.cell(rij_out,col_idx).border=thin_border
+    rij_out+=1
+
+# Kolombreedte
+for col in range(1,len(open_uren)+2):
+    ws_out.column_dimensions[get_column_letter(col)].width=15
+
+# Download in Streamlit
+output = BytesIO()
+wb_out.save(output)
+output.seek(0)
+st.download_button("Download planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
 
 
