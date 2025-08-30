@@ -428,19 +428,44 @@ for attempt in range(max_attempts):
 wb_out = Workbook()
 ws_out = wb_out.active
 ws_out.title = "Planning"
-header_fill = PatternFill(start_color="BDD7EE", fill_type="solid")
-attr_fill = PatternFill(start_color="E2EFDA", fill_type="solid")
-pv_fill = PatternFill(start_color="FFF2CC", fill_type="solid")
-extra_fill = PatternFill(start_color="FCE4D6", fill_type="solid")
+
+# Kleuren
+white_fill = PatternFill(start_color="FFFFFF", fill_type="solid")
 center_align = Alignment(horizontal="center", vertical="center")
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
 
-# Header
-ws_out.cell(1,1,vandaag).font = Font(bold=True)
+# Pastelkleuren (hex codes)
+pastel_colors = [
+    "FFB3BA", "FFDFBA", "FFFFBA", "BAFFC9", "BAE1FF",
+    "E2CFEA", "F1CBFF", "FFD6E0", "D0F0C0", "CFFAFE",
+    "FDE2E4", "FFF1C1", "C1FFD7", "DAD0F6", "B5EAD7"
+]
+
+# Maak mapping naam -> kleur
+alle_namen = set()
+for attractie, posities in dagplanning.items():
+    for planning in posities:
+        alle_namen.update(n for n in planning.values() if n not in ["", "NIEMAND"])
+for pv in selected:
+    alle_namen.add(pv["naam"])
+for uur, extras in extra_per_uur.items():
+    alle_namen.update(extras)
+
+naam_kleuren = {}
+for i, naam in enumerate(sorted(alle_namen)):
+    kleur = pastel_colors[i % len(pastel_colors)]
+    naam_kleuren[naam] = PatternFill(start_color=kleur, fill_type="solid")
+
+# Header (uren, wit)
+ws_out.cell(1,1,vandaag).font = Font(bold=True, color="000000")
+ws_out.cell(1,1).fill = white_fill
+ws_out.cell(1,1).alignment=center_align
+ws_out.cell(1,1).border=thin_border
+
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
-    ws_out.cell(1,col_idx,f"{uur}:00").font=Font(bold=True)
-    ws_out.cell(1,col_idx).fill=header_fill
+    ws_out.cell(1,col_idx,f"{uur}:00").font=Font(bold=True, color="000000")
+    ws_out.cell(1,col_idx).fill=white_fill
     ws_out.cell(1,col_idx).alignment=center_align
     ws_out.cell(1,col_idx).border=thin_border
 
@@ -449,38 +474,46 @@ rij_out=2
 for attractie,posities in dagplanning.items():
     for idx,planning in enumerate(posities,start=1):
         naam_attr = attractie if len(posities)==1 else f"{attractie} {idx}"
-        ws_out.cell(rij_out,1,naam_attr).font=Font(bold=True)
-        ws_out.cell(rij_out,1).fill=attr_fill
+        ws_out.cell(rij_out,1,naam_attr).font=Font(bold=True, color="000000")
+        ws_out.cell(rij_out,1).fill=white_fill
         ws_out.cell(rij_out,1).border=thin_border
         for col_idx, uur in enumerate(sorted(open_uren), start=2):
             naam = planning.get(uur,"")
-            if naam=="NIEMAND": naam=""
+            if naam=="NIEMAND": 
+                naam=""
             ws_out.cell(rij_out,col_idx,naam).alignment=center_align
             ws_out.cell(rij_out,col_idx).border=thin_border
+            if naam in naam_kleuren:
+                ws_out.cell(rij_out,col_idx).fill = naam_kleuren[naam]
         rij_out+=1
 
 # Pauzevlinders
 rij_out+=1
 for pv_idx,s in enumerate(selected,start=1):
-    ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font=Font(bold=True)
-    ws_out.cell(rij_out,1).fill=pv_fill
+    ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font=Font(bold=True, color="000000")
+    ws_out.cell(rij_out,1).fill=white_fill
     ws_out.cell(rij_out,1).border=thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
-        ws_out.cell(rij_out,col_idx,s["naam"] if uur in [12,13,14,15,16,17] else "").alignment=center_align
+        naam = s["naam"] if uur in [12,13,14,15,16,17] else ""
+        ws_out.cell(rij_out,col_idx,naam).alignment=center_align
         ws_out.cell(rij_out,col_idx).border=thin_border
+        if naam in naam_kleuren:
+            ws_out.cell(rij_out,col_idx).fill = naam_kleuren[naam]
     rij_out+=1
 
 # Extra studenten
 rij_out+=1
 max_extra=max(len(names) for names in extra_per_uur.values()) if extra_per_uur else 0
 for i in range(max_extra):
-    ws_out.cell(rij_out,1,"Extra").font=Font(bold=True)
-    ws_out.cell(rij_out,1).fill=extra_fill
+    ws_out.cell(rij_out,1,"Extra").font=Font(bold=True, color="000000")
+    ws_out.cell(rij_out,1).fill=white_fill
     ws_out.cell(rij_out,1).border=thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
         naam = extra_per_uur[uur][i] if i<len(extra_per_uur[uur]) else ""
         ws_out.cell(rij_out,col_idx,naam).alignment=center_align
         ws_out.cell(rij_out,col_idx).border=thin_border
+        if naam in naam_kleuren:
+            ws_out.cell(rij_out,col_idx).fill = naam_kleuren[naam]
     rij_out+=1
 
 # Kolombreedte
@@ -492,7 +525,6 @@ output = BytesIO()
 wb_out.save(output)
 output.seek(0)
 st.download_button("Download planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
