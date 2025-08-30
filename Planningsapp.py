@@ -414,12 +414,35 @@ def maak_planning(studenten_local):
 # Herhaal tot volledige planning
 # -----------------------------
 max_attempts = 150
-for attempt in range(max_attempts):
-    studenten_copy = copy.deepcopy(studenten)
-    dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
-    if all(pos.get(u,"")!="NIEMAND" or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
-        studenten = studenten_copy
-        break
+studenten = None  # zal de succesvolle planning bevatten
+
+with st.spinner("Planning wordt berekend..."):
+    progress = st.progress(0)  # voortgangsbalk
+    poging_text = st.empty()    # placeholder voor tekstindicator
+
+    for attempt in range(max_attempts):
+        # update tekstindicator
+        poging_text.text(f"Poging {attempt + 1} van {max_attempts}")
+
+        # kopieer studentenlijst zodat originele data niet overschreven wordt
+        studenten_copy = copy.deepcopy(studenten)
+
+        # maak planning
+        dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
+
+        # update voortgangsbalk
+        progress.progress((attempt + 1) / max_attempts)
+
+        # check of alle posities ingevuld zijn
+        if all(pos.get(u, "") != "NIEMAND" or not extra_per_uur.get(u)
+               for p in dagplanning.values() for pos in p for u in pos):
+            studenten = studenten_copy
+            break
+
+    if studenten is None:
+        st.warning("Kon geen volledige planning genereren binnen het maximum aantal pogingen.")
+    else:
+        st.success("Planning succesvol gegenereerd!")
 
 
 # -----------------------------
