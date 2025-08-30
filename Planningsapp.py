@@ -413,6 +413,7 @@ def maak_planning(studenten_local):
 # -----------------------------
 # Herhaal tot volledige planning
 # -----------------------------
+max_attempts = 150
 studenten_planning = None
 with st.spinner("Planning wordt berekend..."):
     progress = st.progress(0)
