@@ -7,7 +7,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
-kak
+
 # -----------------------------
 # Datum
 # -----------------------------
@@ -33,7 +33,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
 
     def max_consecutive_hours(urenlijst):
-        """Bepaal langste reeks opeenvolgende uren."""
+        """Bepaal de langste aaneengesloten reeks in een lijst uren."""
         if not urenlijst:
             return 0
         urenlijst = sorted(set(urenlijst))
@@ -48,15 +48,15 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
         return max_reeks
 
     def check_max4(student, nieuwe_blokuren):
-        """Check of student met nieuwe blok niet >4 opeenvolgend bij attractie staat."""
-        # verzamel alle al geplande uren bij deze attractie (alle posities)
+        """Controleer of student met dit blok niet meer dan 4 opeenvolgend komt te staan."""
+        # Verzamel alle al geplande uren bij deze attractie (alle posities + dit pos)
         geplande_uren = []
         if attractie in dagplanning:
             for pos in dagplanning[attractie]:
                 for u, naam in pos.items():
                     if naam == student:
                         geplande_uren.append(u)
-        # ook de uren in de huidige (in opbouw zijnde) planning
+        # Ook de uren die we in deze ronde al gepland hebben in deze positie
         for u, naam in planning.items():
             if naam == student:
                 geplande_uren.append(u)
@@ -111,6 +111,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 planning[u] = "NIEMAND"
             i += 1
     return planning
+
 
 
 
