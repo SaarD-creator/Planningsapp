@@ -447,7 +447,7 @@ def maak_planning(studenten_local):
 # -----------------------------
 # Herhaal tot volledige planning
 # -----------------------------
-max_attempts = 150
+max_attempts = 2
 dagplanning = {}
 extra_per_uur = {}
 selected = []
