@@ -32,7 +32,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     uren = sorted(open_uren)
     i = 0
 
-    def check_max_consecutive(student, blokuren, planning):
+    def check_max_consecutive(student, blokuren):
         """Controleer of student met dit blok >4 aaneengesloten uren zou krijgen
            over ALLE posities van deze attractie."""
         # Uren die student al bij deze attractie heeft (alle posities!)
@@ -68,7 +68,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and all(u in s["uren_beschikbaar"] for u in blokuren)
                 and not any(u in student_bezet[s["naam"]] for u in blokuren)
                 and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
-                and check_max_consecutive(s["naam"], blokuren, planning)
+                and check_max_consecutive(s["naam"], blokuren)
             ]
             if kandidaten:
                 # Kies student met minst gebruik
@@ -91,17 +91,18 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and u in s["uren_beschikbaar"]
                 and u not in student_bezet[s["naam"]]
                 and gebruik_per_student_attractie[s["naam"]] < max_per_student
-                and check_max_consecutive(s["naam"], [u], planning)
+                and check_max_consecutive(s["naam"], [u])
             ]
             if kandidaten_1:
                 gekozen = random.choice(kandidaten_1)
                 planning[u] = gekozen["naam"]
                 student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student_attractie[gekozen["naam"]] += 1
+                gebruik_per_student_attractie[attractie][gekozen["naam"]] += 1
             else:
                 planning[u] = "NIEMAND"
             i += 1
     return planning
+
 
 
 # -----------------------------
