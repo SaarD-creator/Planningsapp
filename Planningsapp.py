@@ -431,7 +431,6 @@ ws_out.title = "Planning"
 
 # Kleuren & stijlen
 white_fill = PatternFill(start_color="FFFFFF", fill_type="solid")
-niemand_fill = PatternFill(start_color="F2F2F2", fill_type="solid")  # Lichtgrijs voor NIEMAND
 center_align = Alignment(horizontal="center", vertical="center")
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
@@ -483,7 +482,7 @@ for attractie,posities in dagplanning.items():
             naam = planning.get(uur,"")
             if naam=="NIEMAND": 
                 naam=""
-                ws_out.cell(rij_out,col_idx).fill = niemand_fill
+                ws_out.cell(rij_out,col_idx).fill = white_fill
             elif naam in naam_kleuren:
                 ws_out.cell(rij_out,col_idx).fill = naam_kleuren[naam]
             ws_out.cell(rij_out,col_idx,naam).alignment=center_align
@@ -516,7 +515,7 @@ for i in range(max_extra):
         if naam in naam_kleuren:
             ws_out.cell(rij_out,col_idx).fill = naam_kleuren[naam]
         elif naam == "NIEMAND":
-            ws_out.cell(rij_out,col_idx).fill = niemand_fill
+            ws_out.cell(rij_out,col_idx).fill = white_fill
             naam = ""
         ws_out.cell(rij_out,col_idx,naam).alignment=center_align
         ws_out.cell(rij_out,col_idx).border=thin_border
@@ -531,6 +530,7 @@ output = BytesIO()
 wb_out.save(output)
 output.seek(0)
 st.download_button("Download planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+
 
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
