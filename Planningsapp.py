@@ -57,7 +57,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and all(u in s["uren_beschikbaar"] for u in blokuren)
                 and not any(u in student_bezet[s["naam"]] for u in blokuren)
                 and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
-                and max_consecutive_hours(list(student_bezet[s["naam"]]) + list(planning.get(u, []) for u in blokuren)) <= 4
+                and max_consecutive_hours(student_bezet[s["naam"]] + blokuren) <= 4
             ]
             if kandidaten:
                 min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
