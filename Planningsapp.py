@@ -32,33 +32,42 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     uren = sorted(open_uren)
     i = 0
 
-    def check_max_consecutive(student, blokuren):
-        """Controleer of student met dit blok >4 aaneengesloten uren zou krijgen
-           over ALLE posities van deze attractie."""
-        # Uren die student al bij deze attractie heeft (alle posities!)
-        geplande_uren = []
-        if attractie in dagplanning:
-            for pos in dagplanning[attractie]:
-                for u,v in pos.items():
-                    if v == student:
-                        geplande_uren.append(u)
-        # Voeg mogelijke nieuwe uren toe
-        alle_uren = sorted(set(geplande_uren + blokuren))
-        # Zoek maximale aaneengesloten reeks
+    def max_consecutive_hours(urenlijst):
+        """Bepaal langste reeks opeenvolgende uren."""
+        if not urenlijst:
+            return 0
+        urenlijst = sorted(set(urenlijst))
         max_reeks = 1
         huidig = 1
-        for idx in range(1,len(alle_uren)):
-            if alle_uren[idx] == alle_uren[idx-1] + 1:
+        for idx in range(1, len(urenlijst)):
+            if urenlijst[idx] == urenlijst[idx-1] + 1:
                 huidig += 1
                 max_reeks = max(max_reeks, huidig)
             else:
                 huidig = 1
-        return max_reeks <= 4
+        return max_reeks
+
+    def check_max4(student, nieuwe_blokuren):
+        """Check of student met nieuwe blok niet >4 opeenvolgend bij attractie staat."""
+        # verzamel alle al geplande uren bij deze attractie (alle posities)
+        geplande_uren = []
+        if attractie in dagplanning:
+            for pos in dagplanning[attractie]:
+                for u, naam in pos.items():
+                    if naam == student:
+                        geplande_uren.append(u)
+        # ook de uren in de huidige (in opbouw zijnde) planning
+        for u, naam in planning.items():
+            if naam == student:
+                geplande_uren.append(u)
+
+        alle_uren = geplande_uren + nieuwe_blokuren
+        return max_consecutive_hours(alle_uren) <= 4
 
     while i < len(uren):
         geplanned = False
-        # Probeer blokken in volgorde 3,4,2,1
-        for blok in [3,4,2,1]:
+        # probeer blokken in volgorde 3,4,2,1
+        for blok in [3, 4, 2, 1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
@@ -68,10 +77,10 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and all(u in s["uren_beschikbaar"] for u in blokuren)
                 and not any(u in student_bezet[s["naam"]] for u in blokuren)
                 and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
-                and check_max_consecutive(s["naam"], blokuren)
+                and check_max4(s["naam"], blokuren)
             ]
             if kandidaten:
-                # Kies student met minst gebruik
+                # kies student met minst gebruik
                 min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
                 beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
                 gekozen = random.choice(beste)
@@ -83,7 +92,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 geplanned = True
                 break
         if not geplanned:
-            # Laatste optie: 1 uur
+            # fallback: 1 uur
             u = uren[i]
             kandidaten_1 = [
                 s for s in studenten
@@ -91,17 +100,18 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and u in s["uren_beschikbaar"]
                 and u not in student_bezet[s["naam"]]
                 and gebruik_per_student_attractie[s["naam"]] < max_per_student
-                and check_max_consecutive(s["naam"], [u])
+                and check_max4(s["naam"], [u])
             ]
             if kandidaten_1:
                 gekozen = random.choice(kandidaten_1)
                 planning[u] = gekozen["naam"]
                 student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student_attractie[attractie][gekozen["naam"]] += 1
+                gebruik_per_student_attractie[gekozen["naam"]] += 1
             else:
                 planning[u] = "NIEMAND"
             i += 1
     return planning
+
 
 
 
