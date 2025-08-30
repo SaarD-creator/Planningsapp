@@ -27,14 +27,22 @@ ws = wb["Blad1"]
 # -----------------------------
 # Hulpfunctie: plan blokken bij attractie
 # -----------------------------
-def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, max_per_student=6):
+def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, dagplanning, max_per_student=6):
     planning = {}
     uren = sorted(open_uren)
     i = 0
 
     def check_max_consecutive(student, blokuren, planning):
-        """Controleer of student met dit blok >4 aaneengesloten uren zou krijgen."""
-        geplande_uren = [u for u,v in planning.items() if v == student]
+        """Controleer of student met dit blok >4 aaneengesloten uren zou krijgen
+           over ALLE posities van deze attractie."""
+        # Uren die student al bij deze attractie heeft (alle posities!)
+        geplande_uren = []
+        if attractie in dagplanning:
+            for pos in dagplanning[attractie]:
+                for u,v in pos.items():
+                    if v == student:
+                        geplande_uren.append(u)
+        # Voeg mogelijke nieuwe uren toe
         alle_uren = sorted(set(geplande_uren + blokuren))
         # Zoek maximale aaneengesloten reeks
         max_reeks = 1
@@ -49,7 +57,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
 
     while i < len(uren):
         geplanned = False
-        # Probeer eerst blok van 3, dan 4, dan 2, dan 1
+        # Probeer blokken in volgorde 3,4,2,1
         for blok in [3,4,2,1]:
             if i + blok > len(uren):
                 continue
@@ -60,11 +68,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and all(u in s["uren_beschikbaar"] for u in blokuren)
                 and not any(u in student_bezet[s["naam"]] for u in blokuren)
                 and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
-            ]
-            # Filter kandidaten die hierdoor >4 aaneengesloten uren zouden krijgen
-            kandidaten = [
-                s for s in kandidaten
-                if check_max_consecutive(s["naam"], blokuren, planning)
+                and check_max_consecutive(s["naam"], blokuren, planning)
             ]
             if kandidaten:
                 # Kies student met minst gebruik
@@ -188,12 +192,12 @@ def maak_planning(studenten_local):
 
     # --- Eerste posities ---
     for attractie in attracties_te_plannen:
-        dagplanning[attractie] = [plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren)]
+        dagplanning[attractie] = [plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren, dagplanning)]
 
     # --- Tweede posities ---
     for attractie in attracties_te_plannen:
         if aantallen.get(attractie,1) >= 2:
-            dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren))
+            dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet, gebruik_per_attractie_student[attractie], open_uren, dagplanning))
 
     # --- Iteratief schuiven en swaps ---
     while True:
