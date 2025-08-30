@@ -435,12 +435,19 @@ center_align = Alignment(horizontal="center", vertical="center")
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
 
-# Pastelkleuren (hex codes)
+# Pastelkleuren (uitgebreide set)
 pastel_colors = [
-    "FFB3BA", "FFDFBA", "FFFFBA", "BAFFC9", "BAE1FF",
-    "E2CFEA", "F1CBFF", "FFD6E0", "D0F0C0", "CFFAFE",
-    "FDE2E4", "FFF1C1", "C1FFD7", "DAD0F6", "B5EAD7"
+    "FFE5E5", "FFDACC", "FFF2CC", "E5F5E0", "E0F7FA", "E6E6FA", "FDE2E4", "F3E8FF",
+    "FFF0F5", "E0FFFF", "FAFAD2", "E5FFE5", "FFF5E6", "E8E8E8", "F0E6D2", "EDE0D4",
+    "F8EDEB", "E3D5CA", "D6EAF8", "F9E79F", "D5F5E3", "FADBD8", "EBDEF0", "F5EEF8"
 ]
+
+# Mapping naam → kleur
+naam_kleuren = {}
+for i, naam in enumerate(sorted(alle_namen)):
+    kleur = pastel_colors[i % len(pastel_colors)]
+    naam_kleuren[naam] = PatternFill(start_color=kleur, fill_type="solid")
+
 
 # Maak mapping naam -> kleur
 alle_namen = set()
