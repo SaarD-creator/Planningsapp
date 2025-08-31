@@ -1,33 +1,19 @@
 import streamlit as st
-import pandas as pd
-import copy
-import datetime
 from io import BytesIO
+import datetime
 from collections import defaultdict
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
+import copy
 
 # -----------------------------
-# Datum van vandaag
+# Datum
 # -----------------------------
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
 # -----------------------------
-# Feedback loggen
-# -----------------------------
-wb_feedback = Workbook()
-ws_feedback = wb_feedback.active
-ws_feedback.title = "Feedback"
-
-def log_feedback(msg):
-    """Voeg een regel toe in het feedback-werkblad."""
-    next_row = ws_feedback.max_row + 1
-    ws_feedback.cell(next_row, 1, msg)
-
-
-# -----------------------------
-# Streamlit bestand upload
+# Streamlit upload
 # -----------------------------
 uploaded_file = st.file_uploader("Upload een Excel bestand", type=["xlsx"])
 if not uploaded_file:
@@ -46,7 +32,8 @@ for rij in range(2, 500):
     if not naam:
         continue
 
-    uren_beschikbaar = [10 + (kol - 3) for kol in range(3, 12) if ws.cell(rij, kol).value in [1, True, "WAAR", "X"]]
+    uren_beschikbaar = [10 + (kol - 3) for kol in range(3, 12)
+                        if ws.cell(rij, kol).value in [1, True, "WAAR", "X"]]
     attracties = [ws.cell(1, kol).value for kol in range(14, 32)
                   if ws.cell(rij, kol).value in [1, True, "WAAR", "X"] and ws.cell(1, kol).value]
 
@@ -66,7 +53,7 @@ for rij in range(2, 500):
     })
 
 # -----------------------------
-# Openingsuren inlezen (AJ:AR)
+# Openingsuren inlezen
 # -----------------------------
 open_uren = []
 for kol in range(36, 45):
@@ -95,7 +82,7 @@ for rij in range(4, 11):  # BN4 t/m BN10
             selected.append(student_obj)
 
 # -----------------------------
-# Attracties inlezen en kritieke score bepalen
+# Attracties en aantallen
 # -----------------------------
 aantallen = {}
 attracties_te_plannen = []
@@ -113,67 +100,40 @@ for kol in range(47, 65):
 
 def kritieke_score(attr):
     return sum(1 for s in studenten if attr in s['attracties'])
-
 attracties_te_plannen.sort(key=kritieke_score)
 
 # -----------------------------
-# Planning functie (deterministisch, slim)
+# Planning functie
 # -----------------------------
 def plan_studenten(studenten_local, open_uren, attracties_te_plannen, aantallen):
     dagplanning = {}
-    student_bezet = {s["naam"]: [] for s in studenten_local}
-    gebruik_per_student = {s["naam"]: 0 for s in studenten_local}
-
+    student_uren = {s["naam"]: set() for s in studenten_local}  # per student welke uren al gepland
     for attractie in attracties_te_plannen:
         dagplanning[attractie] = []
         num_posities = aantallen[attractie]
-
-        for pos_idx in range(num_posities):
+        for _ in range(num_posities):
             pos_planning = {}
-            uren_idx = 0
-
-            while uren_idx < len(open_uren):
-                blok_grootte = 4  # Max 4 uur per dag
-                for blok in [3, 2, 1]:
-                    if uren_idx + blok > len(open_uren):
-                        continue
-                    blokuren = open_uren[uren_idx:uren_idx + blok]
-                    kandidaten = [s for s in studenten_local
-                                  if attractie in s["attracties"]
-                                  and all(u in s["uren_beschikbaar"] for u in blokuren)
-                                  and s["naam"] not in [n for n in pos_planning.values()]
-                                  and gebruik_per_student[s["naam"]] + blok <= 4]
-
-                    if kandidaten:
-                        min_attracties = min(s["aantal_attracties"] for s in kandidaten)
-                        beste = [s for s in kandidaten if s["aantal_attracties"] == min_attracties]
-                        gekozen = beste[0]  # deterministisch kiezen eerste van beste
-                        for u in blokuren:
-                            pos_planning[u] = gekozen["naam"]
-                            student_bezet[gekozen["naam"]].append(u)
-                        gebruik_per_student[gekozen["naam"]] += blok
-                        uren_idx += blok
-                        break
+            for uur in open_uren:
+                # Bepaal kandidaten die beschikbaar zijn en nog niet gepland op dit uur
+                kandidaten = [s for s in studenten_local
+                              if uur in s["uren_beschikbaar"]
+                              and s["gepland_uren"] < 4
+                              and attractie in s["attracties"]
+                              and uur not in student_uren[s["naam"]]]
+                if kandidaten:
+                    # kies student met minst aantal attracties
+                    min_attracties = min(s["aantal_attracties"] for s in kandidaten)
+                    gekozen = [s for s in kandidaten if s["aantal_attracties"] == min_attracties][0]
+                    pos_planning[uur] = gekozen["naam"]
+                    student_uren[gekozen["naam"]].add(uur)
+                    gekozen["gepland_uren"] += 1
                 else:
-                    u = open_uren[uren_idx]
-                    kandidaten = [s for s in studenten_local
-                                  if attractie in s["attracties"]
-                                  and u in s["uren_beschikbaar"]
-                                  and gebruik_per_student[s["naam"]] < 4]
-                    if kandidaten:
-                        gekozen = kandidaten[0]
-                        pos_planning[u] = gekozen["naam"]
-                        student_bezet[gekozen["naam"]].append(u)
-                        gebruik_per_student[gekozen["naam"]] += 1
-                    else:
-                        pos_planning[u] = "NIEMAND"
-                    uren_idx += 1
-
+                    pos_planning[uur] = "NIEMAND"
             dagplanning[attractie].append(pos_planning)
     return dagplanning
 
 # -----------------------------
-# Extra invullen voor lege posities
+# Extra invullen
 # -----------------------------
 def vul_extra_studenten(dagplanning, studenten_local, open_uren):
     uren_bezet = defaultdict(set)
@@ -182,29 +142,17 @@ def vul_extra_studenten(dagplanning, studenten_local, open_uren):
             for u, naam in pos.items():
                 if naam not in ["", "NIEMAND"]:
                     uren_bezet[u].add(naam)
-
     for pv in selected:
         for u in required_hours:
             uren_bezet[u].add(pv["naam"])
-
     extra_per_uur = {}
     for uur in open_uren:
-        extra_studenten = [s["naam"] for s in studenten_local if uur in s["uren_beschikbaar"]
+        extra_studenten = [s["naam"] for s in studenten_local
+                           if uur in s["uren_beschikbaar"]
                            and s["naam"] not in uren_bezet[uur]
-                           and not s["is_pauzevlinder"]]
+                           and not s["is_pauzevlinder"]
+                           and s["gepland_uren"] < 4]
         extra_per_uur[uur] = extra_studenten
-
-    for uur in open_uren:
-        for attractie, posities in dagplanning.items():
-            for pos in posities:
-                if pos.get(uur, "") == "NIEMAND":
-                    for naam_extra in extra_per_uur[uur]:
-                        s_obj = next(s for s in studenten_local if s["naam"] == naam_extra)
-                        if uur in s_obj["uren_beschikbaar"] and attractie in s_obj["attracties"] and s_obj["gepland_uren"] < 4:
-                            pos[uur] = naam_extra
-                            s_obj["gepland_uren"] += 1
-                            extra_per_uur[uur].remove(naam_extra)
-                            break
     return extra_per_uur
 
 # -----------------------------
@@ -219,7 +167,6 @@ extra_per_uur = vul_extra_studenten(dagplanning, studenten, open_uren)
 wb_out = Workbook()
 ws_out = wb_out.active
 ws_out.title = "Planning"
-
 header_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
 attr_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
 pv_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
@@ -280,11 +227,12 @@ for i in range(max_extra):
 for col in range(1, len(open_uren) + 2):
     ws_out.column_dimensions[get_column_letter(col)].width = 15
 
-# Output in-memory
+# In-memory output
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
-st.download_button("Download Planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+st.download_button("Download Planning", data=output,
+                   file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
