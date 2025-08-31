@@ -1,5 +1,4 @@
 import streamlit as st
-import copy
 import random
 from collections import defaultdict
 from openpyxl import Workbook, load_workbook
@@ -147,9 +146,10 @@ def kritieke_score(attr):
 attracties_te_plannen.sort(key=kritieke_score)
 
 # -----------------------------
-# Planning genereren
+# Maak planning inclusief extra studenten
 # -----------------------------
 def maak_planning(studenten_local):
+    # Pauzevlinders
     pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4, 11) if ws[f'BN{rij}'].value]
     required_hours = [12,13,14,15,16,17]
     selected = []
@@ -166,6 +166,7 @@ def maak_planning(studenten_local):
     dagplanning = {}
     gebruik_per_attractie_student = {attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
 
+    # --- Eerste en tweede posities ---
     for attractie in attracties_te_plannen:
         dagplanning[attractie] = [plan_attractie_pos(
             attractie, studenten_local, student_bezet,
@@ -177,41 +178,27 @@ def maak_planning(studenten_local):
                 gebruik_per_attractie_student[attractie], open_uren, dagplanning
             ))
 
-    return dagplanning, selected
+    # --- Extra studenten per uur ---
+    extra_per_uur = defaultdict(list)
+    uren_bezet = defaultdict(set)
+    for posities in dagplanning.values():
+        for pos in posities:
+            for u, n in pos.items():
+                if n not in ["", "NIEMAND"]:
+                    uren_bezet[u].add(n)
+
+    for s in studenten_local:
+        for u in s["uren_beschikbaar"]:
+            if s["naam"] not in uren_bezet[u] and not s.get("is_pauzevlinder"):
+                extra_per_uur[u].append(s["naam"])
+
+    return dagplanning, extra_per_uur, selected
 
 # -----------------------------
 # Uitvoeren
 # -----------------------------
-dagplanning, selected = maak_planning(studenten)
-
-if dagplanning:
-    st.success("Planning gegenereerd!")
-
-    # -----------------------------
-    # Output naar Excel
-    # -----------------------------
-    wb_out = Workbook()
-    ws_out = wb_out.active
-    ws_out.title = "Planning"
-
-    # Header
-    ws_out.cell(1,1,"Uur")
-    col = 2
-    for attractie in attracties_te_plannen:
-        for pos in range(aantallen.get(attractie,1)):
-            ws_out.cell(1,col,f"{attractie} Pos {pos+1}")
-            col +=1
-
-    # Vul data
-    for rij, uur in enumerate(open_uren,start=2):
-        ws_out.cell(rij,1,uur)
-        col=2
-        for attractie in attracties_te_plannen:
-            for pos in range(aantallen.get(attractie,1)):
-                naam = dagplanning[attractie][pos].get(uur,"NIEMAND") if pos < len(dagplanning[attractie]) else "NIEMAND"
-                ws_out.cell(rij,col,naam)
-                col+=1
-
+dagplanning, extra_per_uur, selected = maak_planning(studenten)
+st.success("Planning gegenereerd!")
 
 # -----------------------------
 # Excel output
@@ -219,6 +206,7 @@ if dagplanning:
 wb_out = Workbook()
 ws_out = wb_out.active
 ws_out.title = "Planning"
+
 header_fill = PatternFill(start_color="BDD7EE", fill_type="solid")
 attr_fill = PatternFill(start_color="E2EFDA", fill_type="solid")
 pv_fill = PatternFill(start_color="FFF2CC", fill_type="solid")
@@ -282,8 +270,7 @@ for col in range(1,len(open_uren)+2):
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
-st.download_button("Download planning", data=output, file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-
+st.download_button("Download planning", data=output.getvalue(), file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
