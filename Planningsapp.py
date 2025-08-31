@@ -132,95 +132,72 @@ attracties_te_plannen.sort(key=kritieke_score)
 # -----------------------------
 
 def maak_planning(selected, attracties, open_uren):
-    dagplanning = defaultdict(list)
-    extra_per_uur = defaultdict(list)
+    # Dagplanning voorbereiden
+    dagplanning = {attr: [{} for _ in range(aantal)] for attr, aantal in attracties.items()}
+    extra_per_uur = {uur: [] for uur in open_uren}
 
-    # Init planning structure
-    for attr in attracties:
-        for _ in range(attracties[attr]["posities"]):
-            dagplanning[attr].append({uur: "NIEMAND" for uur in open_uren})
+    # Geplande uren en per attractie bijhouden
+    ingepland_uren = {s["naam"]: set() for s in selected}
+    ingepland_per_attr = {s["naam"]: {attr: 0 for attr in attracties} for s in selected}
 
-    # Helper: check 4-uursregel
-    def mag_inplannen(student, uur, planning_dicts):
-        uren = sorted(planning_dicts.keys())
-        idx = uren.index(uur)
-        blok = [planning_dicts[u] for u in uren[max(0, idx-3): idx+4]]
-        return blok.count(student) < 4
-
-    # Eerste toewijzing
     for uur in open_uren:
-        random.shuffle(selected)
-        for s in selected:
-            if s["pauzevlinder"] and 12 <= uur <= 17:
-                continue
-            for attr, posities in dagplanning.items():
-                if uur in s["uren_beschikbaar"] and attr in s["attracties"]:
-                    max_per = attracties[attr]["max_per_student"]
-                    geplande = sum(p[uur] == s["naam"] for p in posities)
-                    if geplande < max_per:
-                        for planning in posities:
-                            if planning[uur] == "NIEMAND" and mag_inplannen(s["naam"], uur, planning):
-                                planning[uur] = s["naam"]
-                                break
+        # Studenten die dit uur beschikbaar zijn
+        beschikbaar = [s for s in selected if uur in s["uren_beschikbaar"]]
+        random.shuffle(beschikbaar)
 
-    # ----------- NABEHANDELING RONDE 1: FIRST-POSITION SAFEGUARD -----------
-    for uur in open_uren:
+        # Eerste ronde: probeer alles te vullen
         for attr, posities in dagplanning.items():
-            if all(p[uur] == "NIEMAND" for p in posities):
-                # zoek eerst iemand die dubbel staat op dit uur
-                moved = False
-                for other_attr, other_posities in dagplanning.items():
-                    if other_attr == attr:
-                        continue
-                    for planning in other_posities:
-                        naam = planning[uur]
-                        if naam != "NIEMAND" and sum(p[uur] == naam for p in dagplanning[other_attr]) > 1:
-                            planning[uur] = "NIEMAND"
-                            posities[0][uur] = naam
-                            moved = True
-                            break
-                    if moved:
+            for pos_idx in range(len(posities)):
+                kandidaat = None
+                for s in beschikbaar:
+                    if (
+                        attr in s["attracties"]
+                        and uur in s["uren_beschikbaar"]
+                        and uur not in ingepland_uren[s["naam"]]
+                        and ingepland_per_attr[s["naam"]][attr] < 1
+                        and not any(u in ingepland_uren[s["naam"]] for u in range(uur-3, uur))
+                    ):
+                        kandidaat = s
                         break
-                # lukt niet? probeer uit extra
-                if not moved:
-                    for s in selected:
-                        if (uur in s["uren_beschikbaar"] and 
-                            attr in s["attracties"] and 
-                            mag_inplannen(s["naam"], uur, posities[0])):
-                            if all(p[uur] != s["naam"] for plist in dagplanning.values() for p in plist):
-                                posities[0][uur] = s["naam"]
-                                moved = True
-                                break
-                # lukt nog steeds niet → blijft "NIEMAND"
+                if kandidaat:
+                    posities[pos_idx][uur] = kandidaat["naam"]
+                    ingepland_uren[kandidaat["naam"]].add(uur)
+                    ingepland_per_attr[kandidaat["naam"]][attr] += 1
+                    beschikbaar.remove(kandidaat)
+                else:
+                    posities[pos_idx][uur] = "NIEMAND"
 
-    # ----------- NABEHANDELING RONDE 2: EXTRA CLEANUP -----------
-    for uur in open_uren:
-        geplande = {p[uur] for posities in dagplanning.values() for p in posities if p[uur] != "NIEMAND"}
-        for s in selected:
-            if s["naam"] not in geplande and uur in s["uren_beschikbaar"]:
-                # kijk of er nog lege plekken zijn
-                placed = False
-                for attr, posities in dagplanning.items():
-                    if attr in s["attracties"]:
-                        for planning in posities:
-                            if planning[uur] == "NIEMAND" and mag_inplannen(s["naam"], uur, planning):
-                                planning[uur] = s["naam"]
-                                placed = True
-                                break
-                        if placed:
-                            break
-                if not placed:
-                    extra_per_uur[uur].append(s["naam"])
+        # Tweede ronde: garandeer dat elke attractie minstens 1 student heeft
+        for attr, posities in dagplanning.items():
+            if all(pos[uur] == "NIEMAND" for pos in posities) and beschikbaar:
+                # Neem eerste vrije student
+                s = beschikbaar.pop()
+                posities[0][uur] = s["naam"]
+                ingepland_uren[s["naam"]].add(uur)
+                ingepland_per_attr[s["naam"]][attr] += 1
+
+        # Derde ronde: probeer lege plekken alsnog op te vullen met resterende studenten
+        for attr, posities in dagplanning.items():
+            for pos in posities:
+                if pos[uur] == "NIEMAND" and beschikbaar:
+                    s = beschikbaar.pop()
+                    pos[uur] = s["naam"]
+                    ingepland_uren[s["naam"]].add(uur)
+                    ingepland_per_attr[s["naam"]][attr] += 1
+
+        # Alles wat overblijft gaat naar extra
+        for s in beschikbaar:
+            extra_per_uur[uur].append(s["naam"])
 
     return dagplanning, extra_per_uur
-
 
 
 # -----------------------------
 # Uitvoeren
 # -----------------------------
-dagplanning, extra_per_uur = maak_planning(studenten, attracties, open_uren)
+dagplanning, extra_per_uur, selected = maak_planning(studenten)
 st.success("Planning gegenereerd!")
+
 
 # -----------------------------
 # Excel output
