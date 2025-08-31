@@ -177,7 +177,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 # -----------------------------
-# Maak planning inclusief schuiven, swaps en extra regels (versnelde versie)
+# Maak planning inclusief schuiven, swaps en extra regels (geoptimaliseerd)
 # -----------------------------
 def maak_planning(studenten_local):
     # Pauzevlinders inlezen
@@ -199,7 +199,8 @@ def maak_planning(studenten_local):
             s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
             selected.append(s)
 
-    student_bezet = {s["naam"]: set() for s in studenten_local}
+    # student_bezet met lijsten voor compatibiliteit met plan_attractie_pos
+    student_bezet = {s["naam"]: [] for s in studenten_local}
     dagplanning = {}
     gebruik_per_attractie_student = {attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
 
@@ -248,7 +249,7 @@ def maak_planning(studenten_local):
             for u in required_hours:
                 uren_bezet[u].add(pv["naam"])
 
-        # Extra studenten per uur (sets sneller dan lijsten)
+        # Extra studenten per uur
         extra_per_uur = {u: [s["naam"] for s in studenten_local 
                              if u in s["uren_beschikbaar"] and s["naam"] not in uren_bezet[u]
                              and not s.get("is_pauzevlinder")] for u in open_uren}
@@ -269,7 +270,7 @@ def maak_planning(studenten_local):
                 for attractie, pos in list(lege_posities):
                     if attractie in s_obj["attracties"] and _ok_max4(extra_student, attractie, {uur}):
                         pos[uur] = extra_student
-                        student_bezet[extra_student].add(uur)
+                        student_bezet[extra_student].append(uur)
                         gebruik_per_attractie_student[attractie][extra_student] += 1
                         uren_bezet[uur].add(extra_student)
                         lege_posities.remove((attractie, pos))
@@ -278,7 +279,7 @@ def maak_planning(studenten_local):
                         break
                 if geplaatst: continue
 
-                # 2) Swap (enkel eerste haalbare swap)
+                # 2) Swap (eerste haalbare swap)
                 for attractie, posities in dagplanning.items():
                     if geplaatst: break
                     for pos in posities:
@@ -287,7 +288,7 @@ def maak_planning(studenten_local):
                         h_obj = student_dict[huidige]
                         if attractie in s_obj["attracties"] and _ok_max4(extra_student, attractie, {uur}) and _ok_max4(huidige, attractie, {uur}):
                             pos[uur] = extra_student
-                            student_bezet[extra_student].add(uur)
+                            student_bezet[extra_student].append(uur)
                             gebruik_per_attractie_student[attractie][extra_student] += 1
                             uren_bezet[uur].add(extra_student)
                             extra_per_uur[uur].append(huidige)
@@ -318,7 +319,7 @@ def maak_planning(studenten_local):
                                 break
                     if kandidaat:
                         posities[0][uur] = kandidaat
-                        student_bezet[kandidaat].add(uur)
+                        student_bezet[kandidaat].append(uur)
                         gebruik_per_attractie_student[attractie][kandidaat] += 1
                         uren_bezet[uur].add(kandidaat)
                         wijziging = True
@@ -327,13 +328,11 @@ def maak_planning(studenten_local):
 
     return dagplanning, extra_per_uur, selected
 
-
 # -----------------------------
-# Herhaal tot volledige planning (versnelde versie)
+# Herhaal tot volledige planning (versneld)
 # -----------------------------
 max_attempts = 50  # minder pogingen nodig door snellere functie
 for attempt in range(max_attempts):
-    # Maak status-only kopie voor mutable delen
     dagplanning, extra_per_uur, selected = maak_planning(studenten)
 
     # Controle: zijn er nog lege plekken die niet met extra ingevuld kunnen worden?
@@ -348,7 +347,7 @@ for attempt in range(max_attempts):
         if not planning_volledig: break
 
     if planning_volledig:
-        break  # succesvolle planning gevonden
+        break
 
 # -----------------------------
 # Excel output
