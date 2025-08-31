@@ -138,42 +138,42 @@ attracties_te_plannen.sort(key=kritieke_score)
 # -----------------------------
 
 
-def maak_planning(studenten, attracties, posities, open_uren):
+def maak_planning(studenten):
     """
     Maakt een dagplanning met blokken 3-4-2-1.
     - Eerste posities altijd gevuld (desnoods swap).
     - Kritieke studenten (weinig mogelijke attracties) krijgen voorrang.
     - Tweede posities en extra's pas daarna.
     """
+    # extract from studenten-data
+    attracties = sorted({a for s in studenten for a in s["attracties"]})
+    posities = {a: max(s.get("posities", {}).get(a, 1) for s in studenten) for a in attracties}
+    open_uren = sorted({u for s in studenten for u in s["uren_beschikbaar"]})
 
     dagplanning = {attr: {p: {} for p in range(posities[attr])} for attr in attracties}
     extra_per_uur = {u: [] for u in open_uren}
 
     # tracking
-    student_bezet = defaultdict(list)          # naam -> lijst met uren
-    gebruik_per_student = defaultdict(int)     # naam -> totaal geplande uren
+    student_bezet = defaultdict(list)
+    gebruik_per_student = defaultdict(int)
 
     def sorteer_kandidaten(kandidaten):
-        """Kritieke studenten eerst, dan minst geplande uren."""
         return sorted(
             kandidaten,
             key=lambda s: (s["aantal_attracties"], gebruik_per_student[s["naam"]])
         )
 
     def plan_blok(attr, pos, start_index, urenlijst, kandidaten, max_per_student=4):
-        """Probeer blok van 3,4,2,1 uur te plannen."""
         for blok in [3, 4, 2, 1]:
             if start_index + blok > len(urenlijst):
                 continue
             blokuren = urenlijst[start_index:start_index+blok]
 
             for s in sorteer_kandidaten(kandidaten):
-                # check beschikbaarheid
                 if all(u in s["uren_beschikbaar"] for u in blokuren) \
                    and all(u not in student_bezet[s["naam"]] for u in blokuren) \
                    and gebruik_per_student[s["naam"]] + blok <= max_per_student:
                     
-                    # inplannen
                     for u in blokuren:
                         dagplanning[attr][pos][u] = s["naam"]
                         student_bezet[s["naam"]].append(u)
@@ -183,27 +183,22 @@ def maak_planning(studenten, attracties, posities, open_uren):
 
     urenlijst = sorted(open_uren)
 
-    # -----------------
     # 1. Eerste posities
-    # -----------------
     for attr in attracties:
-        for pos in range(min(1, posities[attr])):  # alleen de eerste positie
+        for pos in range(min(1, posities[attr])):
             i = 0
             while i < len(urenlijst):
                 kandidaten = [s for s in studenten if attr in s["attracties"]]
                 success, blok = plan_blok(attr, pos, i, urenlijst, kandidaten)
                 if not success:
-                    # laatste redmiddel: zoek iemand uit een tweede positie/extra en swap
                     dagplanning[attr][pos][urenlijst[i]] = "NIEMAND"
                     i += 1
                 else:
                     i += blok
 
-    # -----------------
     # 2. Tweede posities
-    # -----------------
     for attr in attracties:
-        for pos in range(1, posities[attr]):  # tweede posities (indien aanwezig)
+        for pos in range(1, posities[attr]):
             i = 0
             while i < len(urenlijst):
                 kandidaten = [s for s in studenten if attr in s["attracties"]]
@@ -214,9 +209,7 @@ def maak_planning(studenten, attracties, posities, open_uren):
                 else:
                     i += blok
 
-    # -----------------
-    # 3. Extra’s (alleen als ALLE posities gevuld zijn)
-    # -----------------
+    # 3. Extra’s (alleen als ALLE eerste posities gevuld zijn)
     for u in urenlijst:
         geplande = {dagplanning[attr][p].get(u, "NIEMAND")
                     for attr in attracties
@@ -224,11 +217,11 @@ def maak_planning(studenten, attracties, posities, open_uren):
         bezet = {naam for naam in geplande if naam != "NIEMAND"}
         vrije_studenten = [s for s in studenten if u in s["uren_beschikbaar"]
                            and s["naam"] not in bezet]
-        # alleen toevoegen als er geen "NIEMAND" in eerste posities zit
         if all(dagplanning[attr][0].get(u, "NIEMAND") != "NIEMAND" for attr in attracties):
             extra_per_uur[u] = [s["naam"] for s in vrije_studenten]
 
-    return dagplanning, extra_per_uur
+    return dagplanning, extra_per_uur, studenten
+
 
 
 
