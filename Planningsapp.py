@@ -130,45 +130,9 @@ attracties_te_plannen.sort(key=kritieke_score)
 # -----------------------------
 # Maak planning
 # -----------------------------
+
+
 def maak_planning(studenten_local):
-    # -----------------------------
-    # Pauzevlinders
-    # -----------------------------
-    pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
-    required_hours = [12,13,14,15,16,17]
-    selected=[]
-    for idx, naam in enumerate(pauzevlinder_namen, start=1):
-        for s in studenten_local:
-            if s["naam"] == naam:
-                s["is_pauzevlinder"] = True
-                s["pv_number"] = idx
-                s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
-                selected.append(s)
-                break
-
-    # -----------------------------
-    # Init dicts
-    # -----------------------------
-    student_bezet = {s["naam"]: [] for s in studenten_local}
-    dagplanning = {}
-    gebruik_per_student = {attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
-
-    # -----------------------------
-    # Eerste & tweede posities
-    # -----------------------------
-    for attr in attracties_te_plannen:
-        dagplanning[attr] = [
-            plan_attractie_pos(attr, studenten_local, student_bezet, gebruik_per_student[attr], open_uren, dagplanning)
-        ]
-        if aantallen.get(attr,1) >= 2:
-            dagplanning[attr].append(
-                plan_attractie_pos(attr, studenten_local, student_bezet, gebruik_per_student[attr], open_uren, dagplanning)
-            )
-
-    # -----------------------------
-    # Hulpfuncties
-    # -----------------------------
- def maak_planning(studenten_local):
     # -----------------------------
     # Pauzevlinders
     # -----------------------------
@@ -329,6 +293,7 @@ def maak_planning(studenten_local):
                 eerste_pos[uur] = "NIEMAND"
 
     return dagplanning, extra_per_uur, selected
+
 
 
 # -----------------------------
