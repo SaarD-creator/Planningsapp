@@ -144,9 +144,6 @@ attracties_te_plannen.sort(key=kritieke_score)
 def maak_planning(studenten_local):
     from collections import defaultdict
 
-    # -------------------
-    # Hulpfuncties
-    # -------------------
     def max_consecutive_hours(urenlijst):
         if not urenlijst: return 0
         urenlijst = sorted(set(urenlijst))
@@ -183,34 +180,23 @@ def maak_planning(studenten_local):
         dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
 
     # -------------------
-    # Precompute geschikte studenten per attractie
-    # -------------------
-    kandidaten_per_attr = {attr: [s for s in studenten_local if attr in s["attracties"]] 
-                           for attr in attracties_te_plannen}
-
-    # Sorteer eenmalig per kritieke score
-    for attr, lst in kandidaten_per_attr.items():
-        lst.sort(key=lambda s: (s["aantal_attracties"], totaal_uren[s["naam"]]))
-
-    # -------------------
-    # Functie om een positie te plannen
+    # Functie om blokken toe te wijzen tijdens planning
     # -------------------
     def plan_positie(pos, attr):
         uren = sorted(open_uren)
         i = 0
         while i < len(uren):
             geplanned = False
-            # Probeer blokken 3->2->1 ondergeschikt
             for blok in [3,2,1]:
-                if i + blok > len(uren): continue
+                if i + blok > len(uren):
+                    continue
                 blokuren = uren[i:i+blok]
-                for s in kandidaten_per_attr[attr]:
-                    # Check beschikbaar, max per attractie en max 6 totaal
-                    if (all(u in s["uren_beschikbaar"] and u not in student_bezet[s["naam"]] for u in blokuren) and
-                        gebruik_per_student[attr][s["naam"]] + blok <= 4 and
-                        totaal_uren[s["naam"]] + blok <= 6 and
-                        max_consecutive_hours(student_bezet[s["naam"]] + blokuren) <= 4):
-                        # Toewijzen
+                for s in studenten_local:
+                    if (attr in s["attracties"]
+                        and all(u in s["uren_beschikbaar"] and u not in student_bezet[s["naam"]] for u in blokuren)
+                        and gebruik_per_student[attr][s["naam"]] + blok <= 4
+                        and totaal_uren[s["naam"]] + blok <= 6
+                        and max_consecutive_hours(student_bezet[s["naam"]] + blokuren) <= 4):
                         for u in blokuren:
                             pos[u] = s["naam"]
                             student_bezet[s["naam"]].append(u)
@@ -221,11 +207,14 @@ def maak_planning(studenten_local):
                         break
                 if geplanned: break
             if not geplanned:
-                # fallback per uur
                 u = uren[i]
-                for s in kandidaten_per_attr[attr]:
-                    if (u in s["uren_beschikbaar"] and u not in student_bezet[s["naam"]] and
-                        gebruik_per_student[attr][s["naam"]] < 4 and totaal_uren[s["naam"]] < 6):
+                # fallback: eerste beschikbare student
+                for s in studenten_local:
+                    if (attr in s["attracties"]
+                        and u in s["uren_beschikbaar"]
+                        and u not in student_bezet[s["naam"]]
+                        and gebruik_per_student[attr][s["naam"]] < 4
+                        and totaal_uren[s["naam"]] < 6):
                         pos[u] = s["naam"]
                         student_bezet[s["naam"]].append(u)
                         gebruik_per_student[attr][s["naam"]] += 1
@@ -255,6 +244,7 @@ def maak_planning(studenten_local):
                     extra_per_uur[uur].append(s["naam"])
 
     return dagplanning, extra_per_uur, selected
+
 
 
 #mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
