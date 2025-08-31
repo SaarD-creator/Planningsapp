@@ -1,5 +1,7 @@
 # veel 1uur blokken, maar voor de rest top!
 
+# al ietske beter
+
 import streamlit as st
 import random
 from collections import defaultdict
@@ -51,10 +53,8 @@ def plan_attractie_pos(attr, studenten, student_bezet, gebruik_per_student, open
     i = 0
     while i < len(uren):
         geplanned = False
-        # probeer de blokken in volgorde 3-4-2-1
         for blok in [3,4,2,1]:
-            if i+blok > len(uren): 
-                continue
+            if i+blok > len(uren): continue
             blokuren = uren[i:i+blok]
             kandidaten = [s for s in studenten
                           if attr in s["attracties"]
@@ -63,9 +63,8 @@ def plan_attractie_pos(attr, studenten, student_bezet, gebruik_per_student, open
                           and gebruik_per_student[s["naam"]]+blok <= max_per_student
                           and check_max4(s["naam"], blokuren, attr, dagplanning, planning)]
             if kandidaten:
-                # kies student met minst geplande uren voor deze attractie
                 min_uren = min(gebruik_per_student[s["naam"]] for s in kandidaten)
-                beste = [s for s in kandidaten if gebruik_per_student[s["naam"]] == min_uren]
+                beste = [s for s in kandidaten if gebruik_per_student[s["naam"]]==min_uren]
                 gekozen = random.choice(beste)
                 for u in blokuren:
                     planning[u] = gekozen["naam"]
@@ -75,7 +74,6 @@ def plan_attractie_pos(attr, studenten, student_bezet, gebruik_per_student, open
                 geplanned = True
                 break
         if not geplanned:
-            # fallback naar 1-uur blok
             u = uren[i]
             kandidaten = [s for s in studenten
                           if attr in s["attracties"]
