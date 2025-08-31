@@ -319,48 +319,49 @@ def maak_planning(studenten_local):
                     extra_per_uur[uur].append(extra_student)
                     break
 
-        # --- Regel 2: minstens 1 student per attractie per uur ---
+        # --- Regel 2: minstens 1 student per attractie per uur (alle posities!) ---
         for uur in open_uren:
             for attractie,posities in dagplanning.items():
-                bezet = [p.get(uur,"") for p in posities if p.get(uur,"") not in ["","NIEMAND"]]
-                if bezet: continue
-                kandidaat = None
+                for pos in posities:  # Iterate every position
+                    if pos.get(uur,"") not in ["","NIEMAND"]:
+                        continue  # Already filled
+                    kandidaat = None
 
-                # 2a) extra student
-                for i,naam in enumerate(list(extra_per_uur[uur])):
-                    if naam in eligible[uur][attractie] and _ok_max4(naam, attractie, [uur]):
-                        kandidaat = naam
-                        del extra_per_uur[uur][i]
-                        break
-
-                # 2b) vrije student
-                if not kandidaat:
-                    for s in studenten_local:
-                        if s["naam"] in eligible[uur][attractie] and s["naam"] not in uren_bezet[uur] and _ok_max4(s["naam"], attractie, [uur]):
-                            kandidaat = s["naam"]
+                    # 2a) extra student
+                    for i,naam in enumerate(list(extra_per_uur[uur])):
+                        if naam in eligible[uur][attractie] and _ok_max4(naam, attractie, [uur]):
+                            kandidaat = naam
+                            del extra_per_uur[uur][i]
                             break
 
-                # 2c) milde swap
-                if not kandidaat:
-                    for bron_attr,bron_posities in dagplanning.items():
-                        if kandidaat: break
-                        bezet_bron = [p for p in bron_posities if p.get(uur,"") not in ["","NIEMAND"]]
-                        if len(bezet_bron) >= 2 or (bron_attr != attractie and len(bezet_bron)>=1):
-                            for p in bezet_bron:
-                                naam = p[uur]
-                                if naam in eligible[uur][attractie] and _ok_max4(naam, attractie, [uur]):
-                                    p[uur] = ""
-                                    kandidaat = naam
-                                    wijziging = True
-                                    break
+                    # 2b) vrije student
+                    if not kandidaat:
+                        for s in studenten_local:
+                            if s["naam"] in eligible[uur][attractie] and s["naam"] not in uren_bezet[uur] and _ok_max4(s["naam"], attractie, [uur]):
+                                kandidaat = s["naam"]
+                                break
 
-                if kandidaat:
-                    posities[0][uur] = kandidaat
-                    _uren_student_bij_attr[kandidaat][attractie].append(uur)
-                    student_bezet[kandidaat].append(uur)
-                    gebruik_per_attractie_student[attractie][kandidaat] += 1
-                    uren_bezet[uur].add(kandidaat)
-                    wijziging = True
+                    # 2c) milde swap
+                    if not kandidaat:
+                        for bron_attr,bron_posities in dagplanning.items():
+                            if kandidaat: break
+                            bezet_bron = [p for p in bron_posities if p.get(uur,"") not in ["","NIEMAND"]]
+                            if len(bezet_bron) >= 2 or (bron_attr != attractie and len(bezet_bron)>=1):
+                                for p in bezet_bron:
+                                    naam = p[uur]
+                                    if naam in eligible[uur][attractie] and _ok_max4(naam, attractie, [uur]):
+                                        p[uur] = ""
+                                        kandidaat = naam
+                                        wijziging = True
+                                        break
+
+                    if kandidaat:
+                        pos[uur] = kandidaat
+                        _uren_student_bij_attr[kandidaat][attractie].append(uur)
+                        student_bezet[kandidaat].append(uur)
+                        gebruik_per_attractie_student[attractie][kandidaat] += 1
+                        uren_bezet[uur].add(kandidaat)
+                        wijziging = True
 
         if not wijziging:
             break
