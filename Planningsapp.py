@@ -198,7 +198,7 @@ def maak_planning(studenten_local):
 
             # Kandidaten die beschikbaar zijn op dit uur en nog niet gepland
             kandidaten=[s for s in studenten_local if uur in s["uren_beschikbaar"] and uur not in student_bezet[s["naam"]] and not s.get("is_pauzevlinder")]
-            if not kandidaten: break
+            if not kandidaten: break  # geen beschikbare studenten → NIEMAND blijft
 
             geplaatst=False
             # 1) Direct plaatsen
@@ -255,18 +255,17 @@ def maak_planning(studenten_local):
             if eerste_pos.get(uur,"") not in ["","NIEMAND"]:
                 continue  # al ingevuld
 
-            # Kandidaten: alleen studenten die op dit uur werken en deze attractie kunnen
-            kandidaten = [s for s in studenten_local if uur in s["uren_beschikbaar"] and attr in s["attracties"]]
+            # Alleen studenten die beschikbaar zijn op dit uur
+            kandidaten = [s for s in studenten_local if uur in s["uren_beschikbaar"] and attr in s["attracties"] and uur not in student_bezet[s["naam"]]]
             if kandidaten:
                 min_uren = min(gebruik_per_student[attr][s["naam"]] for s in kandidaten)
                 beste = [s for s in kandidaten if gebruik_per_student[attr][s["naam"]] == min_uren]
                 gekozen = random.choice(beste)
-                # Plaats student
                 eerste_pos[uur] = gekozen["naam"]
                 student_bezet[gekozen["naam"]].append(uur)
                 gebruik_per_student[attr][gekozen["naam"]] +=1
             else:
-                # Niemand beschikbaar op dit uur → laat "NIEMAND"
+                # Niemand beschikbaar → NIEMAND
                 eerste_pos[uur] = "NIEMAND"
 
     return dagplanning, extra_per_uur, selected
