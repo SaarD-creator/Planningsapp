@@ -139,18 +139,19 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 
+from collections import defaultdict
+
 def maak_planning(studenten):
     # verzamel attracties en hun max posities
     attracties = sorted({a for s in studenten for a in s["attracties"]})
     posities = {a: max(s.get("posities", {}).get(a, 1) for s in studenten) for a in attracties}
     open_uren = sorted({u for s in studenten for u in s["uren_beschikbaar"]})
 
-    # basisstructuur: altijd dicts
+    # ✅ oude structuur: list van dicts per attractie
     dagplanning = {
-        attr: {
-            p: {u: "NIEMAND" for u in open_uren}
-            for p in range(posities[attr])
-        }
+        attr: [
+            {u: "NIEMAND" for u in open_uren} for _ in range(posities[attr])
+        ]
         for attr in attracties
     }
     extra_per_uur = {u: [] for u in open_uren}
@@ -209,7 +210,7 @@ def maak_planning(studenten):
         geplande = {
             dagplanning[attr][p][u]
             for attr in attracties
-            for p in dagplanning[attr]
+            for p in range(posities[attr])
         }
         bezet = {naam for naam in geplande if naam != "NIEMAND"}
         vrije_studenten = [s for s in studenten if u in s["uren_beschikbaar"]
