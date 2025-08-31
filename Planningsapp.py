@@ -156,12 +156,6 @@ def maak_planning(studenten_local):
             maxr = max(maxr, huidig)
         return maxr
 
-    def _ok_max4(naam, attr, extra_uren, dagplanning):
-        uren = []
-        for posities in dagplanning.get(attr, []):
-            uren += [u for u, n in posities.items() if n == naam]
-        return max_consecutive_hours(sorted(set(uren) | set(extra_uren))) <= 4
-
     # -------------------
     # Pauzevlinders
     # -------------------
@@ -181,6 +175,7 @@ def maak_planning(studenten_local):
     # Init
     # -------------------
     student_bezet = {s["naam"]: [] for s in studenten_local}
+    totaal_uren = {s["naam"]: 0 for s in studenten_local}
     dagplanning = {}
     gebruik_per_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
@@ -188,38 +183,56 @@ def maak_planning(studenten_local):
         dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
 
     # -------------------
-    # Kandidatenlijst vooraf sorteren (kritieke eerst)
+    # Precompute geschikte studenten per attractie
     # -------------------
-    sorted_studenten = sorted(studenten_local, key=lambda s: s["aantal_attracties"])
+    kandidaten_per_attr = {attr: [s for s in studenten_local if attr in s["attracties"]] 
+                           for attr in attracties_te_plannen}
+
+    # Sorteer eenmalig per kritieke score
+    for attr, lst in kandidaten_per_attr.items():
+        lst.sort(key=lambda s: (s["aantal_attracties"], totaal_uren[s["naam"]]))
 
     # -------------------
-    # Functie om een positie te plannen met lichte bloklogica
+    # Functie om een positie te plannen
     # -------------------
     def plan_positie(pos, attr):
         uren = sorted(open_uren)
         i = 0
         while i < len(uren):
             geplanned = False
+            # Probeer blokken 3->2->1 ondergeschikt
             for blok in [3,2,1]:
                 if i + blok > len(uren): continue
                 blokuren = uren[i:i+blok]
-                # Kies eerste student die blok kan nemen
-                for s in sorted_studenten:
-                    if (attr in s["attracties"] and 
-                        all(u in s["uren_beschikbaar"] and u not in student_bezet[s["naam"]] for u in blokuren) and
+                for s in kandidaten_per_attr[attr]:
+                    # Check beschikbaar, max per attractie en max 6 totaal
+                    if (all(u in s["uren_beschikbaar"] and u not in student_bezet[s["naam"]] for u in blokuren) and
                         gebruik_per_student[attr][s["naam"]] + blok <= 4 and
-                        _ok_max4(s["naam"], attr, blokuren, dagplanning)):
+                        totaal_uren[s["naam"]] + blok <= 6 and
+                        max_consecutive_hours(student_bezet[s["naam"]] + blokuren) <= 4):
+                        # Toewijzen
                         for u in blokuren:
                             pos[u] = s["naam"]
                             student_bezet[s["naam"]].append(u)
                         gebruik_per_student[attr][s["naam"]] += blok
+                        totaal_uren[s["naam"]] += blok
                         i += blok
                         geplanned = True
                         break
                 if geplanned: break
             if not geplanned:
+                # fallback per uur
                 u = uren[i]
-                if pos.get(u,"") in ["", "NIEMAND"]:
+                for s in kandidaten_per_attr[attr]:
+                    if (u in s["uren_beschikbaar"] and u not in student_bezet[s["naam"]] and
+                        gebruik_per_student[attr][s["naam"]] < 4 and totaal_uren[s["naam"]] < 6):
+                        pos[u] = s["naam"]
+                        student_bezet[s["naam"]].append(u)
+                        gebruik_per_student[attr][s["naam"]] += 1
+                        totaal_uren[s["naam"]] += 1
+                        geplanned = True
+                        break
+                if not geplanned:
                     pos[u] = "NIEMAND"
                 i += 1
 
