@@ -1,10 +1,7 @@
 import streamlit as st
-import copy
 import random
 from collections import defaultdict
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
 
@@ -150,7 +147,6 @@ attracties_te_plannen.sort(key=kritieke_score)
 # Planning genereren
 # -----------------------------
 def maak_planning(studenten_local):
-    # Pauzevlinders
     pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4, 11) if ws[f'BN{rij}'].value]
     required_hours = [12,13,14,15,16,17]
     selected = []
@@ -179,6 +175,39 @@ def maak_planning(studenten_local):
             ))
 
     return dagplanning, selected
+
+# -----------------------------
+# Uitvoeren
+# -----------------------------
+dagplanning, selected = maak_planning(studenten)
+
+if dagplanning:
+    st.success("Planning gegenereerd!")
+
+    # -----------------------------
+    # Output naar Excel
+    # -----------------------------
+    wb_out = Workbook()
+    ws_out = wb_out.active
+    ws_out.title = "Planning"
+
+    # Header
+    ws_out.cell(1,1,"Uur")
+    col = 2
+    for attractie in attracties_te_plannen:
+        for pos in range(aantallen.get(attractie,1)):
+            ws_out.cell(1,col,f"{attractie} Pos {pos+1}")
+            col +=1
+
+    # Vul data
+    for rij, uur in enumerate(open_uren,start=2):
+        ws_out.cell(rij,1,uur)
+        col=2
+        for attractie in attracties_te_plannen:
+            for pos in range(aantallen.get(attractie,1)):
+                naam = dagplanning[attractie][pos].get(uur,"NIEMAND") if pos < len(dagplanning[attractie]) else "NIEMAND"
+                ws_out.cell(rij,col,naam)
+                col+=1
 
 
 # -----------------------------
