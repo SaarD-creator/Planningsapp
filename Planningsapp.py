@@ -255,27 +255,22 @@ def maak_planning(studenten_local):
             if eerste_pos.get(uur,"") not in ["","NIEMAND"]:
                 continue  # al ingevuld
 
-            # Kandidaten: beschikbaar + kan attractie + nog niet op dit uur
-            kandidaten = [s for s in studenten_local if uur in s["uren_beschikbaar"] 
-                          and uur not in student_bezet[s["naam"]] and attr in s["attracties"]]
+            # Kandidaten: alleen studenten die op dit uur werken en deze attractie kunnen
+            kandidaten = [s for s in studenten_local if uur in s["uren_beschikbaar"] and attr in s["attracties"]]
             if kandidaten:
                 min_uren = min(gebruik_per_student[attr][s["naam"]] for s in kandidaten)
                 beste = [s for s in kandidaten if gebruik_per_student[attr][s["naam"]] == min_uren]
                 gekozen = random.choice(beste)
-            else:
-                # Geen volledig beschikbare student, forceer een student die de attractie kan
-                forceer_kandidaten = [s for s in studenten_local if attr in s["attracties"]]
-                min_uren = min(gebruik_per_student[attr][s["naam"]] for s in forceer_kandidaten)
-                beste = [s for s in forceer_kandidaten if gebruik_per_student[attr][s["naam"]] == min_uren]
-                gekozen = random.choice(beste)
-
-            # Plaats student
-            eerste_pos[uur] = gekozen["naam"]
-            if uur not in student_bezet[gekozen["naam"]]:
+                # Plaats student
+                eerste_pos[uur] = gekozen["naam"]
                 student_bezet[gekozen["naam"]].append(uur)
-            gebruik_per_student[attr][gekozen["naam"]] +=1
+                gebruik_per_student[attr][gekozen["naam"]] +=1
+            else:
+                # Niemand beschikbaar op dit uur → laat "NIEMAND"
+                eerste_pos[uur] = "NIEMAND"
 
     return dagplanning, extra_per_uur, selected
+
 
 # -----------------------------
 # Uitvoeren
