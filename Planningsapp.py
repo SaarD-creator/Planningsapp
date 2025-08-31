@@ -139,6 +139,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 # Maak planning
 # -----------------------------
 
+
 def maak_planning(studenten_local):
     from collections import defaultdict
 
@@ -176,7 +177,7 @@ def maak_planning(studenten_local):
     dagplanning = {}
     gebruik_per_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
-    # Voor elke attractie: aantal posities (1 of 2)
+    # Maak posities aan
     for attr in attracties_te_plannen:
         dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
 
@@ -186,6 +187,7 @@ def maak_planning(studenten_local):
     for attr, posities in dagplanning.items():
         for idx, pos in enumerate(posities):
             vrije_uren = sorted(open_uren)
+            # 1. probeer blokken van 3/2/1
             planning_blok = plan_attractie_pos(
                 attr=attr,
                 studenten=studenten_local,
@@ -194,9 +196,34 @@ def maak_planning(studenten_local):
                 open_uren=vrije_uren,
                 dagplanning=dagplanning[attr]
             )
-            # Vul positie met geplande blokken
             for uur, naam in planning_blok.items():
                 pos[uur] = naam
+
+    # -----------------------------
+    # Vul lege posities per uur
+    # -----------------------------
+    for attr, posities in dagplanning.items():
+        for pos in posities:
+            for uur in open_uren:
+                if pos.get(uur, "") in ["", "NIEMAND"]:
+                    # Kandidaten beschikbaar op dit uur
+                    kandidaten = [
+                        s for s in studenten_local
+                        if uur in s["uren_beschikbaar"]
+                        and attr in s["attracties"]
+                        and _ok_max4(s["naam"], attr, [uur])
+                        and gebruik_per_student[attr][s["naam"]] < 4
+                        and uur not in student_bezet[s["naam"]]
+                        and not s.get("is_pauzevlinder")
+                    ]
+                    if kandidaten:
+                        kandidaten.sort(key=lambda s: (s["aantal_attracties"], gebruik_per_student[attr][s["naam"]]))
+                        gekozen = kandidaten[0]
+                        pos[uur] = gekozen["naam"]
+                        student_bezet[gekozen["naam"]].append(uur)
+                        gebruik_per_student[attr][gekozen["naam"]] += 1
+                    else:
+                        pos[uur] = "NIEMAND"
 
     # -----------------------------
     # Extra studenten per uur
