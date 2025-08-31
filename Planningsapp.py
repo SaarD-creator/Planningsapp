@@ -318,7 +318,7 @@ def maak_planning_full_coverage(studenten_local, max_rounds=5):
 max_attempts = 20  # veel lager dan 150, meestal voldoende
 for attempt in range(max_attempts):
     # Geen deepcopy, we werken met dicts/sets, wijzigingen zijn lokaal binnen functie
-    dagplanning, extra_per_uur, selected = maak_planning_fast(studenten)
+    dagplanning, extra_per_uur, selected = maak_planning_full_coverage(studenten)
     
     # Check: alle posities gevuld of geen extra's over
     volledig = True
