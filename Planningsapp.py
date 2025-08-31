@@ -61,7 +61,8 @@ def plan_attractie_pos(attr, studenten, student_bezet, gebruik_per_student, open
     while i < len(uren):
         geplanned = False
 
-        for blok in [3, 2, 1]:
+        # probeer eerst grotere blokken
+        for blok in [3,2,1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
@@ -94,6 +95,7 @@ def plan_attractie_pos(attr, studenten, student_bezet, gebruik_per_student, open
             i += 1
 
     return planning
+
 
 # -----------------------------
 # Studenten inlezen
@@ -188,7 +190,7 @@ def maak_planning(studenten_local):
         dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
 
     # -------------------
-    # Eerste posities
+    # Plan eerste posities
     # -------------------
     for uur in open_uren:
         for attr, posities in dagplanning.items():
@@ -229,7 +231,7 @@ def maak_planning(studenten_local):
                         eerste_pos[uur] = "NIEMAND"
 
     # -------------------
-    # Tweede posities
+    # Plan tweede posities
     # -------------------
     for uur in open_uren:
         for attr, posities in dagplanning.items():
@@ -262,7 +264,7 @@ def maak_planning(studenten_local):
                     extra_per_uur[uur].append(s["naam"])
 
     # -------------------
-    # Lichte blokoptimalisatie (ondergeschikt)
+    # Blokken aanpassen (3/2/1 uur) ZONDER iets anders aan te passen
     # -------------------
     for attr, posities in dagplanning.items():
         for pos in posities:
@@ -274,14 +276,20 @@ def maak_planning(studenten_local):
                 if naam in ["", "NIEMAND"]:
                     i += 1
                     continue
-                # probeer een blok van 2 of 3 uur samen te voegen binnen deze positie
-                for blok in [3,2]:  # eerst 3, dan 2
-                    if i + blok > len(uren_sorted): continue
+                # probeer blok van 3, dan 2, dan 1 uur
+                for blok in [3,2,1]:
+                    if i + blok > len(uren_sorted):
+                        continue
                     blokuren = uren_sorted[i:i+blok]
-                    # check of alle uren beschikbaar zijn voor deze student of veilig te ruilen
+                    # check max 4 uur per attractie en max 6 uur totaal
+                    if len([u for u in blokuren if pos[u]==naam]) > 4:
+                        continue
+                    if len(student_bezet[naam]) + len([u for u in blokuren if pos[u]!=naam]) > 6:
+                        continue
+                    # check of ruil veilig is
                     if all(pos[u]==naam or (pos[u] not in ["", "NIEMAND"] and _ok_max4(pos[u], attr, [u], dagplanning)) for u in blokuren):
                         for u in blokuren:
-                            if pos[u] not in ["", "NIEMAND"] and pos[u] != naam:
+                            if pos[u] not in ["", "NIEMAND"] and pos[u]!=naam:
                                 andere = pos[u]
                                 pos[u] = naam
                                 student_bezet[naam].append(u)
@@ -290,6 +298,7 @@ def maak_planning(studenten_local):
                 i += 1
 
     return dagplanning, extra_per_uur, selected
+
 
 
 #mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
