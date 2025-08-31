@@ -8,6 +8,7 @@ from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
 
+
 # -----------------------------
 # Datum
 # -----------------------------
