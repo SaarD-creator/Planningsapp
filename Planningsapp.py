@@ -260,18 +260,6 @@ def maak_planning(studenten_local):
 
     return dagplanning, extra_per_uur, selected
 
-# -----------------------------
-# Herhaal tot volledige planning
-# -----------------------------
-max_attempts = 150
-for attempt in range(max_attempts):
-studenten_copy = copy.deepcopy(studenten)
-dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
-
-
-if all(pos.get(u, '') != 'NIEMAND' or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
-studenten = studenten_copy
-break
 
 # -----------------------------
 # Excel output
