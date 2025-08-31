@@ -370,8 +370,6 @@ def maak_planning(studenten_local):
 # Herhaal tot volledige planning
 # -----------------------------
 max_attempts = 150
-uren_sorted = sorted(open_uren)
-
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
     dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
@@ -396,6 +394,8 @@ for attempt in range(max_attempts):
 # -----------------------------
 # Excel output
 # -----------------------------
+uren_sorted = sorted(open_uren)   # <== verplaatst naar hier
+
 wb_out = Workbook()
 ws_out = wb_out.active
 ws_out.title = "Planning"
