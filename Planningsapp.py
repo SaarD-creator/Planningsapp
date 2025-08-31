@@ -176,7 +176,9 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 
-def maak_planning(studenten_local, ws, aantallen, open_uren, attracties_te_plannen, max_rounds=5):
+def maak_planning(studenten_local, max_rounds=5):
+    global ws, aantallen, open_uren, attracties_te_plannen
+
     # -------------------
     # Pauzevlinders
     # -------------------
@@ -232,6 +234,7 @@ def maak_planning(studenten_local, ws, aantallen, open_uren, attracties_te_plann
             if uur in eerste_pos and eerste_pos[uur] not in [None, "", "NIEMAND"]:
                 continue
             geplaatst = False
+            # Probeer vrije student
             for s in studenten_local:
                 if (uur in s["uren_beschikbaar"] 
                     and attr in s["attracties"] 
@@ -242,8 +245,8 @@ def maak_planning(studenten_local, ws, aantallen, open_uren, attracties_te_plann
                     gebruik_per_attractie_student[attr][s["naam"]] += 1
                     geplaatst = True
                     break
+            # Fallback pauzevlinder
             if not geplaatst and selected:
-                # fallback pauzevlinder
                 for pv in selected:
                     if uur in pv["uren_beschikbaar"] and attr in pv["attracties"]:
                         eerste_pos[uur] = pv["naam"]
@@ -251,11 +254,12 @@ def maak_planning(studenten_local, ws, aantallen, open_uren, attracties_te_plann
                         gebruik_per_attractie_student[attr][pv["naam"]] += 1
                         geplaatst = True
                         break
+            # Laat nooit leeg
             if not geplaatst:
                 eerste_pos[uur] = "FORCED"
 
     # -------------------
-    # Extra posities en swaps
+    # Extra posities
     # -------------------
     for _ in range(max_rounds):
         wijziging = False
@@ -281,28 +285,15 @@ def maak_planning(studenten_local, ws, aantallen, open_uren, attracties_te_plann
 
 
 # -----------------------------
-# Herhaal tot volledige planning (light)
+# Vul volledige planning (Streamlit-vriendelijk)
 # -----------------------------
-max_attempts = 20  # veel lager dan 150, meestal voldoende
-for attempt in range(max_attempts):
-    # Geen deepcopy, we werken met dicts/sets, wijzigingen zijn lokaal binnen functie
-    dagplanning, extra_per_uur, selected = maak_planning(studenten)
-    
-    # Check: alle posities gevuld of geen extra's over
-    volledig = True
-    for posities in dagplanning.values():
-        for pos in posities:
-            for u in open_uren:
-                if pos.get(u, "") in ["", "NIEMAND"] and extra_per_uur.get(u):
-                    volledig = False
-                    break
-            if not volledig:
-                break
-        if not volledig:
-            break
+dagplanning, selected = maak_planning(studenten)
 
-    if volledig:
-        break
+# Optionele check: bevestig dat elke attractie per uur minimaal 1 student heeft
+for attr, posities in dagplanning.items():
+    for uur in open_uren:
+        if posities[0].get(uur, "") in ["", "NIEMAND"]:
+            st.warning(f"Attractie {attr} heeft geen student op uur {uur}")
 
 
 
