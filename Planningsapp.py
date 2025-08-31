@@ -197,19 +197,18 @@ def maak_planning(studenten_local):
     gebruik_per_attractie_student = {attr: {s['naam']: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
     dagplanning = {}
-    # Gebruik de bestaande hulpfunctie plan_attractie_pos
+    # Stap 1: eerste en tweede posities per attractie invullen via plan_attractie_pos
     for attractie in attracties_te_plannen:
         dagplanning[attractie] = [plan_attractie_pos(attractie, studenten_local, student_bezet,
-                                                   gebruik_per_attractie_student[attractie], open_uren, dagplanning)]
+                                                    gebruik_per_attractie_student[attractie], open_uren, dagplanning)]
         if aantallen.get(attractie, 1) >= 2:
             dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet,
                                                              gebruik_per_attractie_student[attractie], open_uren, dagplanning))
 
-    # -----------------------------
-    # Stap 1: Zorg dat elke attractie per uur minstens 1 student heeft
-    # -----------------------------
+    # Stap 2: Zorg dat minstens 1 student per attractie per uur staat
     for uur in open_uren:
         for attractie, posities in dagplanning.items():
+            geplaatst = False
             for pos in posities:
                 if pos.get(uur, '') in ['', 'NIEMAND']:
                     for s in studenten_local:
@@ -217,20 +216,21 @@ def maak_planning(studenten_local):
                             pos[uur] = s['naam']
                             student_bezet[s['naam']].append(uur)
                             gebruik_per_attractie_student[attractie][s['naam']] += 1
+                            geplaatst = True
                             break
+                if geplaatst:
+                    break
 
-    # -----------------------------
-    # Stap 2: Vul overige vrije plekken met beschikbare studenten
-    # -----------------------------
+    # Stap 3: Vul overige vrije plekken met beschikbare studenten
     max_iterations = 1000
     iteration = 0
 
     while iteration < max_iterations:
         iteration += 1
         wijziging = False
-
-        # Update per-uur informatie over welke studenten al geplaatst zijn
         extra_per_uur = defaultdict(list)
+
+        # Bepaal welke studenten nog beschikbaar zijn per uur
         for uur in open_uren:
             for s in studenten_local:
                 if uur in s['uren_beschikbaar'] and uur not in student_bezet[s['naam']] and not s.get('is_pauzevlinder'):
@@ -240,7 +240,6 @@ def maak_planning(studenten_local):
             for attractie, posities in dagplanning.items():
                 for pos in posities:
                     if pos.get(uur, '') in ['', 'NIEMAND']:
-                        # Prioriteit: student kan attractie, max 4 uur regel, beschikbaar
                         kandidaten = [s for s in studenten_local
                                       if uur in s['uren_beschikbaar']
                                       and attractie in s['attracties']
@@ -252,6 +251,8 @@ def maak_planning(studenten_local):
                             pos[uur] = gekozen['naam']
                             student_bezet[gekozen['naam']].append(uur)
                             gebruik_per_attractie_student[attractie][gekozen['naam']] += 1
+                            if gekozen['naam'] in extra_per_uur[uur]:
+                                extra_per_uur[uur].remove(gekozen['naam'])
                             wijziging = True
 
         if not wijziging:
@@ -264,15 +265,13 @@ def maak_planning(studenten_local):
 # -----------------------------
 max_attempts = 150
 for attempt in range(max_attempts):
-    studenten_copy = copy.deepcopy(studenten)
-    dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
-
-    if all(pos.get(u, '') != 'NIEMAND' or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
-        studenten = studenten_copy
-        break
+studenten_copy = copy.deepcopy(studenten)
+dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
 
 
-
+if all(pos.get(u, '') != 'NIEMAND' or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
+studenten = studenten_copy
+break
 
 # -----------------------------
 # Excel output
