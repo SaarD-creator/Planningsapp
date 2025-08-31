@@ -8,11 +8,6 @@ from openpyxl.utils import get_column_letter
 import copy
 
 # -----------------------------
-# Datum
-# -----------------------------
-vandaag = datetime.date.today().strftime("%d-%m-%Y")
-
-# -----------------------------
 # Feedback loggen
 # -----------------------------
 wb_feedback = Workbook()
@@ -24,6 +19,10 @@ def log_feedback(msg):
     next_row = ws_feedback.max_row + 1
     ws_feedback.cell(next_row, 1, msg)
 
+# -----------------------------
+# Datum
+# -----------------------------
+vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
 # -----------------------------
 # Streamlit upload
@@ -111,44 +110,81 @@ for kol in range(47, 65):
     if aantallen[naam] >= 1:
         attracties_te_plannen.append(naam)
 
+# Kritieke score: minder kandidaten = hoger prioriteit
 def kritieke_score(attr):
     return sum(1 for s in studenten if attr in s['attracties'])
 attracties_te_plannen.sort(key=kritieke_score)
 
 # -----------------------------
-# Planning functie
+# Hulpfunctie: plan 1 positie van 1 attractie
 # -----------------------------
-def plan_studenten(studenten_local, open_uren, attracties_te_plannen, aantallen):
-    dagplanning = {}
-    student_uren = {s["naam"]: set() for s in studenten_local}  # per student welke uren al gepland
-    for attractie in attracties_te_plannen:
-        dagplanning[attractie] = []
-        num_posities = aantallen[attractie]
-        for _ in range(num_posities):
-            pos_planning = {}
-            for uur in open_uren:
-                # Bepaal kandidaten die beschikbaar zijn en nog niet gepland op dit uur
-                kandidaten = [s for s in studenten_local
-                              if uur in s["uren_beschikbaar"]
-                              and s["gepland_uren"] < 4
-                              and attractie in s["attracties"]
-                              and uur not in student_uren[s["naam"]]]
-                if kandidaten:
-                    # kies student met minst aantal attracties
-                    min_attracties = min(s["aantal_attracties"] for s in kandidaten)
-                    gekozen = [s for s in kandidaten if s["aantal_attracties"] == min_attracties][0]
-                    pos_planning[uur] = gekozen["naam"]
-                    student_uren[gekozen["naam"]].add(uur)
-                    gekozen["gepland_uren"] += 1
-                else:
-                    pos_planning[uur] = "NIEMAND"
-            dagplanning[attractie].append(pos_planning)
-    return dagplanning
+def plan_attractie_pos(attractie, studenten_local, student_bezet, open_uren, verplicht=True):
+    planning = {}
+    uren = sorted(open_uren)
+    i = 0
+    while i < len(uren):
+        geplanned = False
+        # Probeer blokken van 3,2,1 uur
+        for blok in [3, 2, 1]:
+            if i + blok > len(uren):
+                continue
+            blokuren = uren[i:i+blok]
+            kandidaten = [s for s in studenten_local
+                          if attractie in s["attracties"]
+                          and all(u in s["uren_beschikbaar"] for u in blokuren)
+                          and all(u not in student_bezet[s["naam"]] for u in blokuren)
+                          and s["gepland_uren"] + blok <= 4]
+            if kandidaten:
+                # kies student met minste aantal attracties (deterministisch)
+                min_attracties = min(s["aantal_attracties"] for s in kandidaten)
+                gekozen = next(s for s in kandidaten if s["aantal_attracties"] == min_attracties)
+                for u in blokuren:
+                    planning[u] = gekozen["naam"]
+                    student_bezet[gekozen["naam"]].append(u)
+                gekozen["gepland_uren"] += blok
+                i += blok
+                geplanned = True
+                break
+        if not geplanned:
+            u = uren[i]
+            kandidaten_1 = [s for s in studenten_local
+                            if attractie in s["attracties"]
+                            and u in s["uren_beschikbaar"]
+                            and u not in student_bezet[s["naam"]]
+                            and s["gepland_uren"] < 4]
+            if kandidaten_1:
+                min_attracties = min(s["aantal_attracties"] for s in kandidaten_1)
+                gekozen = next(s for s in kandidaten_1 if s["aantal_attracties"] == min_attracties)
+                planning[u] = gekozen["naam"]
+                student_bezet[gekozen["naam"]].append(u)
+                gekozen["gepland_uren"] += 1
+            else:
+                planning[u] = "NIEMAND"
+            i += 1
+    return planning
 
 # -----------------------------
-# Extra invullen
+# Maak volledige dagplanning
 # -----------------------------
-def vul_extra_studenten(dagplanning, studenten_local, open_uren):
+def maak_planning(studenten_local):
+    student_bezet = {s["naam"]: [] for s in studenten_local}
+    dagplanning = {}
+    gebruik_per_attractie_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
+
+    # Plan eerste en tweede posities per attractie
+    for attractie in attracties_te_plannen:
+        dagplanning[attractie] = []
+        # Eerste positie
+        pos1 = plan_attractie_pos(attractie, studenten_local, student_bezet, open_uren, verplicht=True)
+        dagplanning[attractie].append(pos1)
+        # Tweede positie indien nodig
+        if aantallen.get(attractie, 1) >= 2:
+            pos2 = plan_attractie_pos(attractie, studenten_local, student_bezet, open_uren, verplicht=False)
+            dagplanning[attractie].append(pos2)
+
+    # -----------------------------
+    # Wissel extra studenten naar lege posities
+    # -----------------------------
     uren_bezet = defaultdict(set)
     for posities in dagplanning.values():
         for pos in posities:
@@ -158,21 +194,38 @@ def vul_extra_studenten(dagplanning, studenten_local, open_uren):
     for pv in selected:
         for u in required_hours:
             uren_bezet[u].add(pv["naam"])
+
     extra_per_uur = {}
-    for uur in open_uren:
+    for uur in sorted(open_uren):
         extra_studenten = [s["naam"] for s in studenten_local
                            if uur in s["uren_beschikbaar"]
                            and s["naam"] not in uren_bezet[uur]
                            and not s["is_pauzevlinder"]
                            and s["gepland_uren"] < 4]
         extra_per_uur[uur] = extra_studenten
-    return extra_per_uur
+
+    # Controle: als er nog vrije posities zijn, zet daar extra studenten in
+    for uur in sorted(open_uren):
+        for attractie, posities in dagplanning.items():
+            for pos in posities:
+                if pos.get(uur, "") == "NIEMAND":
+                    for naam_extra in extra_per_uur[uur][:]:
+                        student_obj = next(s for s in studenten_local if s['naam'] == naam_extra)
+                        if uur in student_obj['uren_beschikbaar'] and attractie in student_obj['attracties'] and student_obj['gepland_uren'] < 4:
+                            pos[uur] = naam_extra
+                            student_obj['gepland_uren'] += 1
+                            uren_bezet[uur].add(naam_extra)
+                            extra_per_uur[uur].remove(naam_extra)
+                            break
+
+    return dagplanning, extra_per_uur, selected
 
 # -----------------------------
-# Planning maken
+# Dagplanning maken
 # -----------------------------
-dagplanning = plan_studenten(studenten, open_uren, attracties_te_plannen, aantallen)
-extra_per_uur = vul_extra_studenten(dagplanning, studenten, open_uren)
+studenten_copy = copy.deepcopy(studenten)
+dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
+log_feedback(f"Aantal studenten ingeladen: {len(studenten)}")
 
 # -----------------------------
 # Excel output
