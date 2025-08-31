@@ -13,6 +13,18 @@ import datetime
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
 # -----------------------------
+# Feedback loggen
+# -----------------------------
+wb_feedback = Workbook()
+ws_feedback = wb_feedback.active
+ws_feedback.title = "Feedback"
+
+def log_feedback(msg):
+    """Voeg een regel toe in het feedback-werkblad."""
+    next_row = ws_feedback.max_row + 1
+    ws_feedback.cell(next_row, 1, msg)
+
+# -----------------------------
 # Upload Excel
 # -----------------------------
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
