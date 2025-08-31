@@ -61,8 +61,7 @@ def plan_attractie_pos(attr, studenten, student_bezet, gebruik_per_student, open
     while i < len(uren):
         geplanned = False
 
-        # probeer eerst grotere blokken
-        for blok in [3,2,1]:
+        for blok in [3, 2, 1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
@@ -95,7 +94,6 @@ def plan_attractie_pos(attr, studenten, student_bezet, gebruik_per_student, open
             i += 1
 
     return planning
-
 
 # -----------------------------
 # Studenten inlezen
@@ -137,10 +135,11 @@ def kritieke_score(attr):
     return sum(1 for s in studenten if attr in s["attracties"])
 attracties_te_plannen.sort(key=kritieke_score)
 
+
+#mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
 # -----------------------------
 # Maak planning
 # -----------------------------
-#mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
 
 def maak_planning(studenten_local):
     from collections import defaultdict
@@ -190,67 +189,46 @@ def maak_planning(studenten_local):
         dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
 
     # -------------------
-    # Plan eerste posities
+    # Functie om blokken toe te wijzen
     # -------------------
-    for uur in open_uren:
-        for attr, posities in dagplanning.items():
-            eerste_pos = posities[0]
-            if eerste_pos.get(uur,"NIEMAND") in ["", "NIEMAND"]:
+    def plan_blokken(pos, attr):
+        uren = sorted(open_uren)
+        i = 0
+        while i < len(uren):
+            geplanned = False
+            for blok in [3,2,1]:  # probeer eerst grotere blokken
+                if i + blok > len(uren):
+                    continue
+                blokuren = uren[i:i+blok]
+                # Kandidaten filteren
                 kandidaten = [s for s in studenten_local
-                              if uur in s["uren_beschikbaar"]
-                              and attr in s["attracties"]
-                              and _ok_max4(s["naam"], attr, [uur], dagplanning)
-                              and gebruik_per_student[attr][s["naam"]] < 4
-                              and uur not in student_bezet[s["naam"]]]
+                              if attr in s["attracties"]
+                              and all(u in s["uren_beschikbaar"] for u in blokuren)
+                              and all(u not in student_bezet[s["naam"]] for u in blokuren)
+                              and gebruik_per_student[attr][s["naam"]] + blok <= 4
+                              and _ok_max4(s["naam"], attr, blokuren, dagplanning)]
                 if kandidaten:
                     kandidaten.sort(key=lambda s: (s["aantal_attracties"], gebruik_per_student[attr][s["naam"]]))
-                    s_gekozen = kandidaten[0]
-                    eerste_pos[uur] = s_gekozen["naam"]
-                    student_bezet[s_gekozen["naam"]].append(uur)
-                    gebruik_per_student[attr][s_gekozen["naam"]] += 1
-                else:
-                    # fallback swap
-                    for bron_attr, bron_posities in dagplanning.items():
-                        swap_gedaan = False
-                        for pos in bron_posities:
-                            huidig = pos.get(uur,"")
-                            if huidig in ["", "NIEMAND"]: continue
-                            h_obj = next(st for st in studenten_local if st["naam"]==huidig)
-                            if (attr in h_obj["attracties"]
-                                and uur in h_obj["uren_beschikbaar"]
-                                and _ok_max4(huidig, attr, [uur], dagplanning)
-                                and gebruik_per_student[attr][h_obj["naam"]] < 4):
-                                pos[uur] = "NIEMAND"
-                                eerste_pos[uur] = huidig
-                                student_bezet[huidig].append(uur)
-                                gebruik_per_student[attr][h_obj["naam"]] += 1
-                                swap_gedaan = True
-                                break
-                        if swap_gedaan: break
-                    if eerste_pos.get(uur,"") in ["", "NIEMAND"]:
-                        eerste_pos[uur] = "NIEMAND"
+                    gekozen = kandidaten[0]
+                    for u in blokuren:
+                        pos[u] = gekozen["naam"]
+                        student_bezet[gekozen["naam"]].append(u)
+                    gebruik_per_student[attr][gekozen["naam"]] += blok
+                    i += blok
+                    geplanned = True
+                    break
+            if not geplanned:
+                u = uren[i]
+                if pos.get(u,"") in ["", "NIEMAND"]:
+                    pos[u] = "NIEMAND"
+                i += 1
 
     # -------------------
-    # Plan tweede posities
+    # Plan alle posities
     # -------------------
-    for uur in open_uren:
-        for attr, posities in dagplanning.items():
-            for pos in posities[1:]:
-                if pos.get(uur,"NIEMAND") in ["", "NIEMAND"]:
-                    kandidaten = [s for s in studenten_local
-                                  if uur in s["uren_beschikbaar"]
-                                  and attr in s["attracties"]
-                                  and _ok_max4(s["naam"], attr, [uur], dagplanning)
-                                  and gebruik_per_student[attr][s["naam"]] < 4
-                                  and uur not in student_bezet[s["naam"]]]
-                    if kandidaten:
-                        kandidaten.sort(key=lambda s: (s["aantal_attracties"], gebruik_per_student[attr][s["naam"]]))
-                        s_gekozen = kandidaten[0]
-                        pos[uur] = s_gekozen["naam"]
-                        student_bezet[s_gekozen["naam"]].append(uur)
-                        gebruik_per_student[attr][s_gekozen["naam"]] += 1
-                    else:
-                        pos[uur] = "NIEMAND"
+    for attr, posities in dagplanning.items():
+        for pos in posities:
+            plan_blokken(pos, attr)
 
     # -------------------
     # Extra studenten
@@ -263,45 +241,10 @@ def maak_planning(studenten_local):
                 if not pos_vrij:
                     extra_per_uur[uur].append(s["naam"])
 
-    # -------------------
-    # Blokken aanpassen (3/2/1 uur) ZONDER iets anders aan te passen
-    # -------------------
-    for attr, posities in dagplanning.items():
-        for pos in posities:
-            uren_sorted = sorted(pos.keys())
-            i = 0
-            while i < len(uren_sorted):
-                uur = uren_sorted[i]
-                naam = pos[uur]
-                if naam in ["", "NIEMAND"]:
-                    i += 1
-                    continue
-                # probeer blok van 3, dan 2, dan 1 uur
-                for blok in [3,2,1]:
-                    if i + blok > len(uren_sorted):
-                        continue
-                    blokuren = uren_sorted[i:i+blok]
-                    # check max 4 uur per attractie en max 6 uur totaal
-                    if len([u for u in blokuren if pos[u]==naam]) > 4:
-                        continue
-                    if len(student_bezet[naam]) + len([u for u in blokuren if pos[u]!=naam]) > 6:
-                        continue
-                    # check of ruil veilig is
-                    if all(pos[u]==naam or (pos[u] not in ["", "NIEMAND"] and _ok_max4(pos[u], attr, [u], dagplanning)) for u in blokuren):
-                        for u in blokuren:
-                            if pos[u] not in ["", "NIEMAND"] and pos[u]!=naam:
-                                andere = pos[u]
-                                pos[u] = naam
-                                student_bezet[naam].append(u)
-                                student_bezet[andere].remove(u)
-                        break
-                i += 1
-
     return dagplanning, extra_per_uur, selected
 
+#mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
 
-
-#mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
 # -----------------------------
 # Uitvoeren
 # -----------------------------
