@@ -33,8 +33,10 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
     while i < len(uren):
         geplanned = False
-        # Probeer eerst blokken van 4,3,2,1 maar niet meer dan 4 uur achter elkaar
-        for blok in [4,3,2,1]:
+        # Probeer blokken van 3,4,2,1, maar geen blok langer dan 4 uur
+        for blok in [3,4,2,1]:
+            if blok > 4:
+                continue
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
@@ -46,15 +48,28 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
                 and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
             ]
             if kandidaten:
-                # Kies student met min gebruik
                 min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
                 beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
                 gekozen = random.choice(beste)
+                # Controleer of we 4 uur max overschrijden
+                laatste_uren = student_bezet[gekozen["naam"]][-4:] if len(student_bezet[gekozen["naam"]]) >= 4 else []
+                # Split indien nodig
+                split_blokuren = []
+                teller = 0
                 for u in blokuren:
+                    if teller >= 4:
+                        break
+                    if u in laatste_uren:
+                        break
+                    split_blokuren.append(u)
+                    teller += 1
+                if not split_blokuren:
+                    continue
+                for u in split_blokuren:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student_attractie[gekozen["naam"]] += blok
-                i += blok
+                gebruik_per_student_attractie[gekozen["naam"]] += len(split_blokuren)
+                i += len(split_blokuren)
                 geplanned = True
                 break
         if not geplanned:
@@ -69,9 +84,14 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             ]
             if kandidaten_1:
                 gekozen = random.choice(kandidaten_1)
-                planning[u] = gekozen["naam"]
-                student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student_attractie[gekozen["naam"]] += 1
+                # Controleer max 4 uur achter elkaar
+                laatste_uren = student_bezet[gekozen["naam"]][-4:] if len(student_bezet[gekozen["naam"]]) >= 4 else []
+                if not laatste_uren or u - laatste_uren[-1] > 1:
+                    planning[u] = gekozen["naam"]
+                    student_bezet[gekozen["naam"]].append(u)
+                    gebruik_per_student_attractie[gekozen["naam"]] += 1
+                else:
+                    planning[u] = "NIEMAND"
             else:
                 planning[u] = "NIEMAND"
             i += 1
@@ -218,6 +238,7 @@ for attempt in range(max_attempts):
     if all(pos.get(u,"")!="NIEMAND" or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
         studenten = studenten_copy
         break
+
 
 # -----------------------------
 # Excel output
