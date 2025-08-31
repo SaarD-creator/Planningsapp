@@ -180,6 +180,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 # -----------------------------
 # Maak planning inclusief schuiven, swaps en extra regels
 # -----------------------------
+@st.cache_data
 def maak_planning(studenten_local):
     # Pauzevlinders inlezen
     pauzevlinder_namen = [
