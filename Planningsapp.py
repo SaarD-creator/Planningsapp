@@ -322,44 +322,63 @@ def maak_planning(studenten_local):
             break
 
     # -----------------------------
-    # NIEUW: Zorg dat geen enkele attractie onbemand blijft
+    # NIEUW: Finale check blokgewijs + voorkeur vaste student
     # -----------------------------
     for attr, posities in dagplanning.items():
-        for uur in open_uren:
-            if posities[0].get(uur, "") in ["", "NIEMAND"]:
-                gevuld = False
+        lege_uren = [uur for uur in open_uren if posities[0].get(uur, "") in ["", "NIEMAND"]]
+        if not lege_uren:
+            continue
 
-                # 1) Kijk of tweede positie deze attractie kan bemannen
-                if len(posities) > 1 and posities[1][uur] not in ["", "NIEMAND"]:
-                    kandidaat = posities[1][uur]
-                    s_obj = next(s for s in studenten if s["naam"] == kandidaat)
-                    if uur in s_obj["uren_beschikbaar"] and attr in s_obj["attracties"]:
-                        posities[0][uur] = kandidaat
-                        posities[1][uur] = "NIEMAND"
-                        gevuld = True
+        # Groepeer aaneengesloten lege uren
+        blokken = []
+        start = None
+        for i, uur in enumerate(lege_uren):
+            if start is None:
+                start = uur
+            if i+1 == len(lege_uren) or lege_uren[i+1] != uur+1:
+                blokken.append(list(range(start, uur+1)))
+                start = None
 
-                if gevuld:
-                    continue
+        for blok in blokken:
+            geplaatst = False
 
-                # 2) Swap met een student van een andere positie die het kan
-                for bron_attr, bron_posities in dagplanning.items():
-                    if gevuld:
+            # 1) Tweede positie eerst
+            if len(posities) > 1:
+                kandidaten = [posities[1][uur] for uur in blok if posities[1][uur] not in ["", "NIEMAND"]]
+                kandidaten = list(dict.fromkeys(kandidaten))
+                for naam in kandidaten:
+                    s_obj = next(s for s in studenten if s["naam"] == naam)
+                    if all(u in s_obj["uren_beschikbaar"] for u in blok) and attr in s_obj["attracties"]:
+                        for u in blok:
+                            posities[0][u] = naam
+                            posities[1][u] = "NIEMAND"
+                        geplaatst = True
                         break
-                    for pos in bron_posities:
-                        naam_huidig = pos.get(uur, "")
-                        if naam_huidig in ["", "NIEMAND"]:
-                            continue
-                        s_obj = next(s for s in studenten if s["naam"] == naam_huidig)
-                        if uur in s_obj["uren_beschikbaar"] and attr in s_obj["attracties"]:
-                            posities[0][uur] = naam_huidig
-                            pos[uur] = "NIEMAND"
-                            gevuld = True
-                            break
+            if geplaatst:
+                continue
 
-                if not gevuld:
-                    posities[0][uur] = "NIEMAND"
+            # 2) Swap met andere attracties blokgewijs
+            for bron_attr, bron_posities in dagplanning.items():
+                if geplaatst:
+                    break
+                for pos in bron_posities:
+                    naam_huidig = pos.get(blok[0], "")
+                    if naam_huidig in ["", "NIEMAND"]:
+                        continue
+                    s_obj = next(s for s in studenten if s["naam"] == naam_huidig)
+                    if all(u in s_obj["uren_beschikbaar"] for u in blok) and attr in s_obj["attracties"]:
+                        for u in blok:
+                            posities[0][u] = naam_huidig
+                            pos[u] = "NIEMAND"
+                        geplaatst = True
+                        break
 
-    # EINDCONTROLE: Als er echt voor bepaalde attractie+uur niemand beschikbaar is, zet NIEMAND
+            # 3) fallback NIEMAND
+            if not geplaatst:
+                for u in blok:
+                    posities[0][u] = "NIEMAND"
+
+    # EINDCONTROLE: vul overige lege posities met NIEMAND
     for attr, posities in dagplanning.items():
         for pos in posities:
             for uur in open_uren:
