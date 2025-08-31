@@ -184,23 +184,21 @@ def maak_planning(studenten_local):
     dagplanning = {}
     gebruik_per_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
-    # Maak posities
     for attr in attracties_te_plannen:
         dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
 
     # -------------------
-    # Functie om blokken toe te wijzen
+    # Blokken toewijzen
     # -------------------
-    def plan_blokken(pos, attr):
+    def plan_positie(pos, attr):
         uren = sorted(open_uren)
         i = 0
         while i < len(uren):
             geplanned = False
-            for blok in [3,2,1]:  # probeer eerst grotere blokken
+            for blok in [3,2,1]:
                 if i + blok > len(uren):
                     continue
                 blokuren = uren[i:i+blok]
-                # Kandidaten filteren
                 kandidaten = [s for s in studenten_local
                               if attr in s["attracties"]
                               and all(u in s["uren_beschikbaar"] for u in blokuren)
@@ -218,9 +216,23 @@ def maak_planning(studenten_local):
                     geplanned = True
                     break
             if not geplanned:
+                # fallback: iemand per uur of NIEMAND als strikt onmogelijk
                 u = uren[i]
                 if pos.get(u,"") in ["", "NIEMAND"]:
-                    pos[u] = "NIEMAND"
+                    kandidaten = [s for s in studenten_local
+                                  if attr in s["attracties"]
+                                  and u in s["uren_beschikbaar"]
+                                  and u not in student_bezet[s["naam"]]
+                                  and gebruik_per_student[attr][s["naam"]] < 4
+                                  and _ok_max4(s["naam"], attr, [u], dagplanning)]
+                    if kandidaten:
+                        kandidaten.sort(key=lambda s: (s["aantal_attracties"], gebruik_per_student[attr][s["naam"]]))
+                        gekozen = kandidaten[0]
+                        pos[u] = gekozen["naam"]
+                        student_bezet[gekozen["naam"]].append(u)
+                        gebruik_per_student[attr][gekozen["naam"]] += 1
+                    else:
+                        pos[u] = "NIEMAND"
                 i += 1
 
     # -------------------
@@ -228,7 +240,7 @@ def maak_planning(studenten_local):
     # -------------------
     for attr, posities in dagplanning.items():
         for pos in posities:
-            plan_blokken(pos, attr)
+            plan_positie(pos, attr)
 
     # -------------------
     # Extra studenten
@@ -242,6 +254,7 @@ def maak_planning(studenten_local):
                     extra_per_uur[uur].append(s["naam"])
 
     return dagplanning, extra_per_uur, selected
+
 
 #mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
 
