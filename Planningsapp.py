@@ -255,43 +255,47 @@ def maak_planning(studenten_local):
 dagplanning, extra_per_uur, selected = maak_planning(studenten)
 
 
-# -----------------------------
-# Blok-optimalisatie functie
-# -----------------------------
-def optimaliseer_blokken(dagplanning):
+def blok_optimizer(dagplanning, studenten):
     """
-    Probeer aaneengesloten blokken van 3→2→1 uur te maken door studenten te ruilen,
-    zonder lege plekken te introduceren en zonder andere eisen te breken.
+    Optimaliseer bestaande planning om blokken van 3→2→1 uur te vormen zonder
+    originele regels te overtreden.
     """
     open_uren_sorted = sorted(open_uren)
-    
+
     for attr, posities in dagplanning.items():
         for pos in posities:
-            # lijst van uren en huidige student
+            # haal alle bezettingen op, alleen echte namen
             urenlijst = [(uur, pos[uur]) for uur in open_uren_sorted if pos[uur] != "NIEMAND"]
-            i = 0
-            while i < len(urenlijst) - 1:
-                uur1, s1 = urenlijst[i]
-                uur2, s2 = urenlijst[i+1]
-                
-                if s1 != s2:
-                    # check of swap mogelijk is (uren beschikbaar)
-                    s1_obj = next((s for s in studenten if s["naam"] == s1), None)
-                    s2_obj = next((s for s in studenten if s["naam"] == s2), None)
-                    if s1_obj and s2_obj:
-                        if uur2 in s1_obj["uren_beschikbaar"] and uur1 in s2_obj["uren_beschikbaar"]:
-                            # swap
-                            pos[uur1], pos[uur2] = pos[uur2], pos[uur1]
-                            # update urenlijst
-                            urenlijst[i], urenlijst[i+1] = (uur1, pos[uur1]), (uur2, pos[uur2])
-                i += 1
+
+            # herhaal sweep totdat er geen swaps meer nodig zijn
+            changed = True
+            while changed:
+                changed = False
+                for i in range(len(urenlijst)-1):
+                    uur1, s1 = urenlijst[i]
+                    uur2, s2 = urenlijst[i+1]
+                    if s1 != s2:
+                        s1_obj = next((s for s in studenten if s["naam"]==s1), None)
+                        s2_obj = next((s for s in studenten if s["naam"]==s2), None)
+                        if not s1_obj or not s2_obj:
+                            continue
+                        # check of swap beide max 4 achter elkaar blijft
+                        uren_s1 = [u for u,n in urenlijst if n==s1] 
+                        uren_s2 = [u for u,n in urenlijst if n==s2]
+                        if max_consecutive_hours(uren_s1 + [uur2]) <= 4 and max_consecutive_hours(uren_s2 + [uur1]) <= 4:
+                            # check of beide beschikbaar zijn
+                            if uur2 in s1_obj["uren_beschikbaar"] and uur1 in s2_obj["uren_beschikbaar"]:
+                                # swap uitvoeren
+                                pos[uur1], pos[uur2] = pos[uur2], pos[uur1]
+                                urenlijst[i], urenlijst[i+1] = (uur1, pos[uur1]), (uur2, pos[uur2])
+                                changed = True
 
 # -----------------------------
-# Pas blok-optimalisatie toe
+# Gebruik blok optimizer
 # -----------------------------
-optimaliseer_blokken(dagplanning)
-
-st.success("Planning gegenereerd met optimale blokken!")
+dagplanning, extra_per_uur, selected = maak_planning(studenten)
+blok_optimizer(dagplanning, studenten)
+st.success("Planning gegenereerd met blok-optimalisatie!")
 
 # -----------------------------
 # Excel output blijft hetzelfde
