@@ -176,7 +176,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 # -----------------------------
-# Maak planning inclusief schuiven, swaps en extra regels
+# Maak planning inclusief schuiven, swaps en extra regels (met fallback)
 # -----------------------------
 @st.cache_data
 def maak_planning(studenten_local):
@@ -197,15 +197,25 @@ def maak_planning(studenten_local):
     gebruik_per_attractie_student = {attr: {s['naam']: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
     dagplanning = {}
-    # Stap 1: eerste en tweede posities per attractie invullen via plan_attractie_pos
     for attractie in attracties_te_plannen:
-        dagplanning[attractie] = [plan_attractie_pos(attractie, studenten_local, student_bezet,
-                                                    gebruik_per_attractie_student[attractie], open_uren, dagplanning)]
-        if aantallen.get(attractie, 1) >= 2:
-            dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet,
-                                                             gebruik_per_attractie_student[attractie], open_uren, dagplanning))
+        dagplanning[attractie] = []
 
-    # Stap 2: Zorg dat minstens 1 student per attractie per uur staat
+        eerste_pos = plan_attractie_pos(attractie, studenten_local, student_bezet,
+                                       gebruik_per_attractie_student[attractie], open_uren, dagplanning)
+        if not eerste_pos:
+            eerste_pos = {uur: 'NIEMAND' for uur in open_uren}
+        dagplanning[attractie].append(eerste_pos)
+
+        if aantallen.get(attractie, 1) >= 2:
+            tweede_pos = plan_attractie_pos(attractie, studenten_local, student_bezet,
+                                           gebruik_per_attractie_student[attractie], open_uren, dagplanning)
+            if not tweede_pos:
+                tweede_pos = {uur: 'NIEMAND' for uur in open_uren}
+            dagplanning[attractie].append(tweede_pos)
+
+    # -----------------------------
+    # Stap 1: Minstens 1 student per attractie per uur
+    # -----------------------------
     for uur in open_uren:
         for attractie, posities in dagplanning.items():
             geplaatst = False
@@ -221,7 +231,9 @@ def maak_planning(studenten_local):
                 if geplaatst:
                     break
 
-    # Stap 3: Vul overige vrije plekken met beschikbare studenten
+    # -----------------------------
+    # Stap 2: Vul overige vrije plekken met beschikbare studenten
+    # -----------------------------
     max_iterations = 1000
     iteration = 0
 
@@ -230,7 +242,6 @@ def maak_planning(studenten_local):
         wijziging = False
         extra_per_uur = defaultdict(list)
 
-        # Bepaal welke studenten nog beschikbaar zijn per uur
         for uur in open_uren:
             for s in studenten_local:
                 if uur in s['uren_beschikbaar'] and uur not in student_bezet[s['naam']] and not s.get('is_pauzevlinder'):
@@ -259,6 +270,32 @@ def maak_planning(studenten_local):
             break
 
     return dagplanning, extra_per_uur, selected
+
+
+# -----------------------------
+# Herhaal tot volledige planning (veilige versie)
+# -----------------------------
+max_attempts = 150
+for attempt in range(max_attempts):
+    studenten_copy = copy.deepcopy(studenten)
+    dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
+
+    # Check: elke attractie heeft minstens één student per uur
+    geldig = True
+    for posities in dagplanning.values():
+        for pos in posities:
+            for uur in open_uren:
+                if pos.get(uur, '') in ['', 'NIEMAND']:
+                    geldig = False
+                    break
+            if not geldig:
+                break
+        if not geldig:
+            break
+
+    if geldig:
+        studenten = studenten_copy
+        break
 
 
 # -----------------------------
