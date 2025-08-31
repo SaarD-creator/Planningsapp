@@ -131,7 +131,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 # Maak planning
 # -----------------------------
 def maak_planning(studenten_local):
-    # Pauzevlinders inlezen
+    # Pauzevlinders
     pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
     required_hours=[12,13,14,15,16,17]
     selected=[]
@@ -149,7 +149,7 @@ def maak_planning(studenten_local):
     dagplanning = {}
     gebruik_per_student = {attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
 
-    # --- Eerste en tweede posities ---
+    # Eerste & tweede posities
     for attr in attracties_te_plannen:
         dagplanning[attr] = [plan_attractie_pos(attr, studenten_local, student_bezet, gebruik_per_student[attr], open_uren, dagplanning)]
         if aantallen.get(attr,1) >= 2:
@@ -165,7 +165,7 @@ def maak_planning(studenten_local):
     def _ok_max4(naam, attr, extra_uren):
         return max_consecutive_hours(_uren_student_bij_attr(naam, attr)+list(extra_uren)) <=4
 
-    # --- Iteratief lege plekken vullen + swaps ---
+    # Iteratief lege plekken vullen + swaps + extra studenten
     extra_per_uur = defaultdict(list)
     for uur in open_uren:
         guard = 0
@@ -182,7 +182,7 @@ def maak_planning(studenten_local):
 
             if not lege_posities: break
 
-            # Verzamel kandidaten die nog niet op dit uur gepland staan
+            # Kandidaten die nog niet op dit uur gepland staan
             kandidaten=[s for s in studenten_local if uur in s["uren_beschikbaar"] and uur not in student_bezet[s["naam"]] and not s.get("is_pauzevlinder")]
 
             if not kandidaten: break
@@ -201,7 +201,7 @@ def maak_planning(studenten_local):
 
             if geplaatst: continue
 
-            # 2) Swap (als direct plaatsen niet lukt)
+            # 2) Swap
             swap_ok=False
             for s in kandidaten:
                 for attr,posities in dagplanning.items():
@@ -212,18 +212,18 @@ def maak_planning(studenten_local):
                         if attr not in s["attracties"] or not _ok_max4(s["naam"],attr,[uur]): continue
                         # Zoek vrije plek voor huidig
                         for lege_attr, lege_pos in lege_posities:
-                            if lege_attr in [a for a in studenten_local if a["naam"]==huidig][0]["attracties"]:
-                                if _ok_max4(huidig, lege_attr,[uur]):
-                                    # voer swap uit
-                                    pos[uur]=s["naam"]
-                                    student_bezet[s["naam"]].append(uur)
-                                    gebruik_per_student[attr][s["naam"]]+=1
-                                    lege_pos[uur]=huidig
-                                    student_bezet[huidig].append(uur)
-                                    gebruik_per_student[lege_attr][huidig]+=1
-                                    swap_ok=True
-                                    geplaatst=True
-                                    break
+                            h_obj = next(st for st in studenten_local if st["naam"]==huidig)
+                            if lege_attr in h_obj["attracties"] and _ok_max4(huidig, lege_attr,[uur]):
+                                # swap
+                                pos[uur]=s["naam"]
+                                student_bezet[s["naam"]].append(uur)
+                                gebruik_per_student[attr][s["naam"]]+=1
+                                lege_pos[uur]=huidig
+                                student_bezet[huidig].append(uur)
+                                gebruik_per_student[lege_attr][huidig]+=1
+                                swap_ok=True
+                                geplaatst=True
+                                break
                         if geplaatst: break
                 if geplaatst: break
 
@@ -233,6 +233,28 @@ def maak_planning(studenten_local):
                     if s["naam"] not in extra_per_uur[uur]:
                         extra_per_uur[uur].append(s["naam"])
                 break  # stop iteratie voor dit uur
+
+        # --- Regel 2: minstens 1 student per attractie per uur ---
+        for attr,posities in dagplanning.items():
+            bezet = [pos.get(uur,"") for pos in posities if pos.get(uur,"") not in ["","NIEMAND"]]
+            if bezet: continue
+            # Geen student gepland -> pak iemand uit extra_per_uur of vrije student
+            kandidaat = None
+            for naam in extra_per_uur.get(uur,[]):
+                s_obj = next(st for st in studenten_local if st["naam"]==naam)
+                if attr in s_obj["attracties"] and _ok_max4(naam, attr,[uur]):
+                    kandidaat=naam
+                    extra_per_uur[uur].remove(naam)
+                    break
+            if not kandidaat:
+                for s in studenten_local:
+                    if uur not in student_bezet[s["naam"]] and attr in s["attracties"] and _ok_max4(s["naam"], attr,[uur]):
+                        kandidaat = s["naam"]
+                        break
+            if kandidaat:
+                posities[0][uur]=kandidaat
+                student_bezet[kandidaat].append(uur)
+                gebruik_per_student[attr][kandidaat] +=1
 
     return dagplanning, extra_per_uur, selected
 
