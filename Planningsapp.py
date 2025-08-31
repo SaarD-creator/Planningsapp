@@ -144,6 +144,9 @@ attracties_te_plannen.sort(key=kritieke_score)
 def maak_planning(studenten_local):
     from collections import defaultdict
 
+    # -------------------
+    # Hulpfuncties
+    # -------------------
     def max_consecutive_hours(urenlijst):
         if not urenlijst: return 0
         urenlijst = sorted(set(urenlijst))
@@ -153,14 +156,11 @@ def maak_planning(studenten_local):
             maxr = max(maxr, huidig)
         return maxr
 
-    def _uren_student_bij_attr(naam, attr, dagplanning):
+    def _ok_max4(naam, attr, extra_uren, dagplanning):
         uren = []
         for posities in dagplanning.get(attr, []):
             uren += [u for u, n in posities.items() if n == naam]
-        return sorted(set(uren))
-
-    def _ok_max4(naam, attr, extra_uren, dagplanning):
-        return max_consecutive_hours(_uren_student_bij_attr(naam, attr, dagplanning) + list(extra_uren)) <= 4
+        return max_consecutive_hours(sorted(set(uren) | set(extra_uren))) <= 4
 
     # -------------------
     # Pauzevlinders
@@ -188,7 +188,12 @@ def maak_planning(studenten_local):
         dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
 
     # -------------------
-    # Blokken toewijzen
+    # Kandidatenlijst vooraf sorteren (kritieke eerst)
+    # -------------------
+    sorted_studenten = sorted(studenten_local, key=lambda s: s["aantal_attracties"])
+
+    # -------------------
+    # Functie om een positie te plannen met lichte bloklogica
     # -------------------
     def plan_positie(pos, attr):
         uren = sorted(open_uren)
@@ -196,43 +201,26 @@ def maak_planning(studenten_local):
         while i < len(uren):
             geplanned = False
             for blok in [3,2,1]:
-                if i + blok > len(uren):
-                    continue
+                if i + blok > len(uren): continue
                 blokuren = uren[i:i+blok]
-                kandidaten = [s for s in studenten_local
-                              if attr in s["attracties"]
-                              and all(u in s["uren_beschikbaar"] for u in blokuren)
-                              and all(u not in student_bezet[s["naam"]] for u in blokuren)
-                              and gebruik_per_student[attr][s["naam"]] + blok <= 4
-                              and _ok_max4(s["naam"], attr, blokuren, dagplanning)]
-                if kandidaten:
-                    kandidaten.sort(key=lambda s: (s["aantal_attracties"], gebruik_per_student[attr][s["naam"]]))
-                    gekozen = kandidaten[0]
-                    for u in blokuren:
-                        pos[u] = gekozen["naam"]
-                        student_bezet[gekozen["naam"]].append(u)
-                    gebruik_per_student[attr][gekozen["naam"]] += blok
-                    i += blok
-                    geplanned = True
-                    break
+                # Kies eerste student die blok kan nemen
+                for s in sorted_studenten:
+                    if (attr in s["attracties"] and 
+                        all(u in s["uren_beschikbaar"] and u not in student_bezet[s["naam"]] for u in blokuren) and
+                        gebruik_per_student[attr][s["naam"]] + blok <= 4 and
+                        _ok_max4(s["naam"], attr, blokuren, dagplanning)):
+                        for u in blokuren:
+                            pos[u] = s["naam"]
+                            student_bezet[s["naam"]].append(u)
+                        gebruik_per_student[attr][s["naam"]] += blok
+                        i += blok
+                        geplanned = True
+                        break
+                if geplanned: break
             if not geplanned:
-                # fallback: iemand per uur of NIEMAND als strikt onmogelijk
                 u = uren[i]
                 if pos.get(u,"") in ["", "NIEMAND"]:
-                    kandidaten = [s for s in studenten_local
-                                  if attr in s["attracties"]
-                                  and u in s["uren_beschikbaar"]
-                                  and u not in student_bezet[s["naam"]]
-                                  and gebruik_per_student[attr][s["naam"]] < 4
-                                  and _ok_max4(s["naam"], attr, [u], dagplanning)]
-                    if kandidaten:
-                        kandidaten.sort(key=lambda s: (s["aantal_attracties"], gebruik_per_student[attr][s["naam"]]))
-                        gekozen = kandidaten[0]
-                        pos[u] = gekozen["naam"]
-                        student_bezet[gekozen["naam"]].append(u)
-                        gebruik_per_student[attr][gekozen["naam"]] += 1
-                    else:
-                        pos[u] = "NIEMAND"
+                    pos[u] = "NIEMAND"
                 i += 1
 
     # -------------------
