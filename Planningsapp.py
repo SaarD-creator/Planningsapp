@@ -13,6 +13,12 @@ import datetime
 vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
 # -----------------------------
+# Pauzevlinder uren
+# -----------------------------
+required_hours = [12,13,14,15,16,17]
+
+
+# -----------------------------
 # Feedback loggen
 # -----------------------------
 wb_feedback = Workbook()
