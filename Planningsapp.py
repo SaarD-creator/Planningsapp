@@ -176,6 +176,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 
+
 # -----------------------------
 # Maak planning inclusief schuiven, swaps en extra regels
 # -----------------------------
@@ -236,7 +237,7 @@ def maak_planning(studenten_local):
                     break  # Vul alleen eerste positie per attractie per uur
 
     # -----------------------------
-    # Stap 2: blokken van 3 uur zoveel mogelijk
+    # Stap 2: blokken van maximaal 4 uur, probeer 3 uur samen
     # -----------------------------
     max_iterations = 1000
     iteration = 0
@@ -265,22 +266,24 @@ def maak_planning(studenten_local):
             for pos in posities:
                 for uur in open_uren:
                     if pos.get(uur, '') in ['', 'NIEMAND']:
-                        # Probeer blok van 3 uur
-                        blok_uren = [u for u in range(uur, uur+3) if u in open_uren]
-                        geplaatst = False
-                        for naam in list(extra_per_uur[uur]):
-                            s_obj = next(s for s in studenten_local if s['naam'] == naam)
-                            if all(u in s_obj['uren_beschikbaar'] for u in blok_uren) and attractie in s_obj['attracties'] and _ok_max4(naam, attractie, blok_uren):
-                                for u in blok_uren:
-                                    pos[u] = naam
-                                    student_bezet[naam].append(u)
-                                    gebruik_per_attractie_student[attractie][naam] += 1
-                                    if naam in extra_per_uur[u]:
-                                        extra_per_uur[u].remove(naam)
-                                wijziging = geplaatst = True
+                        # Probeer blok van maximaal 4 uur, voorkeurslengte 3
+                        for lengte in [3,2,1]:
+                            blok_uren = [u for u in range(uur, uur+lengte) if u in open_uren and pos.get(u,'') in ['', 'NIEMAND']]
+                            if not blok_uren: continue
+                            geplaatst = False
+                            for naam in list(extra_per_uur[uur]):
+                                s_obj = next(s for s in studenten_local if s['naam'] == naam)
+                                if all(u in s_obj['uren_beschikbaar'] for u in blok_uren) and attractie in s_obj['attracties'] and _ok_max4(naam, attractie, blok_uren):
+                                    for u in blok_uren:
+                                        pos[u] = naam
+                                        student_bezet[naam].append(u)
+                                        gebruik_per_attractie_student[attractie][naam] += 1
+                                        if naam in extra_per_uur[u]:
+                                            extra_per_uur[u].remove(naam)
+                                    wijziging = geplaatst = True
+                                    break
+                            if geplaatst:
                                 break
-                        if geplaatst:
-                            continue
 
         if not wijziging:
             break
