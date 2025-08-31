@@ -282,13 +282,13 @@ def snelle_blok_optimizer(dagplanning, studenten):
                                 # update urenlijst voor deze pass
                                 urenlijst[i], urenlijst[i+1] = (uur1, pos[uur1]), (uur2, pos[uur2])
 
-
 # -----------------------------
 # Gebruik blok optimizer
 # -----------------------------
 dagplanning, extra_per_uur, selected = maak_planning(studenten)
-blok_optimizer(dagplanning, studenten)
+snelle_blok_optimizer(dagplanning, studenten)
 st.success("Planning gegenereerd met blok-optimalisatie!")
+
 
 # -----------------------------
 # Excel output blijft hetzelfde
