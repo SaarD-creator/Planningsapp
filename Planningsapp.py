@@ -301,14 +301,18 @@ def maak_planning(studenten_local, max_rounds=5):
 # -----------------------------
 # Vul volledige planning (Streamlit-vriendelijk)
 # -----------------------------
-dagplanning, selected = maak_planning(studenten)
+dagplanning, extra_per_uur, selected = maak_planning(studenten)
 
 # Optionele check: bevestig dat elke attractie per uur minimaal 1 student heeft
 for attr, posities in dagplanning.items():
     for uur in open_uren:
-        if posities[0].get(uur, "") in ["", "NIEMAND"]:
+        eerste_pos = posities[0].get(uur, "")
+        if eerste_pos in ["", "NIEMAND", None]:
             st.warning(f"Attractie {attr} heeft geen student op uur {uur}")
 
+# Optioneel: toon aantal extra studenten per uur
+max_extra = max(len(names) for names in extra_per_uur.values()) if extra_per_uur else 0
+st.info(f"Maximaal aantal extra studenten op een uur: {max_extra}")
 
 
 # -----------------------------
