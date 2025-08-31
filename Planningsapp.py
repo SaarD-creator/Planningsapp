@@ -131,7 +131,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 # Maak planning
 # -----------------------------
 def maak_planning(studenten_local):
-    # Pauzevlinders
+    # Pauzevlinders inlezen
     pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
     required_hours=[12,13,14,15,16,17]
     selected=[]
@@ -140,51 +140,99 @@ def maak_planning(studenten_local):
             if s["naam"]==naam:
                 s["is_pauzevlinder"]=True
                 s["pv_number"]=idx
-                s["uren_beschikbaar"]=[u for u in s["uren_beschikbaar"] if u not in required_hours]
+                s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
                 selected.append(s)
                 break
 
-    student_bezet={s["naam"]:[] for s in studenten_local}
-    dagplanning={}
-    gebruik_per_student={attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
+    # Init dicts
+    student_bezet = {s["naam"]: [] for s in studenten_local}
+    dagplanning = {}
+    gebruik_per_student = {attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
 
-    # Eerste & tweede posities
+    # --- Eerste en tweede posities ---
     for attr in attracties_te_plannen:
-        dagplanning[attr]=[plan_attractie_pos(attr, studenten_local, student_bezet, gebruik_per_student[attr], open_uren, dagplanning)]
-        if aantallen.get(attr,1)>=2:
+        dagplanning[attr] = [plan_attractie_pos(attr, studenten_local, student_bezet, gebruik_per_student[attr], open_uren, dagplanning)]
+        if aantallen.get(attr,1) >= 2:
             dagplanning[attr].append(plan_attractie_pos(attr, studenten_local, student_bezet, gebruik_per_student[attr], open_uren, dagplanning))
 
-    # Iteratief lege plekken vullen + swaps (zoals origineel)
-    extra_per_uur=defaultdict(list)
-    max_guard = 2000
+    # Hulpfuncties
+    def _uren_student_bij_attr(naam, attr):
+        uren=[]
+        for posities in dagplanning.get(attr,[]):
+            uren += [u for u,n in posities.items() if n==naam]
+        return sorted(set(uren))
+
+    def _ok_max4(naam, attr, extra_uren):
+        return max_consecutive_hours(_uren_student_bij_attr(naam, attr)+list(extra_uren)) <=4
+
+    # --- Iteratief lege plekken vullen + swaps ---
+    extra_per_uur = defaultdict(list)
     for uur in open_uren:
-        guard=0
+        guard = 0
         while True:
-            guard+=1
-            if guard>max_guard: break
+            guard +=1
+            if guard>2000: break  # voorkomt infinite loop
+
             # Verzamel vrije plekken
             lege_posities=[]
             for attr,posities in dagplanning.items():
                 for pos in posities:
                     if pos.get(uur,"NIEMAND") in ["","NIEMAND"]:
                         lege_posities.append((attr,pos))
-            # Verzamel beschikbare studenten
-            kandidaten=[s for s in studenten_local if uur in s["uren_beschikbaar"] and s["naam"] not in student_bezet[s["naam"]] and not s.get("is_pauzevlinder")]
+
+            if not lege_posities: break
+
+            # Verzamel kandidaten die nog niet op dit uur gepland staan
+            kandidaten=[s for s in studenten_local if uur in s["uren_beschikbaar"] and uur not in student_bezet[s["naam"]] and not s.get("is_pauzevlinder")]
+
+            if not kandidaten: break
+
             geplaatst=False
+            # 1) Direct plaatsen
             for s in kandidaten:
                 for attr,pos in lege_posities:
-                    if attr in s["attracties"] and check_max4(s["naam"],[uur],attr,dagplanning,pos):
+                    if attr in s["attracties"] and _ok_max4(s["naam"], attr, [uur]):
                         pos[uur]=s["naam"]
                         student_bezet[s["naam"]].append(uur)
+                        gebruik_per_student[attr][s["naam"]] +=1
                         geplaatst=True
                         break
                 if geplaatst: break
-            if not geplaatst: break
 
-        # Plaats de studenten die echt niet konden
-        for s in kandidaten:
-            if s["naam"] not in student_bezet or uur not in student_bezet[s["naam"]]:
-                extra_per_uur[uur].append(s["naam"])
+            if geplaatst: continue
+
+            # 2) Swap (als direct plaatsen niet lukt)
+            swap_ok=False
+            for s in kandidaten:
+                for attr,posities in dagplanning.items():
+                    if swap_ok: break
+                    for pos in posities:
+                        huidig = pos.get(uur,"")
+                        if huidig in ["","NIEMAND"]: continue
+                        if attr not in s["attracties"] or not _ok_max4(s["naam"],attr,[uur]): continue
+                        # Zoek vrije plek voor huidig
+                        for lege_attr, lege_pos in lege_posities:
+                            if lege_attr in [a for a in studenten_local if a["naam"]==huidig][0]["attracties"]:
+                                if _ok_max4(huidig, lege_attr,[uur]):
+                                    # voer swap uit
+                                    pos[uur]=s["naam"]
+                                    student_bezet[s["naam"]].append(uur)
+                                    gebruik_per_student[attr][s["naam"]]+=1
+                                    lege_pos[uur]=huidig
+                                    student_bezet[huidig].append(uur)
+                                    gebruik_per_student[lege_attr][huidig]+=1
+                                    swap_ok=True
+                                    geplaatst=True
+                                    break
+                        if geplaatst: break
+                if geplaatst: break
+
+            if not geplaatst:
+                # Plaats in extra als echt niet mogelijk
+                for s in kandidaten:
+                    if s["naam"] not in extra_per_uur[uur]:
+                        extra_per_uur[uur].append(s["naam"])
+                break  # stop iteratie voor dit uur
 
     return dagplanning, extra_per_uur, selected
 
