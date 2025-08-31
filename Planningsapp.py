@@ -174,6 +174,8 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 
+
+
 # -----------------------------
 # Maak planning inclusief schuiven, swaps en extra regels
 # -----------------------------
@@ -218,15 +220,17 @@ def maak_planning(studenten_local):
     def _ok_max4(naam, attr, extra):
         return _max_consecutive(_uren_student_bij_attr(naam, attr) + list(extra)) <= 4
 
+    blok_lengtes = [3, 4, 2, 1]
+
     # -----------------------------
-    # Stap 1: gegarandeerde 1 student per attractie
+    # Stap 1: Vul gegarandeerd 1 student per attractie
     # -----------------------------
     for attractie, posities in dagplanning.items():
         for pos in posities:
             for uur in open_uren:
                 if pos.get(uur, '') in ['', 'NIEMAND']:
                     for s in studenten_local:
-                        if uur in s['uren_beschikbaar'] and attractie in s['attracties'] and s['naam'] not in student_bezet:
+                        if uur in s['uren_beschikbaar'] and attractie in s['attracties'] and uur not in student_bezet[s['naam']]:
                             pos[uur] = s['naam']
                             student_bezet[s['naam']].append(uur)
                             gebruik_per_attractie_student[attractie][s['naam']] += 1
@@ -234,10 +238,8 @@ def maak_planning(studenten_local):
                     break
 
     # -----------------------------
-    # Stap 2: extra studenten alleen als nodig
-    #         blokken van 3-4-2-1 uur
+    # Stap 2: Vul extra studenten in blokken 3-4-2-1, zonder dubbele plaatsingen
     # -----------------------------
-    blok_lengtes = [3, 4, 2, 1]
     max_iterations = 1000
     iteration = 0
 
@@ -257,11 +259,9 @@ def maak_planning(studenten_local):
 
         extra_per_uur = defaultdict(list)
         for uur in open_uren:
-            lege_vakken = any(pos.get(uur, '') in ['', 'NIEMAND'] for p in dagplanning.values() for pos in p)
-            if not lege_vakken:
-                for s in studenten_local:
-                    if uur in s['uren_beschikbaar'] and s['naam'] not in uren_bezet[uur] and not s.get('is_pauzevlinder'):
-                        extra_per_uur[uur].append(s['naam'])
+            for s in studenten_local:
+                if uur in s['uren_beschikbaar'] and uur not in student_bezet[s['naam']] and not s.get('is_pauzevlinder'):
+                    extra_per_uur[uur].append(s['naam'])
 
         for attractie, posities in dagplanning.items():
             for pos in posities:
@@ -270,7 +270,7 @@ def maak_planning(studenten_local):
                         bezet = any(p.get(uur, '') not in ['', 'NIEMAND'] for p in posities)
                         if not bezet:
                             for s in studenten_local:
-                                if uur in s['uren_beschikbaar'] and attractie in s['attracties'] and _ok_max4(s['naam'], attractie, [uur]):
+                                if uur in s['uren_beschikbaar'] and attractie in s['attracties'] and uur not in student_bezet[s['naam']] and _ok_max4(s['naam'], attractie, [uur]):
                                     pos[uur] = s['naam']
                                     student_bezet[s['naam']].append(uur)
                                     gebruik_per_attractie_student[attractie][s['naam']] += 1
@@ -287,7 +287,7 @@ def maak_planning(studenten_local):
                             geplaatst = False
                             for naam in list(extra_per_uur[uur]):
                                 s_obj = next(s for s in studenten_local if s['naam'] == naam)
-                                if all(u in s_obj['uren_beschikbaar'] for u in blok_uren) and attractie in s_obj['attracties'] and _ok_max4(naam, attractie, blok_uren):
+                                if all(u in s_obj['uren_beschikbaar'] and u not in student_bezet[s_obj['naam']] for u in blok_uren) and attractie in s_obj['attracties'] and _ok_max4(naam, attractie, blok_uren):
                                     for u in blok_uren:
                                         pos[u] = naam
                                         student_bezet[naam].append(u)
