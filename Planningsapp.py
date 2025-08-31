@@ -189,6 +189,9 @@ for idx, naam in enumerate(pauzevlinder_namen, start=1):
             s["pv_number"] = idx
             s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
 
+# Lijst van geselecteerde pauzevlinders (voor Excel-output)
+selected = [s for s in studenten if s.get("is_pauzevlinder")]
+
 # -----------------------------
 # Maak volledige planning
 # -----------------------------
