@@ -31,49 +31,70 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     planning = {}
     uren = sorted(open_uren)
     i = 0
+
     while i < len(uren):
         geplanned = False
-        # Probeer blokken van 3,4,2,1, maar geen blok langer dan 4 uur
-        for blok in [3,4,2,1]:
-            if blok > 4:
-                continue
+
+        for blok in [4,3,2,1]:  # probeer blokken in deze volgorde
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
-            kandidaten = [
-                s for s in studenten
-                if attractie in s["attracties"]
-                and all(u in s["uren_beschikbaar"] for u in blokuren)
-                and not any(u in student_bezet[s["naam"]] for u in blokuren)
-                and gebruik_per_student_attractie[s["naam"]] + blok <= max_per_student
-            ]
+
+            kandidaten = []
+            for s in studenten:
+                if attractie not in s["attracties"]:
+                    continue
+                if not all(u in s["uren_beschikbaar"] for u in blokuren):
+                    continue
+                if any(u in student_bezet[s["naam"]] for u in blokuren):
+                    continue
+                if gebruik_per_student_attractie[s["naam"]] + len(blokuren) > max_per_student:
+                    continue
+
+                # Controleer max 4 uur aaneengesloten
+                laatste_uren = sorted(student_bezet[s["naam"]])
+                max_aaneengesloten = 0
+                teller = 0
+                for u_idx, u in enumerate(laatste_uren):
+                    if u_idx == 0 or u == laatste_uren[u_idx-1] + 1:
+                        teller += 1
+                    else:
+                        teller = 1
+                    if teller > max_aaneengesloten:
+                        max_aaneengesloten = teller
+
+                # Check of het nieuwe blok een aaneengesloten reeks >4 uur maakt
+                aaneensluitend_vooraan = 0
+                for j, u in enumerate(blokuren):
+                    if laatste_uren and u == laatste_uren[-1] + 1:
+                        aaneensluitend_vooraan += 1
+                        laatste_uren.append(u)
+                    else:
+                        break
+                if aaneensluitend_vooraan >= 4:
+                    continue
+
+                kandidaten.append(s)
+
             if kandidaten:
                 min_uren = min(gebruik_per_student_attractie[s["naam"]] for s in kandidaten)
                 beste = [s for s in kandidaten if gebruik_per_student_attractie[s["naam"]] == min_uren]
                 gekozen = random.choice(beste)
-                # Controleer of we 4 uur max overschrijden
-                laatste_uren = student_bezet[gekozen["naam"]][-4:] if len(student_bezet[gekozen["naam"]]) >= 4 else []
-                # Split indien nodig
-                split_blokuren = []
-                teller = 0
+
                 for u in blokuren:
-                    if teller >= 4:
+                    # check nogmaals aaneengesloten limiet
+                    laatste_uren = sorted(student_bezet[gekozen["naam"]])
+                    if laatste_uren and u == laatste_uren[-1] + 1 and len(laatste_uren) >= 3:
                         break
-                    if u in laatste_uren:
-                        break
-                    split_blokuren.append(u)
-                    teller += 1
-                if not split_blokuren:
-                    continue
-                for u in split_blokuren:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student_attractie[gekozen["naam"]] += len(split_blokuren)
-                i += len(split_blokuren)
+                    gebruik_per_student_attractie[gekozen["naam"]] += 1
+
+                i += len(blokuren)
                 geplanned = True
                 break
+
         if not geplanned:
-            # Laatste optie: 1 uur
             u = uren[i]
             kandidaten_1 = [
                 s for s in studenten
@@ -84,9 +105,9 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             ]
             if kandidaten_1:
                 gekozen = random.choice(kandidaten_1)
-                # Controleer max 4 uur achter elkaar
-                laatste_uren = student_bezet[gekozen["naam"]][-4:] if len(student_bezet[gekozen["naam"]]) >= 4 else []
-                if not laatste_uren or u - laatste_uren[-1] > 1:
+                # Check max 4 uur aaneengesloten
+                laatste_uren = sorted(student_bezet[gekozen["naam"]])
+                if not laatste_uren or u != laatste_uren[-1] + 1 or len(laatste_uren) < 3:
                     planning[u] = gekozen["naam"]
                     student_bezet[gekozen["naam"]].append(u)
                     gebruik_per_student_attractie[gekozen["naam"]] += 1
@@ -95,7 +116,9 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
             else:
                 planning[u] = "NIEMAND"
             i += 1
+
     return planning
+
 
 # -----------------------------
 # Studenten inlezen
