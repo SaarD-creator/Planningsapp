@@ -219,7 +219,7 @@ def maak_planning(selected, attracties, open_uren):
 # -----------------------------
 # Uitvoeren
 # -----------------------------
-dagplanning, extra_per_uur, selected = maak_planning(studenten)
+dagplanning, extra_per_uur = maak_planning(studenten, attracties, open_uren)
 st.success("Planning gegenereerd!")
 
 # -----------------------------
