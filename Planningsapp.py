@@ -184,47 +184,44 @@ def maak_planning(studenten_local):
     # -------------------
     def plan_positie(pos, attr):
         uren = sorted(open_uren)
-        i = 0
-        while i < len(uren):
+        for idx, uur in enumerate(uren):
+            # Zoek eerste student die dit uur kan
             geplanned = False
-            # Probeer blokken 3->2->1, maar alleen als alle andere eisen OK zijn
-            for blok in [3,2,1]:
-                if i + blok > len(uren): continue
-                blokuren = uren[i:i+blok]
-                for s in studenten_local:
-                    if (attr in s["attracties"]
-                        and all(u in s["uren_beschikbaar"] and u not in student_bezet[s["naam"]] for u in blokuren)
-                        and gebruik_per_student[attr][s["naam"]] + blok <= 4
-                        and totaal_uren[s["naam"]] + blok <= 6
-                        and max_consecutive_hours(student_bezet[s["naam"]] + blokuren) <= 4):
-                        # Toewijzen
-                        for u in blokuren:
-                            pos[u] = s["naam"]
-                            student_bezet[s["naam"]].append(u)
-                        gebruik_per_student[attr][s["naam"]] += blok
-                        totaal_uren[s["naam"]] += blok
-                        i += blok
-                        geplanned = True
-                        break
-                if geplanned: break
+            for s in studenten_local:
+                if (attr in s["attracties"]
+                    and uur in s["uren_beschikbaar"]
+                    and uur not in student_bezet[s["naam"]]
+                    and gebruik_per_student[attr][s["naam"]] < 4
+                    and totaal_uren[s["naam"]] < 6
+                    and max_consecutive_hours(student_bezet[s["naam"]] + [uur]) <= 4):
+                    pos[uur] = s["naam"]
+                    student_bezet[s["naam"]].append(uur)
+                    gebruik_per_student[attr][s["naam"]] += 1
+                    totaal_uren[s["naam"]] += 1
+                    geplanned = True
+                    break
             if not geplanned:
-                # fallback: eerste student per uur of NIEMAND
-                u = uren[i]
-                for s in studenten_local:
-                    if (attr in s["attracties"]
-                        and u in s["uren_beschikbaar"]
-                        and u not in student_bezet[s["naam"]]
-                        and gebruik_per_student[attr][s["naam"]] < 4
-                        and totaal_uren[s["naam"]] < 6):
-                        pos[u] = s["naam"]
-                        student_bezet[s["naam"]].append(u)
-                        gebruik_per_student[attr][s["naam"]] += 1
-                        totaal_uren[s["naam"]] += 1
-                        geplanned = True
-                        break
-                if not geplanned:
-                    pos[u] = "NIEMAND"
-                i += 1
+                pos[uur] = "NIEMAND"
+
+        # -------------------
+        # Probeer lichte blokken achteraf voor efficiency
+        # -------------------
+        # dit is echt ondergeschikt: alleen indien het alle andere regels respecteert
+        uren_to_check = sorted(pos.keys())
+        i = 0
+        while i < len(uren_to_check):
+            for blok in [3,2]:
+                if i + blok > len(uren_to_check):
+                    continue
+                blokuren = uren_to_check[i:i+blok]
+                # Check of dezelfde student alle blokuren al bezet heeft
+                studenten_in_blok = [pos[u] for u in blokuren if pos[u] != "NIEMAND"]
+                if len(set(studenten_in_blok)) == 1 and len(studenten_in_blok) == blok:
+                    # blok is al efficiënt, niks doen
+                    i += blok
+                    break
+            else:
+                i += 1  # ga naar volgend uur
 
     # -------------------
     # Plan alle posities
@@ -245,7 +242,6 @@ def maak_planning(studenten_local):
                     extra_per_uur[uur].append(s["naam"])
 
     return dagplanning, extra_per_uur, selected
-
 
 
 
