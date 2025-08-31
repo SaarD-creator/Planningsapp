@@ -51,46 +51,46 @@ def check_max4(student, nieuwe_uren, attr, dagplanning, planning):
 
 def plan_attractie_pos(attr, studenten, student_bezet, gebruik_per_student, open_uren, dagplanning, max_per_student=4):
     """
-    Plant een attractie op basis van blokken van 3,2,1 uur, maximaal max_per_student uur per student.
-    Kritieke studenten (weinig mogelijke attracties) krijgen prioriteit.
+    Plant een attractie per uur. Probeer blokken van 3→2→1 uur, maar ondergeschikt aan alle andere eisen.
     """
     planning = {}
     uren = sorted(open_uren)
-    i = 0
 
-    while i < len(uren):
+    for uur_idx, uur in enumerate(uren):
         geplanned = False
-
-        for blok in [3, 2, 1]:
-            if i + blok > len(uren):
-                continue
-            blokuren = uren[i:i+blok]
-
-            # Filter kandidaten
-            kandidaten = [s for s in studenten
-                          if attr in s["attracties"]
-                          and all(u in s["uren_beschikbaar"] for u in blokuren)
-                          and not any(u in student_bezet[s["naam"]] for u in blokuren)
-                          and gebruik_per_student[s["naam"]] + blok <= max_per_student
-                          and check_max4(s["naam"], blokuren, attr, dagplanning, planning)]
-
-            if kandidaten:
-                # Sorteer: kritieke studenten eerst (weinig attracties), daarna minste gebruik
-                kandidaten.sort(key=lambda s: (s["aantal_attracties"], gebruik_per_student[s["naam"]]))
-                gekozen = kandidaten[0]
-
-                for u in blokuren:
-                    planning[u] = gekozen["naam"]
-                    student_bezet[gekozen["naam"]].append(u)
-                gebruik_per_student[gekozen["naam"]] += blok
-                i += blok
+        # Zoek eerst een student die dit uur kan
+        for s in studenten:
+            if (attr in s["attracties"]
+                and uur in s["uren_beschikbaar"]
+                and uur not in student_bezet[s["naam"]]
+                and gebruik_per_student[s["naam"]] < max_per_student
+                and max_consecutive_hours(student_bezet[s["naam"]] + [uur]) <= 4):
+                planning[uur] = s["naam"]
+                student_bezet[s["naam"]].append(uur)
+                gebruik_per_student[s["naam"]] += 1
                 geplanned = True
                 break
 
         if not geplanned:
-            # Geen kandidaat gevonden: zet NIEMAND
-            u = uren[i]
-            planning[u] = "NIEMAND"
+            # fallback: NIEMAND
+            planning[uur] = "NIEMAND"
+
+    # -------------------
+    # Optioneel: lichte blokken achteraf (3->2->1), ondergeschikt
+    # -------------------
+    # Controleer alleen of een student meerdere uren achter elkaar kan krijgen, zonder andere eisen te breken
+    uren_to_check = sorted(planning.keys())
+    i = 0
+    while i < len(uren_to_check):
+        for blok in [3,2]:
+            if i + blok > len(uren_to_check): continue
+            blokuren = uren_to_check[i:i+blok]
+            studenten_in_blok = [planning[u] for u in blokuren if planning[u] != "NIEMAND"]
+            if len(set(studenten_in_blok)) == 1 and len(studenten_in_blok) == blok:
+                # blok is al efficiënt, niets te doen
+                i += blok
+                break
+        else:
             i += 1
 
     return planning
@@ -140,22 +140,19 @@ attracties_te_plannen.sort(key=kritieke_score)
 # -----------------------------
 # Maak planning
 # -----------------------------
-
 def maak_planning(studenten_local):
     from collections import defaultdict
 
-    def max_consecutive_hours(urenlijst):
-        if not urenlijst: return 0
-        urenlijst = sorted(set(urenlijst))
-        maxr = huidig = 1
-        for i in range(1, len(urenlijst)):
-            huidig = huidig + 1 if urenlijst[i] == urenlijst[i-1] + 1 else 1
-            maxr = max(maxr, huidig)
-        return maxr
+    def _uren_student_bij_attr(naam, attr):
+        uren = []
+        for posities in dagplanning.get(attr, []):
+            uren += [u for u, n in posities.items() if n == naam]
+        return sorted(set(uren))
 
-    # -------------------
+    def _ok_max4(naam, attr, extra_uren):
+        return max_consecutive_hours(_uren_student_bij_attr(naam, attr) + list(extra_uren)) <= 4
+
     # Pauzevlinders
-    # -------------------
     pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
     required_hours = [12,13,14,15,16,17]
     selected = []
@@ -168,70 +165,28 @@ def maak_planning(studenten_local):
                 selected.append(s)
                 break
 
-    # -------------------
     # Init
-    # -------------------
     student_bezet = {s["naam"]: [] for s in studenten_local}
-    totaal_uren = {s["naam"]: 0 for s in studenten_local}
     dagplanning = {}
     gebruik_per_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
+    # Plan eerste en tweede posities direct per uur
     for attr in attracties_te_plannen:
-        dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
+        dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]  # 1 of 2 posities
 
     # -------------------
-    # Plan blokken per positie (ondergeschikt)
-    # -------------------
-    def plan_positie(pos, attr):
-        uren = sorted(open_uren)
-        for idx, uur in enumerate(uren):
-            # Zoek eerste student die dit uur kan
-            geplanned = False
-            for s in studenten_local:
-                if (attr in s["attracties"]
-                    and uur in s["uren_beschikbaar"]
-                    and uur not in student_bezet[s["naam"]]
-                    and gebruik_per_student[attr][s["naam"]] < 4
-                    and totaal_uren[s["naam"]] < 6
-                    and max_consecutive_hours(student_bezet[s["naam"]] + [uur]) <= 4):
-                    pos[uur] = s["naam"]
-                    student_bezet[s["naam"]].append(uur)
-                    gebruik_per_student[attr][s["naam"]] += 1
-                    totaal_uren[s["naam"]] += 1
-                    geplanned = True
-                    break
-            if not geplanned:
-                pos[uur] = "NIEMAND"
-
-        # -------------------
-        # Probeer lichte blokken achteraf voor efficiency
-        # -------------------
-        # dit is echt ondergeschikt: alleen indien het alle andere regels respecteert
-        uren_to_check = sorted(pos.keys())
-        i = 0
-        while i < len(uren_to_check):
-            for blok in [3,2]:
-                if i + blok > len(uren_to_check):
-                    continue
-                blokuren = uren_to_check[i:i+blok]
-                # Check of dezelfde student alle blokuren al bezet heeft
-                studenten_in_blok = [pos[u] for u in blokuren if pos[u] != "NIEMAND"]
-                if len(set(studenten_in_blok)) == 1 and len(studenten_in_blok) == blok:
-                    # blok is al efficiënt, niks doen
-                    i += blok
-                    break
-            else:
-                i += 1  # ga naar volgend uur
-
-    # -------------------
-    # Plan alle posities
+    # Vul eerste posities met nieuwe bloklogica
     # -------------------
     for attr, posities in dagplanning.items():
-        for pos in posities:
-            plan_positie(pos, attr)
+        for idx_pos, pos in enumerate(posities):
+            # gebruik nieuwe plan_attractie_pos per positie
+            planning_pos = plan_attractie_pos(attr, studenten_local, student_bezet, gebruik_per_student[attr], open_uren, dagplanning)
+            # schrijf terug in dagplanning
+            for uur, naam in planning_pos.items():
+                pos[uur] = naam
 
     # -------------------
-    # Extra studenten
+    # Extra studenten alleen toevoegen als alle posities vol zijn
     # -------------------
     extra_per_uur = defaultdict(list)
     for uur in open_uren:
@@ -242,6 +197,7 @@ def maak_planning(studenten_local):
                     extra_per_uur[uur].append(s["naam"])
 
     return dagplanning, extra_per_uur, selected
+
 
 
 
