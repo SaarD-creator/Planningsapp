@@ -135,9 +135,9 @@ def kritieke_score(attr):
     return sum(1 for s in studenten if attr in s["attracties"])
 attracties_te_plannen.sort(key=kritieke_score)
 
-# -----------------------------
-# Maak planning
-# -----------------------------
+# --------------------------------
+# Maak planning inclusief blok-optimizer
+# --------------------------------
 
 def maak_planning(studenten_local):
     from collections import defaultdict
@@ -176,10 +176,8 @@ def maak_planning(studenten_local):
     # Vul eerste posities absoluut
     for uur in open_uren:
         for attr, posities in dagplanning.items():
-            # eerste positie
             eerste_pos = posities[0]
             if eerste_pos.get(uur,"NIEMAND") in ["", "NIEMAND"]:
-                # selecteer student met minste aantal attracties (kritiek)
                 kandidaten = [s for s in studenten_local
                               if uur in s["uren_beschikbaar"]
                               and attr in s["attracties"]
@@ -211,7 +209,6 @@ def maak_planning(studenten_local):
                                 swap_gedaan = True
                                 break
                         if swap_gedaan: break
-                    # als nog steeds leeg
                     if eerste_pos.get(uur,"") in ["", "NIEMAND"]:
                         eerste_pos[uur] = "NIEMAND"
 
@@ -240,10 +237,36 @@ def maak_planning(studenten_local):
     for uur in open_uren:
         for s in studenten_local:
             if uur in s["uren_beschikbaar"] and uur not in student_bezet[s["naam"]] and not s.get("is_pauzevlinder"):
-                # check of alle posities al gevuld
                 pos_vrij = any(pos.get(uur,"NIEMAND") in ["", "NIEMAND"] for posities in dagplanning.values() for pos in posities)
                 if not pos_vrij:
                     extra_per_uur[uur].append(s["naam"])
+
+    # --------------------------------
+    # Blok optimizer: vorm blokken van 3→2→1, ondergeschikt aan alle eisen
+    # --------------------------------
+    for attr, posities in dagplanning.items():
+        for pos in posities:
+            urenlijst = sorted([u for u in open_uren if pos.get(u,"NIEMAND") not in ["", "NIEMAND"]])
+            i = 0
+            while i < len(urenlijst)-1:
+                uur1, uur2 = urenlijst[i], urenlijst[i+1]
+                s1, s2 = pos[uur1], pos[uur2]
+                if s1 != s2:
+                    s1_obj = next((s for s in studenten_local if s["naam"]==s1), None)
+                    s2_obj = next((s for s in studenten_local if s["naam"]==s2), None)
+                    if not s1_obj or not s2_obj:
+                        i += 1
+                        continue
+                    # Controle max 4 achter elkaar
+                    uren_s1 = [u for u,n in pos.items() if n==s1]
+                    uren_s2 = [u for u,n in pos.items() if n==s2]
+                    if max_consecutive_hours(uren_s1 + [uur2]) <= 4 and max_consecutive_hours(uren_s2 + [uur1]) <= 4:
+                        # Controle beschikbaarheid
+                        if uur2 in s1_obj["uren_beschikbaar"] and uur1 in s2_obj["uren_beschikbaar"]:
+                            # Swap als blok van 2 of 3 kan ontstaan
+                            if (i>0 and pos[urenlijst[i-1]]==s2) or (i+2<len(urenlijst) and pos[urenlijst[i+2]]==s1):
+                                pos[uur1], pos[uur2] = pos[uur2], pos[uur1]
+                i += 1
 
     return dagplanning, extra_per_uur, selected
 
@@ -253,45 +276,10 @@ def maak_planning(studenten_local):
 # Uitvoeren
 # -----------------------------
 dagplanning, extra_per_uur, selected = maak_planning(studenten)
-
-
-def snelle_blok_optimizer(dagplanning, studenten):
-    open_uren_sorted = sorted(open_uren)
-
-    for attr, posities in dagplanning.items():
-        for pos in posities:
-            # lijst van bezette uren
-            urenlijst = [(uur, pos[uur]) for uur in open_uren_sorted if pos[uur] != "NIEMAND"]
-            for i in range(len(urenlijst)-1):
-                uur1, s1 = urenlijst[i]
-                uur2, s2 = urenlijst[i+1]
-                if s1 != s2:
-                    s1_obj = next((s for s in studenten if s["naam"]==s1), None)
-                    s2_obj = next((s for s in studenten if s["naam"]==s2), None)
-                    if not s1_obj or not s2_obj:
-                        continue
-                    # Check max 4 achter elkaar voor beide studenten
-                    uren_s1 = [u for u,n in urenlijst if n==s1]
-                    uren_s2 = [u for u,n in urenlijst if n==s2]
-                    if max_consecutive_hours(uren_s1 + [uur2]) <= 4 and max_consecutive_hours(uren_s2 + [uur1]) <= 4:
-                        # Check beschikbaarheid
-                        if uur2 in s1_obj["uren_beschikbaar"] and uur1 in s2_obj["uren_beschikbaar"]:
-                            # Swap enkel als dit blok van 2 of 3 mogelijk maakt
-                            if (i > 0 and urenlijst[i-1][1] == s2) or (i+2 < len(urenlijst) and urenlijst[i+2][1] == s1):
-                                pos[uur1], pos[uur2] = pos[uur2], pos[uur1]
-                                # update urenlijst voor deze pass
-                                urenlijst[i], urenlijst[i+1] = (uur1, pos[uur1]), (uur2, pos[uur2])
+st.success("Planning gegenereerd!")
 
 # -----------------------------
-# Gebruik blok optimizer
-# -----------------------------
-dagplanning, extra_per_uur, selected = maak_planning(studenten)
-snelle_blok_optimizer(dagplanning, studenten)
-st.success("Planning gegenereerd met blok-optimalisatie!")
-
-
-# -----------------------------
-# Excel output blijft hetzelfde
+# Excel output
 # -----------------------------
 wb_out=Workbook()
 ws_out=wb_out.active
@@ -361,7 +349,6 @@ wb_out.save(output)
 output.seek(0)
 st.download_button("Download planning", data=output.getvalue(),
                    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
