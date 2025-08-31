@@ -1,14 +1,11 @@
-
 import streamlit as st
-import copy
-import random
-from collections import defaultdict
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from io import BytesIO
+from collections import defaultdict
+import copy
 import datetime
-
 
 # -----------------------------
 # Datum
@@ -23,7 +20,7 @@ if not uploaded_file:
     st.warning("Upload eerst een Excel-bestand om verder te gaan.")
     st.stop()
 
-wb = load_workbook(uploaded_file)
+wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
 
 # -----------------------------
@@ -80,13 +77,12 @@ for kol in range(47, 65):
         if aantallen[naam] >= 1:
             attracties_te_plannen.append(naam)
 
-# Kritieke attracties eerst
 def kritieke_score(attr):
     return sum(1 for s in studenten if attr in s['attracties'])
 attracties_te_plannen.sort(key=kritieke_score)
 
 # -----------------------------
-# Pauzevlinders inlezen
+# Pauzevlinders
 # -----------------------------
 required_hours = [12,13,14,15,16,17]
 pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
@@ -116,7 +112,6 @@ def max_consecutive_hours(urenlijst):
     return maxr
 
 def kan_student(student, uren, dagplanning_attr, student_bezet, max_per_student=4):
-    """Check of student uren kan plannen zonder >4 opeenvolgend"""
     geplande_uren = []
     for pos in dagplanning_attr:
         for u, n in pos.items():
@@ -201,7 +196,7 @@ def maak_planning(studenten_local):
             if uur in s["uren_beschikbaar"] and s["naam"] not in uren_bezet[uur] and not s.get("is_pauzevlinder"):
                 extra_per_uur[uur].append(s["naam"])
 
-    # --- Invullen lege plekken met extra's zolang mogelijk ---
+    # Invullen van lege plekken met extra
     for uur in open_uren:
         lege_posities = []
         for attractie, posities in dagplanning.items():
@@ -221,9 +216,15 @@ def maak_planning(studenten_local):
                     geplaatst = True
                     break
             if not geplaatst:
-                continue  # blijft bij extra
+                continue
 
     return dagplanning, extra_per_uur, selected
+
+# -----------------------------
+# Planning uitvoeren
+# -----------------------------
+studenten_copy = copy.deepcopy(studenten)
+dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
 
 
 
