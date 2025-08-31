@@ -138,22 +138,18 @@ attracties_te_plannen.sort(key=kritieke_score)
 # -----------------------------
 
 
+from collections import defaultdict
+
 def maak_planning(studenten):
-    """
-    Maakt een dagplanning met blokken 3-4-2-1.
-    - Eerste posities altijd gevuld (desnoods swap).
-    - Kritieke studenten (weinig mogelijke attracties) krijgen voorrang.
-    - Tweede posities en extra's pas daarna.
-    """
-    # extract from studenten-data
     attracties = sorted({a for s in studenten for a in s["attracties"]})
     posities = {a: max(s.get("posities", {}).get(a, 1) for s in studenten) for a in attracties}
     open_uren = sorted({u for s in studenten for u in s["uren_beschikbaar"]})
 
-    dagplanning = {attr: {p: {} for p in range(posities[attr])} for attr in attracties}
+    # altijd dicts!
+    dagplanning = {attr: {p: {u: "NIEMAND" for u in open_uren} for p in range(posities[attr])} 
+                   for attr in attracties}
     extra_per_uur = {u: [] for u in open_uren}
 
-    # tracking
     student_bezet = defaultdict(list)
     gebruik_per_student = defaultdict(int)
 
@@ -190,11 +186,7 @@ def maak_planning(studenten):
             while i < len(urenlijst):
                 kandidaten = [s for s in studenten if attr in s["attracties"]]
                 success, blok = plan_blok(attr, pos, i, urenlijst, kandidaten)
-                if not success:
-                    dagplanning[attr][pos][urenlijst[i]] = "NIEMAND"
-                    i += 1
-                else:
-                    i += blok
+                i += blok if success else 1
 
     # 2. Tweede posities
     for attr in attracties:
@@ -203,21 +195,17 @@ def maak_planning(studenten):
             while i < len(urenlijst):
                 kandidaten = [s for s in studenten if attr in s["attracties"]]
                 success, blok = plan_blok(attr, pos, i, urenlijst, kandidaten)
-                if not success:
-                    dagplanning[attr][pos][urenlijst[i]] = "NIEMAND"
-                    i += 1
-                else:
-                    i += blok
+                i += blok if success else 1
 
-    # 3. Extra’s (alleen als ALLE eerste posities gevuld zijn)
+    # 3. Extra’s
     for u in urenlijst:
-        geplande = {dagplanning[attr][p].get(u, "NIEMAND")
+        geplande = {dagplanning[attr][p][u]
                     for attr in attracties
                     for p in dagplanning[attr]}
         bezet = {naam for naam in geplande if naam != "NIEMAND"}
         vrije_studenten = [s for s in studenten if u in s["uren_beschikbaar"]
                            and s["naam"] not in bezet]
-        if all(dagplanning[attr][0].get(u, "NIEMAND") != "NIEMAND" for attr in attracties):
+        if all(dagplanning[attr][0][u] != "NIEMAND" for attr in attracties):
             extra_per_uur[u] = [s["naam"] for s in vrije_studenten]
 
     return dagplanning, extra_per_uur, studenten
