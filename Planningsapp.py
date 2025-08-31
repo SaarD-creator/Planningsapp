@@ -176,7 +176,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 
-def maak_planning_full_coverage(studenten_local, ws, aantallen, open_uren, attracties_te_plannen, max_rounds=5):
+def maak_planning(studenten_local, ws, aantallen, open_uren, attracties_te_plannen, max_rounds=5):
     # -------------------
     # Pauzevlinders
     # -------------------
@@ -230,7 +230,7 @@ def maak_planning_full_coverage(studenten_local, ws, aantallen, open_uren, attra
         eerste_pos = posities[0]
         for uur in open_uren:
             if uur in eerste_pos and eerste_pos[uur] not in [None, "", "NIEMAND"]:
-                continue  # al gevuld
+                continue
             geplaatst = False
             for s in studenten_local:
                 if (uur in s["uren_beschikbaar"] 
@@ -259,7 +259,6 @@ def maak_planning_full_coverage(studenten_local, ws, aantallen, open_uren, attra
     # -------------------
     for _ in range(max_rounds):
         wijziging = False
-        # Extra studenten vullen alleen lege tweede posities
         for uur in open_uren:
             for attr, posities in dagplanning.items():
                 for pos in posities[1:]:
@@ -280,13 +279,14 @@ def maak_planning_full_coverage(studenten_local, ws, aantallen, open_uren, attra
 
     return dagplanning, selected
 
+
 # -----------------------------
 # Herhaal tot volledige planning (light)
 # -----------------------------
 max_attempts = 20  # veel lager dan 150, meestal voldoende
 for attempt in range(max_attempts):
     # Geen deepcopy, we werken met dicts/sets, wijzigingen zijn lokaal binnen functie
-    dagplanning, extra_per_uur, selected = maak_planning_full_coverage(studenten)
+    dagplanning, extra_per_uur, selected = maak_planning(studenten)
     
     # Check: alle posities gevuld of geen extra's over
     volledig = True
