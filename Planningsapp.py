@@ -220,7 +220,7 @@ def maak_planning(studenten_local):
         return _max_consecutive(_uren_student_bij_attr(naam, attr) + list(extra)) <= 4
 
     # -----------------------------
-    # Stap 1: gegarandeerde 1 student per attractie
+    # Stap 1: gegarandeerde 1 student per attractie (eerste posities)
     # -----------------------------
     for attractie, posities in dagplanning.items():
         for pos in posities:
@@ -236,7 +236,7 @@ def maak_planning(studenten_local):
 
     # -----------------------------
     # Stap 2: extra studenten alleen als er geen lege plekken zijn
-    #         probeer blokken van 3 uur (of 2/1) maar max 4 uur
+    #         probeer blokken van 3/2/1 uur, max 4 uur, maar nooit een attractie onbemand
     # -----------------------------
     max_iterations = 1000
     iteration = 0
@@ -257,26 +257,30 @@ def maak_planning(studenten_local):
 
         extra_per_uur = defaultdict(list)
         for uur in open_uren:
-            for s in studenten_local:
-                # Voeg alleen toe als er geen lege plekken op dit uur zijn
-                lege_vakken = any(pos.get(uur, '') in ['', 'NIEMAND'] for p in dagplanning.values() for pos in p)
-                if uur in s['uren_beschikbaar'] and s['naam'] not in uren_bezet[uur] and not s.get('is_pauzevlinder') and not lege_vakken:
-                    extra_per_uur[uur].append(s['naam'])
+            # Voeg alleen toe als er geen lege plekken op dit uur zijn, en attractie nog bezet kan worden
+            lege_vakken = any(pos.get(uur, '') in ['', 'NIEMAND'] for p in dagplanning.values() for pos in p)
+            if not lege_vakken:
+                for s in studenten_local:
+                    if uur in s['uren_beschikbaar'] and s['naam'] not in uren_bezet[uur] and not s.get('is_pauzevlinder'):
+                        extra_per_uur[uur].append(s['naam'])
 
-        for attractie, posities in dagplanning.items():
-            for pos in posities:
-                for uur in open_uren:
+        # Vul lege plekken, prioriteit: minstens 1 student per attractie
+        for uur in open_uren:
+            for attractie, posities in dagplanning.items():
+                for pos in posities:
                     if pos.get(uur, '') in ['', 'NIEMAND']:
-                        # Vul lege plekken eerst met beschikbare studenten
-                        for s in studenten_local:
-                            if uur in s['uren_beschikbaar'] and attractie in s['attracties'] and s['naam'] not in student_bezet and _ok_max4(s['naam'], attractie, [uur]):
-                                pos[uur] = s['naam']
-                                student_bezet[s['naam']].append(uur)
-                                gebruik_per_attractie_student[attractie][s['naam']] += 1
-                                wijziging = True
-                                break
+                        # Controleer of er al iemand staat bij deze attractie op dit uur
+                        bezet = any(pos.get(uur, '') not in ['', 'NIEMAND'] for pos in posities)
+                        if not bezet:
+                            for s in studenten_local:
+                                if uur in s['uren_beschikbaar'] and attractie in s['attracties'] and _ok_max4(s['naam'], attractie, [uur]):
+                                    pos[uur] = s['naam']
+                                    student_bezet[s['naam']].append(uur)
+                                    gebruik_per_attractie_student[attractie][s['naam']] += 1
+                                    wijziging = True
+                                    break
 
-        # Extra studenten vullen in blokken, alleen als echt nodig
+        # Vul extra studenten in blokken van 3/2/1 uur als echt nodig
         for attractie, posities in dagplanning.items():
             for pos in posities:
                 for uur in open_uren:
@@ -315,6 +319,7 @@ for attempt in range(max_attempts):
     if all(pos.get(u, '') != 'NIEMAND' or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
         studenten = studenten_copy
         break
+
 
 
 
