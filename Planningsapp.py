@@ -154,7 +154,7 @@ def maak_planning(studenten_local):
     # -----------------------------
     # Init structuren
     # -----------------------------
-    student_bezet = {s["naam"]: set() for s in studenten_local}  # gebruik set voor snelle check
+    student_bezet = {s["naam"]: [] for s in studenten_local}  # Lijst voor compatibiliteit
     dagplanning = {}
     gebruik_per_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
@@ -215,7 +215,7 @@ def maak_planning(studenten_local):
                         and gebruik_per_student[attr][student_naam] < 6
                         and uur not in student_bezet[student_naam]):
                         pos[uur] = student_naam
-                        student_bezet[student_naam].add(uur)
+                        student_bezet[student_naam].append(uur)
                         gebruik_per_student[attr][student_naam] += 1
                         wijziging = True
                         geplaatst = True
@@ -239,8 +239,9 @@ def maak_planning(studenten_local):
                                 and uur not in student_bezet[huidig]):
                                 # voer swap uit
                                 pos[uur] = student_naam
-                                student_bezet[student_naam].add(uur)
+                                student_bezet[student_naam].append(uur)
                                 gebruik_per_student[attr][student_naam] += 1
+                                # huidige student naar lege positie
                                 lege_posities.append((attr, pos))
                                 geplaatst = True
                                 wijziging = True
@@ -267,7 +268,7 @@ def maak_planning(studenten_local):
                 if uur not in student_bezet[kandidaat]:
                     posities[0][uur] = kandidaat
                     posities[1][uur] = "NIEMAND"
-                    student_bezet[kandidaat].add(uur)
+                    student_bezet[kandidaat].append(uur)
                     gebruik_per_student[attr][kandidaat] += 1
                     gevuld = True
             if gevuld:
@@ -283,7 +284,7 @@ def maak_planning(studenten_local):
                 min_uren = min(gebruik_per_student[attr][s["naam"]] for s in kandidaten)
                 s_gekozen = random.choice([s for s in kandidaten if gebruik_per_student[attr][s["naam"]] == min_uren])
                 posities[0][uur] = s_gekozen["naam"]
-                student_bezet[s_gekozen["naam"]].add(uur)
+                student_bezet[s_gekozen["naam"]].append(uur)
                 gebruik_per_student[attr][s_gekozen["naam"]] += 1
                 continue
 
@@ -299,7 +300,7 @@ def maak_planning(studenten_local):
                     if uur in s_obj["uren_beschikbaar"] and attr in s_obj["attracties"]:
                         posities[0][uur] = naam_huidig
                         pos[uur] = "NIEMAND"
-                        student_bezet[naam_huidig].add(uur)
+                        student_bezet[naam_huidig].append(uur)
                         gebruik_per_student[attr][naam_huidig] += 1
                         gevuld = True
                         break
@@ -308,7 +309,6 @@ def maak_planning(studenten_local):
                 posities[0][uur] = "NIEMAND"
 
     return dagplanning, extra_per_uur, selected
-
 
 
 
