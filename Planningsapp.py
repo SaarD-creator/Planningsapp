@@ -25,7 +25,8 @@ wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
 
 # -----------------------------
-# Hulpfunctie: plan blokken bij attractie (max 4 uur aaneengesloten)
+# Hulpfunctie: plan blokken bij attractie
+# Max 4 uur aaneengesloten, max 6 uur totaal per student
 # -----------------------------
 def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, max_per_student=6):
     planning = {}
@@ -33,7 +34,7 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
     while i < len(uren):
         geplanned = False
-        for blok in [3,4,2,1]:  # voorkeur blokken
+        for blok in [3,4,2,1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
@@ -133,10 +134,10 @@ def kritieke_score(attr):
 attracties_te_plannen.sort(key=kritieke_score)
 
 # -----------------------------
-# Planning functie (zonder Excel output)
+# Planning functie
 # -----------------------------
 def maak_planning(studenten_local):
-    # Pauzevlinders (BN2)
+    # Pauzevlinders
     try:
         num_pauzevlinders = int(str(ws['BN2'].value).replace(",", ".").strip())
     except:
@@ -154,27 +155,28 @@ def maak_planning(studenten_local):
     dagplanning = {}
     gebruik_per_attractie_student = {attr:{s["naam"]:0 for s in studenten_local} for attr in attracties_te_plannen}
 
-    # Lookup voor dubbele studenten
-    studenten_op_attractie_uur_pos = {
-        (attr, uur, pos_idx): None
-        for attr in attracties_te_plannen
-        for uur in open_uren
-        for pos_idx in range(aantallen.get(attr,1))
-    }
+    # -----------------------------
+    # Lookup om dubbele studenten te voorkomen
+    # Key: (attractie, uur), value: set van namen
+    # -----------------------------
+    studenten_op_attractie_uur = {(attr,u): set() for attr in attracties_te_plannen for u in open_uren}
 
-    # Eerste planning
+    # Eerste posities plannen
     for attractie in attracties_te_plannen:
         num_pos = aantallen.get(attractie,1)
         dagplanning[attractie] = []
         for pos_idx in range(num_pos):
             pos_plan = plan_attractie_pos(attractie, studenten_local, student_bezet,
                                          gebruik_per_attractie_student[attractie], open_uren)
+            # dubbele check per uur
+            for uur in pos_plan:
+                if pos_plan[uur] in studenten_op_attractie_uur[(attractie,uur)]:
+                    pos_plan[uur] = "NIEMAND"
+                elif pos_plan[uur] not in ["","NIEMAND"]:
+                    studenten_op_attractie_uur[(attractie,uur)].add(pos_plan[uur])
             dagplanning[attractie].append(pos_plan)
-            for uur, naam in pos_plan.items():
-                if naam not in ["","NIEMAND"]:
-                    studenten_op_attractie_uur_pos[(attractie,uur,pos_idx)] = naam
 
-    # Iteratief vullen en wisselen met extra studenten
+    # Iteratief vullen lege plekken met extra studenten
     while True:
         wijziging = False
         extra_per_uur = defaultdict(list)
@@ -188,14 +190,14 @@ def maak_planning(studenten_local):
                 for pos_idx, pos in enumerate(posities):
                     if pos.get(uur,"NIEMAND")=="NIEMAND":
                         for s_naam in extra_per_uur[uur][:]:
-                            if s_naam not in [studenten_op_attractie_uur_pos[(attractie,uur,i)] for i in range(len(posities))]:
+                            if s_naam not in studenten_op_attractie_uur[(attractie,uur)]:
                                 s_obj = next(s for s in studenten_local if s["naam"]==s_naam)
                                 if uur in s_obj["uren_beschikbaar"] and attractie in s_obj["attracties"] and gebruik_per_attractie_student[attractie][s_naam]<6:
                                     pos[uur] = s_naam
                                     student_bezet[s_naam].append(uur)
                                     gebruik_per_attractie_student[attractie][s_naam]+=1
                                     extra_per_uur[uur].remove(s_naam)
-                                    studenten_op_attractie_uur_pos[(attractie,uur,pos_idx)] = s_naam
+                                    studenten_op_attractie_uur[(attractie,uur)].add(s_naam)
                                     wijziging = True
                                     break
         if not wijziging:
@@ -210,6 +212,7 @@ max_attempts = 150
 for attempt in range(max_attempts):
     studenten_copy = copy.deepcopy(studenten)
     dagplanning, extra_per_uur, selected = maak_planning(studenten_copy)
+    # Check dat er geen lege plekken overblijven
     if all(pos.get(u,"")!="NIEMAND" or not extra_per_uur.get(u) for p in dagplanning.values() for pos in p for u in pos):
         studenten = studenten_copy
         break
