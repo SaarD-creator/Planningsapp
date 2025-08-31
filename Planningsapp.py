@@ -244,11 +244,11 @@ def maak_planning(studenten_local):
                     for pos in posities:
                         huidig = pos.get(uur,"")
                         if huidig in ["","NIEMAND"]: continue
-                        if attr not in s_obj["attracties"] or not _ok_max4(extra_student, attr, [uur]): continue
-                        # Zoek lege plek B
+                        if attr not in s_obj["attracties"] or not _ok_max4(s_obj["naam"], attr, [uur]): continue
+                        # Zoek vrije plek B
                         for lege_attr, lege_pos in list(lege_posities):
                             h_obj = next(st for st in studenten_local if st["naam"]==huidig)
-                            if uur in h_obj["uren_beschikbaar"] and lege_attr in h_obj["attracties"] and _ok_max4(huidig, lege_attr, [uur]):
+                            if uur in h_obj["uren_beschikbaar"] and lege_attr in h_obj["attracties"] and _ok_max4(h_obj["naam"], lege_attr, [uur]):
                                 # swap uitvoeren
                                 pos[uur]=extra_student
                                 student_bezet[extra_student].append(uur)
@@ -290,7 +290,26 @@ def maak_planning(studenten_local):
                 student_bezet[gekozen["naam"]].append(uur)
                 gebruik_per_student[attr][gekozen["naam"]] +=1
             else:
+                # Als er echt geen student beschikbaar is, zet NIEMAND
                 eerste_pos[uur] = "NIEMAND"
+
+    # -----------------------------
+    # Extra check: geen attractie onbemand
+    # Als er geen student beschikbaar is op een attractie, eerste positie krijgt NIEMAND
+    # Anders wordt minimaal 1 student geplaatst
+    # -----------------------------
+    for attr,posities in dagplanning.items():
+        eerste_pos = posities[0]
+        for uur in open_uren:
+            if eerste_pos.get(uur,"") in ["","NIEMAND"]:
+                kandidaten = [s for s in studenten_local if uur in s["uren_beschikbaar"] and attr in s["attracties"] and uur not in student_bezet[s["naam"]]]
+                if kandidaten:
+                    gekozen = random.choice(kandidaten)
+                    eerste_pos[uur] = gekozen["naam"]
+                    student_bezet[gekozen["naam"]].append(uur)
+                    gebruik_per_student[attr][gekozen["naam"]] +=1
+                else:
+                    eerste_pos[uur] = "NIEMAND"
 
     return dagplanning, extra_per_uur, selected
 
