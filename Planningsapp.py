@@ -31,6 +31,66 @@ if not uploaded_file:
 wb = load_workbook_from_bytes(uploaded_file.read())
 ws = wb["Blad1"]
 
+
+# -----------------------------
+# Studenten inlezen
+# -----------------------------
+studenten = []
+for rij in range(2, 500):
+    naam = ws.cell(rij, 12).value
+    if not naam:
+        continue
+    uren_beschikbaar = [10 + (kol - 3) for kol in range(3, 12) if ws.cell(rij, kol).value in [1, True, "WAAR", "X"]]
+    attracties = [ws.cell(1, kol).value for kol in range(14, 32) if ws.cell(rij, kol).value in [1, True, "WAAR", "X"]]
+    raw_ag = ws[f'AG{rij}'].value
+    try:
+        aantal_attracties = int(raw_ag) if raw_ag is not None else len(attracties)
+    except:
+        aantal_attracties = len(attracties)
+    studenten.append({
+        "naam": naam,
+        "uren_beschikbaar": uren_beschikbaar,
+        "attracties": attracties,
+        "aantal_attracties": aantal_attracties,
+        "is_pauzevlinder": False,
+        "pv_number": None
+    })
+
+# -----------------------------
+# Openingsuren
+# -----------------------------
+open_uren = []
+for kol in range(36, 45):
+    uur_raw = ws.cell(1, kol).value
+    vink = ws.cell(2, kol).value
+    if vink in [1, True, "WAAR", "X"]:
+        uur = int(str(uur_raw).replace("u","").strip()) if not isinstance(uur_raw,int) else uur_raw
+        open_uren.append(uur)
+if not open_uren:
+    open_uren = list(range(10, 19))
+open_uren = sorted(set(open_uren))
+
+# -----------------------------
+# Attracties & aantallen
+# -----------------------------
+aantallen = {}
+attracties_te_plannen = []
+for kol in range(47, 65):
+    naam = ws.cell(1, kol).value
+    if naam:
+        try:
+            aantal = int(ws.cell(2, kol).value)
+        except:
+            aantal = 0
+        aantallen[naam] = max(0, min(2, aantal))
+        if aantallen[naam] >= 1:
+            attracties_te_plannen.append(naam)
+
+def kritieke_score(attr):
+    return sum(1 for s in studenten if attr in s['attracties'])
+attracties_te_plannen.sort(key=kritieke_score)
+
+
 # -----------------------------
 # Hulpfunctie: plan blokken bij attractie
 # -----------------------------
@@ -133,7 +193,6 @@ def plan_attractie_pos(
             i += 1
 
     return planning
-
 
 
 
