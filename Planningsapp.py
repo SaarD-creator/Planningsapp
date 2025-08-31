@@ -204,7 +204,6 @@ def maak_planning(studenten_local):
             attractie, studenten_local, student_bezet,
             gebruik_per_attractie_student[attractie], open_uren, dagplanning
         )]
-        # Only create second position if attractie has count>=2
         if aantallen.get(attractie,1) >= 2:
             posities.append(plan_attractie_pos(
                 attractie, studenten_local, student_bezet,
@@ -214,14 +213,13 @@ def maak_planning(studenten_local):
 
     # --- Enforce first-spot priority globally ---
     for uur in open_uren:
-        # Track which students are assigned this hour
         uur_bezet = set()
         for attr, posities in dagplanning.items():
             for pos in posities:
                 if pos.get(uur,"") not in ["","NIEMAND"]:
                     uur_bezet.add(pos[uur])
 
-        # Fill first positions first
+        # Fill first positions
         for attr, posities in dagplanning.items():
             pos = posities[0]
             if pos.get(uur,"") in ["","NIEMAND"]:
@@ -239,7 +237,7 @@ def maak_planning(studenten_local):
                     gebruik_per_attractie_student[attr][gekozen["naam"]] += 1
                     uur_bezet.add(gekozen["naam"])
 
-        # Then fill second positions if students remain
+        # Fill second positions if students remain
         for attr, posities in dagplanning.items():
             if len(posities) < 2:
                 continue
@@ -259,18 +257,19 @@ def maak_planning(studenten_local):
                     gebruik_per_attractie_student[attr][gekozen["naam"]] += 1
                     uur_bezet.add(gekozen["naam"])
 
-    # --- Extra students & swaps (like your original logic) ---
+    # --- Extras & swaps ---
+    extra_per_uur = defaultdict(list)
     for uur in open_uren:
         lege_posities = [(attr,pos) for attr,posities in dagplanning.items() for pos in posities if pos.get(uur,"") in ["","NIEMAND"]]
-        extra_per_uur = [
+        candidates = [
             s["naam"] for s in studenten_local
             if uur in s["uren_beschikbaar"] and s["naam"] not in uur_bezet and not s.get("is_pauzevlinder")
         ]
         tried_guard = 0
-        while extra_per_uur and lege_posities:
+        while candidates and lege_posities:
             tried_guard += 1
             if tried_guard > 2000: break
-            extra_student = extra_per_uur.pop(0)
+            extra_student = candidates.pop(0)
             geplaatst = False
             for attr,pos in list(lege_posities):
                 if extra_student in pos.values(): continue
@@ -283,10 +282,20 @@ def maak_planning(studenten_local):
                     geplaatst = True
                     break
             if not geplaatst:
-                extra_per_uur.append(extra_student)
+                candidates.append(extra_student)
                 break
 
-    return dagplanning, extra_per_uur, selected
+    # --- Build extra_per_uur in same format as original script ---
+    extra_per_uur_out = defaultdict(list)
+    for uur in open_uren:
+        for s in studenten_local:
+            if uur in s["uren_beschikbaar"] and s["naam"] not in student_bezet or s.get("is_pauzevlinder"):
+                continue
+            assigned_somewhere = any(pos.get(uur,"") == s["naam"] for posities in dagplanning.values() for pos in posities)
+            if not assigned_somewhere:
+                extra_per_uur_out[uur].append(s["naam"])
+
+    return dagplanning, extra_per_uur_out, selected
 
 # -----------------------------
 # Herhaal tot volledige planning (sneller)
