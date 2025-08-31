@@ -176,13 +176,13 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 
-def maak_planning_fast(studenten_local, max_rounds=5):
+def maak_planning(studenten_local, max_rounds=5):
     # -------------------
     # Pauzevlinders
     # -------------------
     pauzevlinder_namen = [str(ws[f'BN{r}'].value).strip() for r in range(4, 11) if ws[f'BN{r}'].value]
-    required_hours = {12,13,14,15,16,17}
-    
+    required_hours = {12, 13, 14, 15, 16, 17}
+
     studenten_dict = {s["naam"]: s for s in studenten_local}
     selected = []
 
@@ -191,6 +191,7 @@ def maak_planning_fast(studenten_local, max_rounds=5):
         if s:
             s["is_pauzevlinder"] = True
             s["pv_number"] = idx
+            # Pauzevlinders mogen deze uren niet plannen
             s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_hours]
             selected.append(s)
 
@@ -224,31 +225,39 @@ def maak_planning_fast(studenten_local, max_rounds=5):
         return _max_consecutive(_uren_student_bij_attr(naam, attr) + list(extra_uren)) <= 4
 
     # -------------------
-    # Plaats eerste ronde direct
+    # Eerste ronde: directe plaatsing
     # -------------------
     for attr, posities in dagplanning.items():
         for pos in posities:
             for uur in open_uren:
-                for s in studenten_local:
-                    if (uur in s["uren_beschikbaar"] 
-                        and attr in s["attracties"]
-                        and uur not in student_bezet[s["naam"]]
-                        and _ok_max4(s["naam"], attr, [uur])):
-                        pos[uur] = s["naam"]
-                        student_bezet[s["naam"]].add(uur)
-                        gebruik_per_attractie_student[attr][s["naam"]] += 1
-                        break  # vul eerste vrije plek
+                if pos.get(uur) in [None, "", "NIEMAND"]:
+                    kandidaten = [s for s in studenten_local 
+                                  if uur in s["uren_beschikbaar"]
+                                  and attr in s["attracties"]
+                                  and uur not in student_bezet[s["naam"]]
+                                  and gebruik_per_attractie_student[attr][s["naam"]] < 6
+                                  and _ok_max4(s["naam"], attr, [uur])]
+                    if kandidaten:
+                        # Kies student met minste uren bij deze attractie
+                        min_uren = min(gebruik_per_attractie_student[attr][s["naam"]] for s in kandidaten)
+                        beste = [s for s in kandidaten if gebruik_per_attractie_student[attr][s["naam"]] == min_uren]
+                        gekozen = random.choice(beste)
+                        pos[uur] = gekozen["naam"]
+                        student_bezet[gekozen["naam"]].add(uur)
+                        gebruik_per_attractie_student[attr][gekozen["naam"]] += 1
+                    else:
+                        pos[uur] = "NIEMAND"
 
     # -------------------
     # Extra rondes: extra studenten & swaps
     # -------------------
     for _ in range(max_rounds):
         wijziging = False
-        # Extra studenten per uur
-        extra_per_uur = {u:[s["naam"] for s in studenten_local
-                            if u in s["uren_beschikbaar"] 
-                            and u not in student_bezet[s["naam"]]
-                            and not s.get("is_pauzevlinder")] 
+        # Extra studenten per uur (niet pauzevlinders)
+        extra_per_uur = {u: [s["naam"] for s in studenten_local
+                             if u in s["uren_beschikbaar"]
+                             and u not in student_bezet[s["naam"]]
+                             and not s.get("is_pauzevlinder")]
                          for u in open_uren}
 
         for uur, extras in extra_per_uur.items():
@@ -256,7 +265,7 @@ def maak_planning_fast(studenten_local, max_rounds=5):
                 s = studenten_dict[extra_naam]
                 geplaatst = False
 
-                # 1) Probeer lege plek
+                # 1) Plaats direct in lege positie
                 for attr, posities in dagplanning.items():
                     for pos in posities:
                         if pos.get(uur) in [None, "", "NIEMAND"] and attr in s["attracties"] and _ok_max4(extra_naam, attr, [uur]):
@@ -269,14 +278,14 @@ def maak_planning_fast(studenten_local, max_rounds=5):
                     if geplaatst:
                         break
 
-                # 2) Probeer swap
+                # 2) Swap indien direct niet mogelijk
                 if not geplaatst:
                     for attr, posities in dagplanning.items():
                         for pos in posities:
                             huidige = pos.get(uur, "")
                             if huidige not in ["", "NIEMAND"] and attr in s["attracties"] and _ok_max4(extra_naam, attr, [uur]):
                                 h_obj = studenten_dict[huidige]
-                                # Zoek lege plek elders voor huidige
+                                # Zoek lege positie elders voor huidige
                                 for attr2, posities2 in dagplanning.items():
                                     if attr2 == attr:
                                         continue
@@ -304,13 +313,14 @@ def maak_planning_fast(studenten_local, max_rounds=5):
     return dagplanning, extra_per_uur, selected
 
 
+
 # -----------------------------
 # Herhaal tot volledige planning (light)
 # -----------------------------
 max_attempts = 20  # veel lager dan 150, meestal voldoende
 for attempt in range(max_attempts):
     # Geen deepcopy, we werken met dicts/sets, wijzigingen zijn lokaal binnen functie
-    dagplanning, extra_per_uur, selected = maak_planning_fast(studenten)
+    dagplanning, extra_per_uur, selected = maak_planning(studenten)
     
     # Check: alle posities gevuld of geen extra's over
     volledig = True
