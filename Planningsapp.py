@@ -7,7 +7,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
-kak
+
 # -----------------------------
 # Datum
 # -----------------------------
@@ -189,6 +189,9 @@ def maak_planning(studenten_local):
     dagplanning = {}
     gebruik_per_attractie_student = {attr: {s["naam"]: 0 for s in studenten_local} for attr in attracties_te_plannen}
 
+    # Lookup voor wie al bij een attractie op een uur staat
+    studenten_op_attractie_uur = {(attr, u): set() for attr in attracties_te_plannen for u in open_uren}
+
     # --- Eerste en tweede posities ---
     for attractie in attracties_te_plannen:
         dagplanning[attractie] = [plan_attractie_pos(attractie, studenten_local, student_bezet,
@@ -196,6 +199,11 @@ def maak_planning(studenten_local):
         if aantallen.get(attractie, 1) >= 2:
             dagplanning[attractie].append(plan_attractie_pos(attractie, studenten_local, student_bezet,
                                                              gebruik_per_attractie_student[attractie], open_uren))
+        # Vul lookup voor eerste planning
+        for pos in dagplanning[attractie]:
+            for uur, naam in pos.items():
+                if naam not in ["", "NIEMAND"]:
+                    studenten_op_attractie_uur[(attractie, uur)].add(naam)
 
     # --- Iteratief vullen en wisselen ---
     while True:
@@ -222,14 +230,12 @@ def maak_planning(studenten_local):
             for attractie, posities in dagplanning.items():
                 while True:
                     wijziging_in_uur = False
-                    # dynamische set van studenten al bij deze attractie op dit uur
-                    studenten_al_op_attractie = {pos.get(uur, "") for pos in posities if pos.get(uur, "") not in ["", "NIEMAND"]}
 
                     for pos in posities:
                         if pos.get(uur, "NIEMAND") == "NIEMAND":
                             # eerst extra studenten
                             for s_naam in extra_per_uur[uur][:]:
-                                if s_naam not in studenten_al_op_attractie:
+                                if s_naam not in studenten_op_attractie_uur[(attractie, uur)]:
                                     s_obj = next(s for s in studenten_local if s["naam"] == s_naam)
                                     if uur in s_obj["uren_beschikbaar"] and attractie in s_obj["attracties"] \
                                             and gebruik_per_attractie_student[attractie][s_naam] < 6:
@@ -237,13 +243,14 @@ def maak_planning(studenten_local):
                                         student_bezet[s_naam].append(uur)
                                         gebruik_per_attractie_student[attractie][s_naam] += 1
                                         extra_per_uur[uur].remove(s_naam)
+                                        studenten_op_attractie_uur[(attractie, uur)].add(s_naam)
                                         wijziging_in_uur = True
                                         break
 
                             # als nog NIEMAND, probeer andere kandidaten
                             if pos.get(uur, "NIEMAND") == "NIEMAND":
                                 kandidaten = [s for s in studenten_local
-                                              if s["naam"] not in studenten_al_op_attractie
+                                              if s["naam"] not in studenten_op_attractie_uur[(attractie, uur)]
                                               and uur in s["uren_beschikbaar"]
                                               and attractie in s["attracties"]
                                               and gebruik_per_attractie_student[attractie][s["naam"]] < 6]
@@ -252,6 +259,7 @@ def maak_planning(studenten_local):
                                     pos[uur] = gekozen["naam"]
                                     student_bezet[gekozen["naam"]].append(uur)
                                     gebruik_per_attractie_student[attractie][gekozen["naam"]] += 1
+                                    studenten_op_attractie_uur[(attractie, uur)].add(gekozen["naam"])
                                     wijziging_in_uur = True
 
                     if not wijziging_in_uur:
@@ -263,6 +271,7 @@ def maak_planning(studenten_local):
             break
 
     return dagplanning, extra_per_uur, selected
+
 
 
 
