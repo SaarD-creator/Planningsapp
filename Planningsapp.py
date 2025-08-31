@@ -180,16 +180,16 @@ def maak_planning(studenten_local):
         dagplanning[attr] = [{} for _ in range(aantallen.get(attr,1))]
 
     # -------------------
-    # Functie om blokken toe te wijzen tijdens planning
+    # Plan blokken per positie (ondergeschikt)
     # -------------------
     def plan_positie(pos, attr):
         uren = sorted(open_uren)
         i = 0
         while i < len(uren):
             geplanned = False
+            # Probeer blokken 3->2->1, maar alleen als alle andere eisen OK zijn
             for blok in [3,2,1]:
-                if i + blok > len(uren):
-                    continue
+                if i + blok > len(uren): continue
                 blokuren = uren[i:i+blok]
                 for s in studenten_local:
                     if (attr in s["attracties"]
@@ -197,6 +197,7 @@ def maak_planning(studenten_local):
                         and gebruik_per_student[attr][s["naam"]] + blok <= 4
                         and totaal_uren[s["naam"]] + blok <= 6
                         and max_consecutive_hours(student_bezet[s["naam"]] + blokuren) <= 4):
+                        # Toewijzen
                         for u in blokuren:
                             pos[u] = s["naam"]
                             student_bezet[s["naam"]].append(u)
@@ -207,8 +208,8 @@ def maak_planning(studenten_local):
                         break
                 if geplanned: break
             if not geplanned:
+                # fallback: eerste student per uur of NIEMAND
                 u = uren[i]
-                # fallback: eerste beschikbare student
                 for s in studenten_local:
                     if (attr in s["attracties"]
                         and u in s["uren_beschikbaar"]
@@ -244,6 +245,7 @@ def maak_planning(studenten_local):
                     extra_per_uur[uur].append(s["naam"])
 
     return dagplanning, extra_per_uur, selected
+
 
 
 
