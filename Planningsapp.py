@@ -255,40 +255,33 @@ def maak_planning(studenten_local):
 dagplanning, extra_per_uur, selected = maak_planning(studenten)
 
 
-def blok_optimizer(dagplanning, studenten):
-    """
-    Optimaliseer bestaande planning om blokken van 3→2→1 uur te vormen zonder
-    originele regels te overtreden.
-    """
+def snelle_blok_optimizer(dagplanning, studenten):
     open_uren_sorted = sorted(open_uren)
 
     for attr, posities in dagplanning.items():
         for pos in posities:
-            # haal alle bezettingen op, alleen echte namen
+            # lijst van bezette uren
             urenlijst = [(uur, pos[uur]) for uur in open_uren_sorted if pos[uur] != "NIEMAND"]
-
-            # herhaal sweep totdat er geen swaps meer nodig zijn
-            changed = True
-            while changed:
-                changed = False
-                for i in range(len(urenlijst)-1):
-                    uur1, s1 = urenlijst[i]
-                    uur2, s2 = urenlijst[i+1]
-                    if s1 != s2:
-                        s1_obj = next((s for s in studenten if s["naam"]==s1), None)
-                        s2_obj = next((s for s in studenten if s["naam"]==s2), None)
-                        if not s1_obj or not s2_obj:
-                            continue
-                        # check of swap beide max 4 achter elkaar blijft
-                        uren_s1 = [u for u,n in urenlijst if n==s1] 
-                        uren_s2 = [u for u,n in urenlijst if n==s2]
-                        if max_consecutive_hours(uren_s1 + [uur2]) <= 4 and max_consecutive_hours(uren_s2 + [uur1]) <= 4:
-                            # check of beide beschikbaar zijn
-                            if uur2 in s1_obj["uren_beschikbaar"] and uur1 in s2_obj["uren_beschikbaar"]:
-                                # swap uitvoeren
+            for i in range(len(urenlijst)-1):
+                uur1, s1 = urenlijst[i]
+                uur2, s2 = urenlijst[i+1]
+                if s1 != s2:
+                    s1_obj = next((s for s in studenten if s["naam"]==s1), None)
+                    s2_obj = next((s for s in studenten if s["naam"]==s2), None)
+                    if not s1_obj or not s2_obj:
+                        continue
+                    # Check max 4 achter elkaar voor beide studenten
+                    uren_s1 = [u for u,n in urenlijst if n==s1]
+                    uren_s2 = [u for u,n in urenlijst if n==s2]
+                    if max_consecutive_hours(uren_s1 + [uur2]) <= 4 and max_consecutive_hours(uren_s2 + [uur1]) <= 4:
+                        # Check beschikbaarheid
+                        if uur2 in s1_obj["uren_beschikbaar"] and uur1 in s2_obj["uren_beschikbaar"]:
+                            # Swap enkel als dit blok van 2 of 3 mogelijk maakt
+                            if (i > 0 and urenlijst[i-1][1] == s2) or (i+2 < len(urenlijst) and urenlijst[i+2][1] == s1):
                                 pos[uur1], pos[uur2] = pos[uur2], pos[uur1]
+                                # update urenlijst voor deze pass
                                 urenlijst[i], urenlijst[i+1] = (uur1, pos[uur1]), (uur2, pos[uur2])
-                                changed = True
+
 
 # -----------------------------
 # Gebruik blok optimizer
