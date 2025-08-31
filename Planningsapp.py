@@ -25,7 +25,7 @@ wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
 
 # -----------------------------
-# Hulpfunctie: plan blokken bij attractie
+# Hulpfunctie: plan blokken bij attractie (max 4 uur achter elkaar)
 # -----------------------------
 def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_attractie, open_uren, max_per_student=6):
     planning = {}
@@ -33,8 +33,8 @@ def plan_attractie_pos(attractie, studenten, student_bezet, gebruik_per_student_
     i = 0
     while i < len(uren):
         geplanned = False
-        # Probeer eerst blok van 3, daarna 4 of 2, dan 1
-        for blok in [3,4,2,1]:
+        # Probeer eerst blokken van 4,3,2,1 maar niet meer dan 4 uur achter elkaar
+        for blok in [4,3,2,1]:
             if i + blok > len(uren):
                 continue
             blokuren = uren[i:i+blok]
