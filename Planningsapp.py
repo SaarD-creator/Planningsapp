@@ -176,7 +176,7 @@ attracties_te_plannen.sort(key=kritieke_score)
 
 
 
-def maak_planning_full_coverage(studenten_local, max_rounds=5):
+def maak_planning_full_coverage(studenten_local, ws, aantallen, open_uren, attracties_te_plannen, max_rounds=5):
     # -------------------
     # Pauzevlinders
     # -------------------
@@ -229,11 +229,12 @@ def maak_planning_full_coverage(studenten_local, max_rounds=5):
     for attr, posities in dagplanning.items():
         eerste_pos = posities[0]
         for uur in open_uren:
+            if uur in eerste_pos and eerste_pos[uur] not in [None, "", "NIEMAND"]:
+                continue  # al gevuld
             geplaatst = False
-            # Probeer eerst vrije student
             for s in studenten_local:
                 if (uur in s["uren_beschikbaar"] 
-                    and attr in s["attracties"]
+                    and attr in s["attracties"] 
                     and uur not in student_bezet[s["naam"]]
                     and _ok_max4(s["naam"], attr, [uur])):
                     eerste_pos[uur] = s["naam"]
@@ -241,31 +242,8 @@ def maak_planning_full_coverage(studenten_local, max_rounds=5):
                     gebruik_per_attractie_student[attr][s["naam"]] += 1
                     geplaatst = True
                     break
-
-            # Als geen vrije student beschikbaar is, forceer met swap of pauzevlinder
-            if not geplaatst:
-                for andere_attr, andere_posities in dagplanning.items():
-                    if andere_attr == attr:
-                        continue
-                    for pos in andere_posities:
-                        huidige = pos.get(uur, "")
-                        if huidige not in ["", "NIEMAND"] and attr in studenten_dict[huidige]["attracties"]:
-                            # swap: plaats huidige in huidige attr posities later (2e pos of lege plek)
-                            for pos2 in dagplanning[andere_attr][1:]:
-                                if pos2.get(uur, "") in [None, "", "NIEMAND"]:
-                                    pos2[uur] = huidige
-                                    pos[uur] = huidige  # tijdelijk placeholder
-                                    eerste_pos[uur] = huidige
-                                    student_bezet[huidige].add(uur)
-                                    geplaatst = True
-                                    break
-                        if geplaatst:
-                            break
-                    if geplaatst:
-                        break
-
-            # Als nog steeds niet geplaatst, forceer pauzevlinder of random student
             if not geplaatst and selected:
+                # fallback pauzevlinder
                 for pv in selected:
                     if uur in pv["uren_beschikbaar"] and attr in pv["attracties"]:
                         eerste_pos[uur] = pv["naam"]
@@ -273,44 +251,34 @@ def maak_planning_full_coverage(studenten_local, max_rounds=5):
                         gebruik_per_attractie_student[attr][pv["naam"]] += 1
                         geplaatst = True
                         break
-
-            # Laat nooit leeg
             if not geplaatst:
-                eerste_pos[uur] = "FORCED"  # fallback, er moet iemand staan
+                eerste_pos[uur] = "FORCED"
 
     # -------------------
     # Extra posities en swaps
     # -------------------
     for _ in range(max_rounds):
         wijziging = False
-        extra_per_uur = {u:[s["naam"] for s in studenten_local
-                            if u in s["uren_beschikbaar"]
-                            and u not in student_bezet[s["naam"]]
-                            and not s.get("is_pauzevlinder")]
-                         for u in open_uren}
-
-        for uur, extras in extra_per_uur.items():
-            for extra_naam in extras:
-                s = studenten_dict[extra_naam]
-                geplaatst = False
-                # Extra posities
-                for attr, posities in dagplanning.items():
-                    for pos in posities[1:]:
-                        if pos.get(uur) in [None, "", "NIEMAND"] and attr in s["attracties"] and _ok_max4(extra_naam, attr, [uur]):
-                            pos[uur] = extra_naam
-                            student_bezet[extra_naam].add(uur)
-                            gebruik_per_attractie_student[attr][extra_naam] += 1
+        # Extra studenten vullen alleen lege tweede posities
+        for uur in open_uren:
+            for attr, posities in dagplanning.items():
+                for pos in posities[1:]:
+                    if pos.get(uur, "") not in ["", "NIEMAND"]:
+                        continue
+                    for s in studenten_local:
+                        if (uur in s["uren_beschikbaar"]
+                            and attr in s["attracties"]
+                            and uur not in student_bezet[s["naam"]]
+                            and _ok_max4(s["naam"], attr, [uur])):
+                            pos[uur] = s["naam"]
+                            student_bezet[s["naam"]].add(uur)
+                            gebruik_per_attractie_student[attr][s["naam"]] += 1
                             wijziging = True
-                            geplaatst = True
                             break
-                    if geplaatst:
-                        break
-
         if not wijziging:
             break
 
-    return dagplanning, extra_per_uur, selected
-
+    return dagplanning, selected
 
 # -----------------------------
 # Herhaal tot volledige planning (light)
