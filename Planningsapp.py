@@ -170,50 +170,62 @@ def assign_student(s):
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
     uren = sorted(uren)
     runs = contiguous_runs(uren)
+
     for run in runs:
         L = len(run)
-        if L==0: continue
+        if L == 0: 
+            continue
         block_sizes = partition_run_lengths(L)
         start_idx = 0
+
         for b in block_sizes:
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
-            placed=False
-            # eerste pass: attracties nog niet toegewezen
+            placed = False
+
+            # --- Eerst: probeer eerste posities ---
             for attr in attracties_te_plannen:
-                if attr not in s["attracties"]: continue
-                if attr in s["assigned_attracties"]: continue
-                ruimte=True
+                if attr not in s["attracties"]: 
+                    continue
+                ruimte = True
                 for h in block_hours:
-                    if per_hour_assigned_counts[h][attr]>=aantallen.get(attr,1):
-                        ruimte=False
+                    if per_hour_assigned_counts[h][attr] >= 1:  # 1e positie eerst
+                        ruimte = False
                         break
                 if ruimte:
                     for h in block_hours:
-                        assigned_map[(h,attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr]+=1
+                        assigned_map[(h, attr)].append(s["naam"])
+                        per_hour_assigned_counts[h][attr] += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
-                    placed=True
+                    placed = True
                     break
-            # tweede pass: extra, incl. tweede posities volgens prioriteit
+
+            if placed:
+                continue
+
+            # --- Dan: tweede posities volgens BA, rij 5–11 ---
+            for attr in tweede_posities_BA:
+                if attr not in s["attracties"]: 
+                    continue
+                ruimte = True
+                for h in block_hours:
+                    if per_hour_assigned_counts[h][attr] >= aantallen.get(attr, 1):  # max 2
+                        ruimte = False
+                        break
+                if ruimte:
+                    for h in block_hours:
+                        assigned_map[(h, attr)].append(s["naam"])
+                        per_hour_assigned_counts[h][attr] += 1
+                        s["assigned_hours"].append(h)
+                    s["assigned_attracties"].add(attr)
+                    placed = True
+                    break
+
+            # --- Als geen eerste of tweede plek mogelijk, dan extra ---
             if not placed:
                 for h in block_hours:
-                    # eerst tweede posities prioritair
-                    for attr in tweede_prioriteit:
-                        if attr not in s["attracties"]: continue
-                        if h in s["assigned_hours"]: continue
-                        if per_hour_assigned_counts[h][attr]>=2: continue
-                        assigned_map[(h,attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr]+=1
-                        s["assigned_hours"].append(h)
-                        placed=True
-                        break
-                    if not placed:
-                        extra_assignments[h].append(s["naam"])
-
-for s in studenten_sorted:
-    assign_student(s)
+                    extra_assignments[h].append(s["naam"])
 
 # -----------------------------
 # Excel output
