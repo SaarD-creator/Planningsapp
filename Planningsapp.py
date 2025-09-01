@@ -151,97 +151,83 @@ attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 
 # -----------------------------
-# Rode vakjes berekenen per uur
+# Bereken rode vakjes per uur
 # -----------------------------
-# Tweede posities-taboe per uur: rode_vakjes_per_uur[uur] = set van attracties die taboe zijn
 rode_vakjes_per_uur = {uur: set() for uur in open_uren}
 
-# Studenten die beschikbaar zijn per uur (exclusief pauzevlinders)
-beschikbaar_per_uur = {uur: [] for uur in open_uren}
-for s in studenten_workend:
-    for uur in s["uren_beschikbaar"]:
-        if uur in open_uren:
-            beschikbaar_per_uur[uur].append(s)
-
-# Attracties die minstens 1 student nodig hebben
-actieve_attracties = [a for a in attracties_te_plannen if any(a in s["attracties"] for s in studenten_workend)]
-
 for uur in open_uren:
-    n_beschikbaar = len([s for s in beschikbaar_per_uur[uur] if not s["is_pauzevlinder"]])
-    n_attracties = len([a for a in actieve_attracties if aantallen.get(a,1) >= 1])
-    # Als exact evenveel studenten als attracties -> tweede posities worden rood
-    if n_beschikbaar <= n_attracties:
-        for a in actieve_attracties:
+    # Studenten beschikbaar dit uur, exclusief pauzevlinders
+    beschikbare_studenten = [s for s in studenten_workend if uur in s["uren_beschikbaar"]]
+    n_studenten = len(beschikbare_studenten)
+
+    # Attracties met plek (eerste of tweede positie)
+    n_attracties = sum(1 for a in attracties_te_plannen if aantallen.get(a,1) >= 2)
+
+    # Rode tweede posities als aantal studenten ≤ aantal attracties
+    if n_studenten <= n_attracties:
+        for a in attracties_te_plannen:
             if aantallen.get(a,1) >= 2:
                 rode_vakjes_per_uur[uur].add(a)
 
-
-
 # -----------------------------
-# Assign per student
+# Assign per student (per uur)
 # -----------------------------
-assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
+assigned_map = defaultdict(list)  # (uur, attr) -> list van student-namen
 per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in open_uren}
-MAX_CONSEC = 4
-MAX_PER_STUDENT_ATTR = 6
 extra_assignments = defaultdict(list)
 
-studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])
+studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
 
-def assign_student(s):
-    # Sorteer beschikbare uren en maak runs
-    beschikbare_uren = sorted([u for u in s["uren_beschikbaar"] if u in open_uren])
-    if not beschikbare_uren:
-        return
+for s in studenten_sorted:
+    uren = sorted([u for u in s["uren_beschikbaar"] if u in open_uren])
+    if not uren:
+        continue
 
-    runs = contiguous_runs(beschikbare_uren)
+    # Track max 4 opeenvolgende uren per attractie
+    consecutive_tracker = defaultdict(int)
 
-    for run in runs:
-        L = len(run)
-        if L == 0:
+    for uur in uren:
+        # Mogelijke attracties voor dit uur
+        mogelijke_attracties = []
+        for a in attracties_te_plannen:
+            huidig = per_hour_assigned_counts[uur][a]
+            if huidig < aantallen.get(a,1):
+                # Eerste positie
+                if huidig == 0:
+                    mogelijke_attracties.append((a, "Eerste"))
+                # Tweede positie, niet-rood
+                elif huidig == 1 and a not in rode_vakjes_per_uur[uur]:
+                    mogelijke_attracties.append((a, "Tweede"))
+
+        if not mogelijke_attracties:
+            # Geen plek → extra
+            extra_assignments[uur].append(s["naam"])
             continue
 
-        # Blokken als hulpmiddel (3-4-2-1)
-        block_sizes = partition_run_lengths(L)
-        start_idx = 0
+        # Kies attractie met laagste kritieke_score eerst
+        mogelijke_attracties.sort(key=lambda x: kritieke_score(x[0], studenten_workend))
+        a, pos_type = mogelijke_attracties[0]
 
-        for b in block_sizes:
-            block_hours = run[start_idx:start_idx+b]
-            start_idx += b
+        # Controleer max 4 opeenvolgende uren
+        if consecutive_tracker[a] >= 4:
+            extra_assignments[uur].append(s["naam"])
+            continue
 
-            # Plaats student per uur
-            for h in block_hours:
-                # Attracties met vrije plekken, eerste of tweede positie niet-rood
-                vrije_attracties_h = [
-                    a for a in attracties_te_plannen
-                    if len(assigned_map.get((h, a), [])) < aantallen.get(a, 1)
-                    and not (len(assigned_map.get((h, a), [])) == 1 and a in rode_vakjes_per_uur[h])
-                ]
+        # Toewijzen
+        assigned_map[(uur,a)].append(s["naam"])
+        per_hour_assigned_counts[uur][a] += 1
+        s["assigned_hours"].append(uur)
+        s["assigned_attracties"].add(a)
 
-                if not vrije_attracties_h:
-                    # Geen plek → student gaat naar extra
-                    extra_assignments[h].append(s["naam"])
-                    continue
+        # Update consecutive
+        consecutive_tracker[a] += 1
 
-                # Plaats student bij eerste beschikbare attractie
-                for a in vrije_attracties_h:
-                    huidig_aantal = len(assigned_map.get((h, a), []))
-
-                    if huidig_aantal == 0:
-                        # Eerste positie
-                        assigned_map[(h, a)].append(s["naam"])
-                        per_hour_assigned_counts[h][a] += 1
-                        s["assigned_hours"].append(h)
-                        s["assigned_attracties"].add(a)
-                        break
-
-                    elif huidig_aantal == 1 and a not in rode_vakjes_per_uur[h]:
-                        # Tweede positie alleen als niet-rood
-                        assigned_map[(h, a)].append(s["naam"])
-                        per_hour_assigned_counts[h][a] += 1
-                        s["assigned_hours"].append(h)
-                        s["assigned_attracties"].add(a)
-                        break
+    # Reset consecutive tracker als er een gat in uren is
+    vorige_uur = None
+    for h in sorted(s["assigned_hours"]):
+        if vorige_uur is not None and h != vorige_uur + 1:
+            consecutive_tracker = defaultdict(int)
+        vorige_uur = h
 
 
 
