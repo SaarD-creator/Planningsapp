@@ -165,7 +165,10 @@ tweede_pos_volgorde = [ws[f'BA{rij}'].value for rij in range(5, 12) if ws[f'BA{r
 # -----------------------------
 # Planning per student
 # -----------------------------
+
+# Nieuwe structuur die compatibel is met bestaande variabelen
 assigned_map = defaultdict(list)  # (uur, attr) -> lijst namen
+per_hour_assigned_counts = {uur: {attr: 0 for attr in attracties_te_plannen} for uur in open_uren}  # telt aantal per uur per attractie
 extra_assignments = defaultdict(list)  # (uur) -> lijst namen
 
 studenten_workend = [s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])]
@@ -188,14 +191,15 @@ for s in studenten_sorted:
             geplaatst = False
             # Zoek eerste attractie die student kan invullen
             for attr in attracties_te_plannen:
-                # controleer eerste positie
+                # controleer eerste positie en tweede positie
                 for pos in range(aantallen.get(attr,1)):
+                    key = f"{attr} {pos+1}" if pos>0 else attr
                     # check of deze positie al vol is op alle uren
-                    if all(len(assigned_map[(h, f"{attr} {pos+1}" if pos>0 else attr)])==0 for h in block_hours):
+                    if all(len(assigned_map[(h,key)])==0 for h in block_hours):
                         # toewijzen
                         for h in block_hours:
-                            key = f"{attr} {pos+1}" if pos>0 else attr
                             assigned_map[(h,key)].append(s["naam"])
+                            per_hour_assigned_counts[h][attr] += 1  # **update hier**
                             s["assigned_hours"].append(h)
                         s["assigned_attracties"].add(attr)
                         geplaatst = True
@@ -206,7 +210,6 @@ for s in studenten_sorted:
                 # Zet bij extra
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
-
 
 
 # -----------------------------
