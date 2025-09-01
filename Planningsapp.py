@@ -202,34 +202,37 @@ def assign_student(s):
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
             placed = False
-            # probeer eerst beschikbare attracties
             for attr in attracties_te_plannen:
                 if attr not in s["attracties"]:
                     continue
                 if attr in s["assigned_attracties"]:
                     continue
-                # check of dit blok in rode vakjes valt
+                # check per uur of tweede positie taboe is
                 ruimte = True
                 for h in block_hours:
-                    if per_hour_assigned_counts[h][attr] >= aantallen.get(attr,1):
+                    huidige_aantal = len(assigned_map.get((h,attr),[]))
+                    if huidige_aantal >= aantallen.get(attr,1):
                         ruimte = False
                         break
-                    if 2 in range(1, aantallen.get(attr,1)+1) and attr in rode_vakjes_per_uur[h]:
-                        # tweede positie is taboe voor dit uur
-                        if len(assigned_map.get((h,attr),[])) >= 1:
-                            ruimte = False
-                            break
+                    # Rode tweede positie taboe
+                    if huidige_aantal == 1 and attr in rode_vakjes_per_uur[h]:
+                        ruimte = False
+                        break
                 if ruimte:
                     for h in block_hours:
-                        assigned_map[(h,attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr] += 1
-                        s["assigned_hours"].append(h)
+                        huidige_aantal = len(assigned_map.get((h,attr),[]))
+                        # Eerste positie altijd invullen, tweede positie alleen als niet rood
+                        if huidige_aantal == 0 or (huidige_aantal == 1 and attr not in rode_vakjes_per_uur[h]):
+                            assigned_map[(h,attr)].append(s["naam"])
+                            per_hour_assigned_counts[h][attr] += 1
+                            s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
                     placed = True
                     break
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
+
 
 
 # -----------------------------
