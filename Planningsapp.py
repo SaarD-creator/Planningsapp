@@ -2,11 +2,9 @@ import streamlit as st
 import random
 from collections import defaultdict
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
-kak
+
 # -----------------------------
 # Datum
 # -----------------------------
@@ -26,33 +24,6 @@ ws = wb["Blad1"]
 # -----------------------------
 # Hulpfuncties
 # -----------------------------
-def max_consecutive_hours(urenlijst):
-    if not urenlijst:
-        return 0
-    urenlijst = sorted(set(urenlijst))
-    maxr = huidig = 1
-    for i in range(1, len(urenlijst)):
-        huidig = huidig + 1 if urenlijst[i] == urenlijst[i-1] + 1 else 1
-        maxr = max(maxr, huidig)
-    return maxr
-
-def partition_run_lengths(L):
-    blocks = [3,2,4,1]
-    dp = [(10**9, [])]*(L+1)
-    dp[0] = (0, [])
-    for i in range(1, L+1):
-        best = (10**9, [])
-        for b in blocks:
-            if i-b < 0:
-                continue
-            prev_ones, prev_blocks = dp[i-b]
-            new_blocks = prev_blocks + [b]
-            ones = prev_ones + (1 if b==1 else 0)
-            if ones < best[0]:
-                best = (ones, new_blocks)
-        dp[i] = best
-    return dp[L][1]
-
 def contiguous_runs(sorted_hours):
     runs=[]
     if not sorted_hours:
@@ -66,6 +37,23 @@ def contiguous_runs(sorted_hours):
             run=[h]
     runs.append(run)
     return runs
+
+def partition_run_lengths(L):
+    """Blokken volgorde 3-4-2-1"""
+    blocks = [3,4,2,1]
+    dp = [(10**9, [])]*(L+1)
+    dp[0] = (0, [])
+    for i in range(1,L+1):
+        best = (10**9, [])
+        for b in blocks:
+            if i-b < 0:
+                continue
+            prev_ones, prev_blocks = dp[i-b]
+            ones = prev_ones + (1 if b==1 else 0)
+            if ones < best[0]:
+                best = (ones, prev_blocks+[b])
+        dp[i] = best
+    return dp[L][1]
 
 # -----------------------------
 # Studenten inlezen
@@ -146,39 +134,36 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
-# Tweede posities logica – functioneel & visueel
+# Rode vakjes / tweede posities
 # -----------------------------
+# tweede posities van BA5-BA11
 tweede_posities = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
-rode_vakjes_per_uur = defaultdict(set)  # uur -> attr die taboe zijn
+rode_vakjes_per_uur = defaultdict(set)
 for uur in open_uren:
     beschikbaar = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
-    aantal_tweede = sum(1 for attr in tweede_posities if aantallen.get(attr,0) >= 2)
+    aantal_tweede = sum(1 for attr in tweede_posities if aantallen.get(attr,0)>=2)
     if beschikbaar < aantal_tweede:
         for attr in tweede_posities:
-            if aantallen.get(attr,0) >= 2:
+            if aantallen.get(attr,0)>=2:
                 rode_vakjes_per_uur[uur].add(attr)
 
 # -----------------------------
-# Assign per student met respect voor rode vakjes
+# Assign studenten
 # -----------------------------
 assigned_map = defaultdict(list)
-per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in open_uren}
-MAX_CONSEC = 4
-MAX_PER_STUDENT_ATTR = 6
+per_hour_assigned_counts = {uur:{a:0 for a in attracties_te_plannen} for uur in open_uren}
 extra_assignments = defaultdict(list)
-
-studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])
+studenten_sorted = sorted(studenten_workend,key=lambda s:s["aantal_attracties"])
 
 def assign_student(s):
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
-    uren = sorted(uren)
     runs = contiguous_runs(uren)
     for run in runs:
         L = len(run)
         if L==0: continue
-        block_sizes = partition_run_lengths(L)
-        start_idx = 0
-        for b in block_sizes:
+        blocks = partition_run_lengths(L)
+        start_idx=0
+        for b in blocks:
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
             placed=False
@@ -203,26 +188,28 @@ def assign_student(s):
                     break
             if not placed:
                 for h in block_hours:
-                    vrije_attr = [a for a in attracties_te_plannen if a not in rode_vakjes_per_uur.get(h,set())]
+                    vrije_attr=[a for a in attracties_te_plannen if a not in rode_vakjes_per_uur.get(h,set())]
                     if vrije_attr:
                         extra_assignments[h].append(s["naam"])
 
 for s in studenten_sorted:
     assign_student(s)
 
-# -----------------------------
-# Excel output
-# -----------------------------
+
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+from io import BytesIO
+
 wb_out = Workbook()
 ws_out = wb_out.active
 ws_out.title = "Planning"
 
 # Styles
 header_fill = PatternFill(start_color="BDD7EE", fill_type="solid")
-attr_fill = PatternFill(start_color="E2EFDA", fill_type="solid")
-pv_fill = PatternFill(start_color="FFF2CC", fill_type="solid")
-extra_fill = PatternFill(start_color="FCE4D6", fill_type="solid")
-rood_fill = PatternFill(start_color="FFC7CE", fill_type="solid")
+attr_fill   = PatternFill(start_color="E2EFDA", fill_type="solid")
+pv_fill     = PatternFill(start_color="FFF2CC", fill_type="solid")
+extra_fill  = PatternFill(start_color="FCE4D6", fill_type="solid")
+rood_fill   = PatternFill(start_color="FFC7CE", fill_type="solid")
 center_align = Alignment(horizontal="center", vertical="center")
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
@@ -230,59 +217,60 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
 # Header
 ws_out.cell(1,1,vandaag).font=Font(bold=True)
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
-    ws_out.cell(1,col_idx,f"{uur}:00").font=Font(bold=True)
-    ws_out.cell(1,col_idx).fill=header_fill
-    ws_out.cell(1,col_idx).alignment=center_align
-    ws_out.cell(1,col_idx).border=thin_border
+    cel = ws_out.cell(1,col_idx, f"{uur}:00")
+    cel.font = Font(bold=True)
+    cel.fill = header_fill
+    cel.alignment = center_align
+    cel.border = thin_border
 
-rij_out=2
+rij_out = 2
 # Attracties invullen
 for attr in attracties_te_plannen:
     max_pos = max(aantallen.get(attr,1), max(per_hour_assigned_counts[h].get(attr,0) for h in open_uren))
-    for pos_idx in range(1,max_pos+1):
+    for pos_idx in range(1, max_pos+1):
         naam_attr = attr if max_pos==1 else f"{attr} {pos_idx}"
-        ws_out.cell(rij_out,1,naam_attr).font=Font(bold=True)
-        ws_out.cell(rij_out,1).fill=attr_fill
-        ws_out.cell(rij_out,1).border=thin_border
+        ws_out.cell(rij_out,1,naam_attr).font = Font(bold=True)
+        ws_out.cell(rij_out,1).fill = attr_fill
+        ws_out.cell(rij_out,1).border = thin_border
         for col_idx, uur in enumerate(sorted(open_uren), start=2):
             cel = ws_out.cell(rij_out,col_idx)
-            # rood indien taboe (rode vakjes)
-            if pos_idx==2 and attr in rode_vakjes_per_uur.get(uur,set()):
+            # Rode vakjes respecteren
+            if pos_idx == 2 and attr in rode_vakjes_per_uur.get(uur,set()):
+                cel.value = ""  # geen student
                 cel.fill = rood_fill
-                cel.value = ""  # echt geen studenten hier
             else:
                 namen = assigned_map.get((uur,attr),[])
                 cel.value = namen[pos_idx-1] if pos_idx-1<len(namen) else ""
-            cel.alignment=center_align
-            cel.border=thin_border
-        rij_out +=1
+            cel.alignment = center_align
+            cel.border = thin_border
+        rij_out += 1
 
 # Pauzevlinders
-rij_out +=1
+rij_out += 1
 for pv_idx, pvnaam in enumerate(pauzevlinder_namen,start=1):
-    ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font=Font(bold=True)
-    ws_out.cell(rij_out,1).fill=pv_fill
-    ws_out.cell(rij_out,1).border=thin_border
+    ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font = Font(bold=True)
+    ws_out.cell(rij_out,1).fill = pv_fill
+    ws_out.cell(rij_out,1).border = thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
-        ws_out.cell(rij_out,col_idx, pvnaam if uur in required_pauze_hours else "").alignment=center_align
-        ws_out.cell(rij_out,col_idx).border=thin_border
-    rij_out +=1
+        ws_out.cell(rij_out,col_idx, pvnaam if uur in required_pauze_hours else "").alignment = center_align
+        ws_out.cell(rij_out,col_idx).border = thin_border
+    rij_out += 1
 
 # Extra
-rij_out +=1
-ws_out.cell(rij_out,1,"Extra").font=Font(bold=True)
-ws_out.cell(rij_out,1).fill=extra_fill
-ws_out.cell(rij_out,1).border=thin_border
+rij_out += 1
+ws_out.cell(rij_out,1,"Extra").font = Font(bold=True)
+ws_out.cell(rij_out,1).fill = extra_fill
+ws_out.cell(rij_out,1).border = thin_border
 
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
     for r_offset, naam in enumerate(extra_assignments[uur]):
-        ws_out.cell(rij_out+1+r_offset, col_idx, naam).alignment=center_align
+        ws_out.cell(rij_out+1+r_offset, col_idx, naam).alignment = center_align
 
 # Kolombreedte
 for col in range(1,len(open_uren)+2):
     ws_out.column_dimensions[get_column_letter(col)].width=18
 
-# Output
+# Output voor Streamlit
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
