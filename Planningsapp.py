@@ -24,7 +24,7 @@ wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
 
 # -----------------------------
-# Hulpfuncties (hergebruikt)
+# Hulpfuncties
 # -----------------------------
 def max_consecutive_hours(urenlijst):
     if not urenlijst:
@@ -36,36 +36,47 @@ def max_consecutive_hours(urenlijst):
         maxr = max(maxr, huidig)
     return maxr
 
-def partition_run_lengths(L):
+# GREEDY partition: prioriteit 3, daarna 2 of 4 (vermijd 1 wanneer mogelijk), anders 1.
+def greedy_partition(L):
     """
-    DP partition voor lengte L. ### AANPASSING:
-    - blokgroottes preferentie: 3, 2, 4, dan 1 (1 is laatste redmiddel)
-    - objective: minimaliseer eerst aantal 1-blokjes, dan maximaliseer aantal (3 of 2)-blokken,
-      daarna minimaliseer aantal blokken.
-    Retourneert lijst van blokgroottes die optellen tot L.
+    Split length L into blocks preferring 3, then 2/4, then 1.
+    Examples:
+      1 -> [1]
+      2 -> [2]
+      3 -> [3]
+      4 -> [4]
+      5 -> [3,2]
+      6 -> [3,3]
+      7 -> [4,3]
+      8 -> [3,3,2]
     """
-    blocks = [3,2,4,1]  # voorkeurvolgorde zoals gevraagd
-    # dp[i] = tuple (num_ones, -num_3_or_2_blocks, num_blocks, partition_list)
-    big = 10**9
-    dp = [(big, big, big, [])] * (L+1)
-    dp[0] = (0, 0, 0, [])
-    for i in range(1, L+1):
-        best = (big, big, big, [])
-        for b in blocks:
-            if i-b < 0:
-                continue
-            prev = dp[i-b]
-            num_ones = prev[0] + (1 if b == 1 else 0)
-            num_32 = prev[1] + ( -1 if b in (2,3) else 0 )  # we store negative so that smaller is better
-            num_blocks = prev[2] + 1
-            part = prev[3] + [b]
-            cand = (num_ones, num_32, num_blocks, part)
-            # lexicografische vergelijking; we willen min num_ones, min num_32 (dat is negatie: dus min -> max 3/2),
-            # min num_blocks
-            if (cand[0], cand[1], cand[2]) < (best[0], best[1], best[2]):
-                best = cand
-        dp[i] = best
-    return dp[L][3]
+    blocks = []
+    while L > 0:
+        if L == 1:
+            blocks.append(1)
+            break
+        if L == 2:
+            blocks.append(2)
+            break
+        if L == 4:
+            blocks.append(4)
+            L -= 4
+            continue
+        # L >= 3 and not equal to 4
+        # if remainder 1 -> take a 4 to avoid creating a 1 later
+        if L % 3 == 1:
+            # only possible when L >= 4
+            if L >= 4:
+                blocks.append(4)
+                L -= 4
+            else:
+                blocks.append(1)
+                L -= 1
+        else:
+            # prefer a 3
+            blocks.append(3)
+            L -= 3
+    return blocks
 
 def contiguous_runs(sorted_hours):
     runs = []
@@ -82,7 +93,7 @@ def contiguous_runs(sorted_hours):
     return runs
 
 # -----------------------------
-# Studenten inlezen (zoals vroeger, maar we bewaren aantal_attracties uit AG)
+# Studenten inlezen
 # -----------------------------
 studenten = []
 for rij in range(2,500):
@@ -98,6 +109,7 @@ for rij in range(2,500):
     studenten.append({
         "naam": naam,
         "uren_beschikbaar": sorted(uren_beschikbaar),
+        "orig_uren_beschikbaar": sorted(uren_beschikbaar.copy()),
         "attracties": [a for a in attracties if a],
         "aantal_attracties": aantal_attracties,
         "is_pauzevlinder": False,
@@ -107,7 +119,7 @@ for rij in range(2,500):
     })
 
 # -----------------------------
-# Openingsuren bepalen (zoals voorheen)
+# Openingsuren bepalen
 # -----------------------------
 open_uren = [int(str(ws.cell(1,kol).value).replace("u","").strip()) for kol in range(36,45) if ws.cell(2,kol).value in [1,True,"WAAR","X"]]
 if not open_uren:
@@ -115,7 +127,7 @@ if not open_uren:
 open_uren = sorted(set(open_uren))
 
 # -----------------------------
-# Pauzevlinders lezen en hun bezetting bepalen (volgens jouw regels)
+# Pauzevlinders
 # -----------------------------
 pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
 
@@ -142,10 +154,11 @@ for idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
             s["is_pauzevlinder"] = True
             s["pv_number"] = idx
             s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_pauze_hours]
+            s["orig_uren_beschikbaar"] = [u for u in s["orig_uren_beschikbaar"] if u not in required_pauze_hours]
             break
 
 # -----------------------------
-# Attracties en aantallen inlezen (en prioriteren)
+# Attracties en aantallen inlezen
 # -----------------------------
 aantallen = {}
 attracties_te_plannen = []
@@ -156,7 +169,7 @@ for kol in range(47,65):
             aantal = int(ws.cell(2,kol).value)
         except:
             aantal = 0
-        aantallen[naam] = max(0, min(2, aantal))
+        aantallen[naam] = max(0, min(2, aantal))  # keep original caps
         if aantallen[naam] >= 1:
             attracties_te_plannen.append(naam)
 
@@ -169,12 +182,12 @@ studenten_workend = [s for s in studenten if any(u in open_uren for u in s["uren
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a, studenten_workend))
 
 # -----------------------------
-# BA kolom: tweede-posities prioriteit (BA rijen 5..12)
+# BA kolom: tweede-posities prioriteit (kan gebruikt blijven voor andere logic)
 # -----------------------------
 ba_prioriteit = [ws[f'BA{r}'].value for r in range(5,13) if ws[f'BA{r}'].value]
 
 # -----------------------------
-# Per-uur: beschikbare studenten (lijst) EN per-uur beschikbare plekken (vanuit excel of berekend)
+# Per-uur: beschikbare studenten (en totale beschikbaarheid)
 # -----------------------------
 col_hour_map = {}
 for kol in range(36,45):
@@ -210,7 +223,7 @@ for uur in open_uren:
     per_hour_total_workers[uur] = beschikbaar
 
 # -----------------------------
-# Per-uur: positions per attractie (aanpassen: haal second posities weg als er te weinig mensen zijn)
+# Per-uur: positions per attractie (maar we capen later op 1 voor blocks)
 # -----------------------------
 per_hour_positions = {}
 for uur in open_uren:
@@ -239,6 +252,10 @@ for uur in open_uren:
 
     per_hour_positions[uur] = positions
 
+# For assignment we cap allowed per (hour,attr) to 1 (single block per attractie)
+def allowed_capacity(uur, attr):
+    return 1 if per_hour_positions.get(uur, {}).get(attr, 0) >= 1 else 0
+
 # -----------------------------
 # Maak per-uur attractielijst (geordend op schaarste)
 # -----------------------------
@@ -253,26 +270,21 @@ for uur in open_uren:
     per_hour_attractielijsten[uur] = lst
 
 # -----------------------------
-# ASSIGNMENT: per student (min attracties eerst), split shifts in blokken en toewijzen
+# ASSIGNMENT: per student (min attracties eerst), split shifts met greedy_partition en toewijzen
 # -----------------------------
-assigned_map = defaultdict(list)
+assigned_map = defaultdict(list)   # key = (uur, attr) -> list of names (but will be at most 1 due to rule)
 per_hour_assigned_counts = {uur: {a: 0 for a in attracties_te_plannen} for uur in open_uren}
 
 MAX_CONSEC = 4
 MAX_PER_STUDENT_ATTR = 6
 
-# Sorteer studenten op aantal attracties (min first) ### (start met de minst-capable student)
+# Sorteer studenten op aantal attracties (min first) — start met de minst-capable student
 studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
 
 def current_student_hours(s):
     return sorted(s["assigned_hours"])
 
-# ### AANPASSING in assignment loop:
-# - we gebruiken partition_run_lengths met nieuwe voorkeur (3,2,4,1)
-# - bij het zoeken naar een attractie voor een block gebruiken we de per_hour_attractielijsten
-#   van het eerste uur van het block (dus we vullen 'naast' eerste attracties)
-# - extra constraint: als er al een blok aanwezig is op die attractie voor één van de uren in block
-#   (dus assigned_map[(h,attr)] niet leeg), dan skip attr (geen tweede blok op dezelfde attractie)
+# Keep track of students that couldn't be fully placed
 for s in studenten_sorted:
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren and u not in s["assigned_hours"]]
     if not uren:
@@ -283,34 +295,36 @@ for s in studenten_sorted:
         L = len(run)
         if L == 0:
             continue
-        block_sizes = partition_run_lengths(L)
+        # use greedy partition as requested
+        block_sizes = greedy_partition(L)
         start_idx = 0
         for b in block_sizes:
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
             assigned = False
 
-            # we pick attracties in order van de attractielijst van het eerste uur (zo vullen we "eerste attracties")
+            # candidate attracties: use attractielijst of fallback to global ordered list
             uur0 = block_hours[0]
             candidate_attrs = per_hour_attractielijsten.get(uur0, [])
-            # remove duplicates but keep order
+            # keep order, remove duplicates
             seen = set()
             cand_ordered = []
             for a in candidate_attrs:
                 if a not in seen:
                     seen.add(a)
                     cand_ordered.append(a)
+            if not cand_ordered:
+                cand_ordered = [a for a in attracties_te_plannen]
 
             for attr in cand_ordered:
                 if attr not in s["attracties"]:
                     continue
                 if attr in s["assigned_attracties"]:
-                    continue  # student al eens op die attractie gezet, skip zoals gevraagd
+                    continue  # don't put same student twice on same attractie
 
-                # check: geen tweede block op zelfde attractie als er al iets staat in een van de uren
+                # RULE: no second block on same attractie if any hour in this block already has someone
                 any_block_existing = any(bool(assigned_map.get((h,attr))) for h in block_hours)
                 if any_block_existing:
-                    # volgens jouw regel: als er al een blok staat, kan er niet nog een blok komen bij dezelfde attractie
                     continue
 
                 # check max per student per attr
@@ -318,10 +332,10 @@ for s in studenten_sorted:
                 if already_on_attr + len(block_hours) > MAX_PER_STUDENT_ATTR:
                     continue
 
-                # check capacity for all uren in block
+                # check capacity for every hour in block using allowed_capacity (capped to 1)
                 ruimte = True
                 for h in block_hours:
-                    allowed = per_hour_positions.get(h, {}).get(attr, 0)
+                    allowed = allowed_capacity(h, attr)
                     used = per_hour_assigned_counts[h].get(attr, 0)
                     if used >= allowed:
                         ruimte = False
@@ -334,7 +348,7 @@ for s in studenten_sorted:
                 if max_consecutive_hours(hypothetische) > MAX_CONSEC:
                     continue
 
-                # assign block
+                # Assign block: mark assigned_map and counters and student's assigned hours/attracties
                 for h in block_hours:
                     assigned_map[(h, attr)].append(s["naam"])
                     per_hour_assigned_counts[h][attr] += 1
@@ -344,11 +358,24 @@ for s in studenten_sorted:
                 break
 
             if not assigned:
-                # kon geen passende attractie vinden -> laat onvervuld (later kun je hier heuristieken toevoegen)
+                # couldn't assign this block -> leave it unfilled (student will become "extra" later for those hours)
                 continue
 
 # -----------------------------
-# Excel output (maak sheet met planning)
+# EXTRA: verzamel ongeplaatste studenten per uur
+# -----------------------------
+# For each hour, list students who had that hour available but are not assigned on that hour
+extra_per_hour = {uur: [] for uur in open_uren}
+for s in studenten_workend:
+    # for each original available hour in open_uren, if student not assigned that hour, append to extra
+    for uur in s["orig_uren_beschikbaar"]:
+        if uur not in open_uren:
+            continue
+        if uur not in s["assigned_hours"] and s["naam"] not in extra_per_hour[uur]:
+            extra_per_hour[uur].append(s["naam"])
+
+# -----------------------------
+# Excel output (1 rij per attractie) + EXTRA rij
 # -----------------------------
 wb_out = Workbook()
 ws_out = wb_out.active
@@ -369,25 +396,32 @@ for col_idx, uur in enumerate(sorted(open_uren), start=2):
     ws_out.cell(1,col_idx).alignment = center_align
     ws_out.cell(1,col_idx).border = thin_border
 
+# één rij per attractie
 rij_out = 2
 for attr in attracties_te_plannen:
-    max_pos = max(per_hour_positions[h].get(attr,0) for h in open_uren)
-    max_pos = max(max_pos, aantallen.get(attr,1))
-    for pos_idx in range(1, max_pos+1):
-        naam_attr = attr if max_pos == 1 else f"{attr} {pos_idx}"
-        ws_out.cell(rij_out,1,naam_attr).font = Font(bold=True)
-        ws_out.cell(rij_out,1).fill = attr_fill
-        ws_out.cell(rij_out,1).border = thin_border
-        for col_idx, uur in enumerate(sorted(open_uren), start=2):
-            assigned_list = assigned_map.get((uur,attr), [])
-            naam = assigned_list[pos_idx-1] if pos_idx-1 < len(assigned_list) else ""
-            if naam == "NIEMAND":
-                naam = ""
-            ws_out.cell(rij_out,col_idx,naam).alignment = center_align
-            ws_out.cell(rij_out,col_idx).border = thin_border
-        rij_out += 1
+    ws_out.cell(rij_out,1,attr).font = Font(bold=True)
+    ws_out.cell(rij_out,1).fill = attr_fill
+    ws_out.cell(rij_out,1).border = thin_border
+    for col_idx, uur in enumerate(sorted(open_uren), start=2):
+        assigned_list = assigned_map.get((uur,attr), [])
+        naam = assigned_list[0] if len(assigned_list) > 0 else ""
+        ws_out.cell(rij_out,col_idx,naam).alignment = center_align
+        ws_out.cell(rij_out,col_idx).border = thin_border
+    rij_out += 1
 
+# EXTRA rij (toon comma-gescheiden namen van ongeplaatste / beschikbare studenten per uur)
+ws_out.cell(rij_out,1,"EXTRA").font = Font(bold=True)
+ws_out.cell(rij_out,1).fill = extra_fill
+ws_out.cell(rij_out,1).border = thin_border
+for col_idx, uur in enumerate(sorted(open_uren), start=2):
+    names = extra_per_hour.get(uur, [])
+    txt = ", ".join(names)
+    ws_out.cell(rij_out,col_idx, txt).alignment = center_align
+    ws_out.cell(rij_out,col_idx).border = thin_border
 rij_out += 1
+
+# Pauzevlinders tonen
+rij_out += 0
 for pv_idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
     if not pvnaam:
         continue
@@ -399,12 +433,14 @@ for pv_idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
         ws_out.cell(rij_out,col_idx).border = thin_border
     rij_out += 1
 
+# Kolombreedte
 for col in range(1, len(open_uren)+2):
     ws_out.column_dimensions[get_column_letter(col)].width = 18
 
+# Download button
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
-st.success("Basisplanning (blok-voor-blok toewijzing) gegenereerd!")
+st.success("Planning (greedy 3>2/4>1, 1 rij per attractie, EXTRA-rij) gegenereerd!")
 st.download_button("Download planning", data=output.getvalue(),
                    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
