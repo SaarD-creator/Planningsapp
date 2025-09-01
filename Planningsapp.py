@@ -147,6 +147,15 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
+# Tweede posities prioriteit (kolom BA, rij 5-11)
+# -----------------------------
+tweede_prioriteit=[]
+for r in range(5,12):
+    val = ws[f'BA{r}'].value
+    if val:
+        tweede_prioriteit.append(val)
+
+# -----------------------------
 # Assign per student
 # -----------------------------
 assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
@@ -170,7 +179,7 @@ def assign_student(s):
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
             placed=False
-            # probeer eerste beschikbare attractie
+            # eerste pass: attracties nog niet toegewezen
             for attr in attracties_te_plannen:
                 if attr not in s["attracties"]: continue
                 if attr in s["assigned_attracties"]: continue
@@ -187,37 +196,24 @@ def assign_student(s):
                     s["assigned_attracties"].add(attr)
                     placed=True
                     break
+            # tweede pass: extra, incl. tweede posities volgens prioriteit
             if not placed:
                 for h in block_hours:
-                    extra_assignments[h].append(s["naam"])
+                    # eerst tweede posities prioritair
+                    for attr in tweede_prioriteit:
+                        if attr not in s["attracties"]: continue
+                        if h in s["assigned_hours"]: continue
+                        if per_hour_assigned_counts[h][attr]>=2: continue
+                        assigned_map[(h,attr)].append(s["naam"])
+                        per_hour_assigned_counts[h][attr]+=1
+                        s["assigned_hours"].append(h)
+                        placed=True
+                        break
+                    if not placed:
+                        extra_assignments[h].append(s["naam"])
 
 for s in studenten_sorted:
     assign_student(s)
-
-# -----------------------------
-# Extra stap: per uur onbemande attracties invullen
-# -----------------------------
-# mapping van beschikbare studenten per uur
-beschikbare_per_uur = defaultdict(list)
-for s in studenten_sorted:
-    for u in s["uren_beschikbaar"]:
-        if u in open_uren:
-            beschikbare_per_uur[u].append(s)
-
-for uur in open_uren:
-    for attr in attracties_te_plannen:
-        nodig = aantallen.get(attr,1)
-        huidig = len(assigned_map[(uur,attr)])
-        while huidig < nodig:
-            kandidaten = [s for s in beschikbare_per_uur[uur] if s["naam"] not in assigned_map[(uur,attr)] and len([h for h,a in s["assigned_hours"] if h==uur])==0]
-            if not kandidaten:
-                break
-            gekozen = random.choice(kandidaten)
-            assigned_map[(uur,attr)].append(gekozen["naam"])
-            per_hour_assigned_counts[uur][attr] += 1
-            gekozen["assigned_hours"].append(uur)
-            gekozen["assigned_attracties"].add(attr)
-            huidig += 1
 
 # -----------------------------
 # Excel output
