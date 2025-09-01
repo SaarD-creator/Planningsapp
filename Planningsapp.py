@@ -65,17 +65,6 @@ def partition_run_lengths(L):
     return dp[L][3]
 
 
-per_hour_attractielijsten = {}
-for uur in open_uren:
-    # Sorteer attracties op basis van kritieke score (weinig kandidaten eerst)
-    sorted_attrs = sorted(attracties_te_plannen, key=lambda a: kritieke_score(a, studenten_workend))
-    lst = []
-    for a in sorted_attrs:
-        npos = per_hour_positions[uur].get(a, 0)
-        for _ in range(npos):
-            lst.append(a)
-    per_hour_attractielijsten[uur] = lst
-
 
 
 def contiguous_runs(sorted_hours):
@@ -124,6 +113,17 @@ open_uren = [int(str(ws.cell(1,kol).value).replace("u","").strip()) for kol in r
 if not open_uren:
     open_uren = list(range(10,19))
 open_uren = sorted(set(open_uren))
+
+per_hour_attractielijsten = {}
+for uur in open_uren:
+    # Sorteer attracties op basis van kritieke score (weinig kandidaten eerst)
+    sorted_attrs = sorted(attracties_te_plannen, key=lambda a: kritieke_score(a, studenten_workend))
+    lst = []
+    for a in sorted_attrs:
+        npos = per_hour_positions[uur].get(a, 0)
+        for _ in range(npos):
+            lst.append(a)
+    per_hour_attractielijsten[uur] = lst
 
 # -----------------------------
 # Pauzevlinders
