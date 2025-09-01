@@ -134,19 +134,27 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
-# Rode vakjes / tweede posities
+# Taboe/rode vakjes per uur (samengevoegd)
 # -----------------------------
-# tweede posities van BA5-BA11
-tweede_posities = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
 rode_vakjes_per_uur = defaultdict(set)
+
 for uur in open_uren:
     beschikbaar = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
-    aantal_tweede = sum(1 for attr in tweede_posities if aantallen.get(attr,0)>=2)
-    if beschikbaar < aantal_tweede:
-        # taboe voor tweede posities die niet genoeg studenten hebben
-        for attr in tweede_posities:
-            if aantallen.get(attr,0)>=2:
+    # tel aantal attracties met >=1 plek en tweede posities >=2
+    benodigd = 0
+    for attr in attracties_te_plannen:
+        plekken = aantallen.get(attr,1)
+        # als tweede plek maar te weinig studenten, taboe
+        if plekken >= 2:
+            benodigd += 2
+        else:
+            benodigd += 1
+    if beschikbaar < benodigd:
+        # markeer alle tweede posities die niet bemand kunnen worden
+        for attr in attracties_te_plannen:
+            if aantallen.get(attr,0) >= 2:
                 rode_vakjes_per_uur[uur].add(attr)
+
 
 # -----------------------------
 # Assign studenten
