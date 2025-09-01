@@ -1,3 +1,6 @@
+# beste tot nu toe met logische indeling
+
+
 import streamlit as st
 import random
 from collections import defaultdict
@@ -140,9 +143,6 @@ for kol in range(47,65):
         if aantallen[naam]>=1:
             attracties_te_plannen.append(naam)
 
-# Tweede posities volgens BA
-tweede_posities_BA = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
-
 def kritieke_score(attr,studenten_list):
     return sum(1 for s in studenten_list if attr in s["attracties"])
 
@@ -161,67 +161,39 @@ extra_assignments = defaultdict(list)
 studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])
 
 def assign_student(s):
-    """
-    Verdeel de shift van een student s over de beschikbare uren.
-    Prioriteit:
-        1. Eerste posities van attracties
-        2. Tweede posities volgens BA-lijst
-        3. Extra (laatste optie)
-    Blokken van 3 uur eerst, daarna 2,4,1 om shift te vullen.
-    """
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
     uren = sorted(uren)
     runs = contiguous_runs(uren)
-    
     for run in runs:
         L = len(run)
-        if L == 0:
-            continue
-        
+        if L==0: continue
         block_sizes = partition_run_lengths(L)
         start_idx = 0
-
         for b in block_sizes:
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
-            placed = False
-
-            # Stap 1: Eerste posities
+            placed=False
+            # probeer eerste beschikbare attractie
             for attr in attracties_te_plannen:
-                if attr not in s["attracties"]:
-                    continue
-                if all(per_hour_assigned_counts[h][attr] < 1 for h in block_hours):
+                if attr not in s["attracties"]: continue
+                if attr in s["assigned_attracties"]: continue
+                ruimte=True
+                for h in block_hours:
+                    if per_hour_assigned_counts[h][attr]>=aantallen.get(attr,1):
+                        ruimte=False
+                        break
+                if ruimte:
                     for h in block_hours:
-                        assigned_map[(h, attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr] += 1
+                        assigned_map[(h,attr)].append(s["naam"])
+                        per_hour_assigned_counts[h][attr]+=1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
-                    placed = True
+                    placed=True
                     break
-
-            if placed:
-                continue
-
-            # Stap 2: Tweede posities BA
-            for attr in tweede_posities_BA:
-                if attr not in s["attracties"]:
-                    continue
-                max_pos = aantallen.get(attr,1)
-                if all(per_hour_assigned_counts[h][attr] < max_pos for h in block_hours):
-                    for h in block_hours:
-                        assigned_map[(h, attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr] += 1
-                        s["assigned_hours"].append(h)
-                    s["assigned_attracties"].add(attr)
-                    placed = True
-                    break
-
-            # Stap 3: Anders naar extra
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
 
-# Toewijzen
 for s in studenten_sorted:
     assign_student(s)
 
@@ -283,6 +255,46 @@ ws_out.cell(rij_out,1).border=thin_border
 for col_idx,uur in enumerate(sorted(open_uren),start=2):
     for r_offset, naam in enumerate(extra_assignments[uur]):
         ws_out.cell(rij_out+1+r_offset,col_idx,naam).alignment=center_align
+
+# -----------------------------
+# Tweede posities check & invullen
+# -----------------------------
+from openpyxl.styles import PatternFill
+
+# Rood voor niet ingevulde tweede posities
+rood_fill = PatternFill(start_color="FFC7CE", fill_type="solid")
+
+# Studenten beschikbaar per uur (zonder pauzevlinders)
+beschikbare_per_uur = {}
+for uur in open_uren:
+    beschikbare_per_uur[uur] = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
+
+# Tweede posities in Excel staan in kolom BA, rijen 5 t/m 11
+# We lezen deze attracties
+tweede_posities = [ws.cell(rij, 53).value for rij in range(5,12) if ws.cell(rij,53).value]
+
+# Rij in output sheet waar tweede posities starten
+rij_tweede = rij_out + 2  # kleine offset om onder "Extra" te beginnen
+
+# Per uur invullen
+for col_idx, uur in enumerate(sorted(open_uren), start=2):
+    studenten_over = beschikbare_per_uur[uur] - len([a for a in attracties_te_plannen if aantallen.get(a,1)>=2])
+    # Itereer over tweede posities
+    for pos_idx, attr in enumerate(tweede_posities, start=1):
+        cel = ws_out.cell(rij_tweede + pos_idx - 1, col_idx)
+        # Vul als er genoeg studenten beschikbaar zijn
+        if studenten_over > 0:
+            # probeer een naam uit extra_assignments
+            if extra_assignments[uur]:
+                naam = extra_assignments[uur].pop(0)
+                cel.value = naam
+                cel.alignment = center_align
+            studenten_over -= 1
+        else:
+            cel.value = ""  # leeg
+            cel.fill = rood_fill
+            cel.alignment = center_align
+
 
 # Kolombreedte
 for col in range(1,len(open_uren)+2):
