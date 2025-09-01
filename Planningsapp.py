@@ -35,35 +35,35 @@ def max_consecutive_hours(urenlijst):
         maxr = max(maxr, huidig)
     return maxr
 
-def partition_shift(L):
+def partition_run_lengths(L):
     """
-    Flexibele blokverdeling:
-    - voorkeur: 3 uur
-    - daarna 2 of 4 uur
-    - als laatste redmiddel 1 uur
-    - zo min mogelijk 1-uurs blokken
+    DP partition voor lengte L. ### AANPASSING:
+    - blokgroottes preferentie: 3, 2, 4, dan 1 (1 is laatste redmiddel)
+    - objective: minimaliseer eerst aantal 1-blokjes, dan maximaliseer aantal (3 of 2)-blokken,
+      daarna minimaliseer aantal blokken.
+    Retourneert lijst van blokgroottes die optellen tot L.
     """
-    if L <= 0:
-        return []
-    blocks = []
-    while L > 0:
-        if L >= 3:
-            blocks.append(3)
-            L -= 3
-        elif L == 2:
-            blocks.append(2)
-            L -= 2
-        elif L == 1:
-            blocks.append(1)
-            L -= 1
-        elif L == 4:
-            blocks.append(4)
-            L -= 4
-        else:
-            # fallback
-            blocks.append(L)
-            break
-    return blocks
+    blocks = [3,2,4,1]  # voorkeurvolgorde zoals gevraagd
+    # dp[i] = tuple (num_ones, -num_3_or_2_blocks, num_blocks, partition_list)
+    big = 10**9
+    dp = [(big, big, big, [])] * (L+1)
+    dp[0] = (0, 0, 0, [])
+    for i in range(1, L+1):
+        best = (big, big, big, [])
+        for b in blocks:
+            if i-b < 0:
+                continue
+            prev = dp[i-b]
+            num_ones = prev[0] + (1 if b == 1 else 0)
+            num_32 = prev[1] + ( -1 if b in (2,3) else 0 )  # we store negative so that smaller is better
+            num_blocks = prev[2] + 1
+            part = prev[3] + [b]
+            cand = (num_ones, num_32, num_blocks, part)
+            if (cand[0], cand[1], cand[2]) < (best[0], best[1], best[2]):
+                best = cand
+        dp[i] = best
+    return dp[L][3]
+
 
 def contiguous_runs(sorted_hours):
     runs = []
