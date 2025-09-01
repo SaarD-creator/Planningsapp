@@ -140,20 +140,14 @@ for kol in range(47,65):
         if aantallen[naam]>=1:
             attracties_te_plannen.append(naam)
 
+# Tweede posities volgens BA
+tweede_posities_BA = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
+
 def kritieke_score(attr,studenten_list):
     return sum(1 for s in studenten_list if attr in s["attracties"])
 
 studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])]
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
-
-# -----------------------------
-# Tweede posities prioriteit (kolom BA, rij 5-11)
-# -----------------------------
-tweede_prioriteit=[]
-for r in range(5,12):
-    val = ws[f'BA{r}'].value
-    if val:
-        tweede_prioriteit.append(val)
 
 # -----------------------------
 # Assign per student
@@ -167,14 +161,23 @@ extra_assignments = defaultdict(list)
 studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])
 
 def assign_student(s):
+    """
+    Verdeel de shift van een student s over de beschikbare uren.
+    Prioriteit:
+        1. Eerste posities van attracties
+        2. Tweede posities volgens BA-lijst
+        3. Extra (laatste optie)
+    Blokken van 3 uur eerst, daarna 2,4,1 om shift te vullen.
+    """
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
     uren = sorted(uren)
     runs = contiguous_runs(uren)
-
+    
     for run in runs:
         L = len(run)
-        if L == 0: 
+        if L == 0:
             continue
+        
         block_sizes = partition_run_lengths(L)
         start_idx = 0
 
@@ -183,16 +186,11 @@ def assign_student(s):
             start_idx += b
             placed = False
 
-            # --- Eerst: probeer eerste posities ---
+            # Stap 1: Eerste posities
             for attr in attracties_te_plannen:
-                if attr not in s["attracties"]: 
+                if attr not in s["attracties"]:
                     continue
-                ruimte = True
-                for h in block_hours:
-                    if per_hour_assigned_counts[h][attr] >= 1:  # 1e positie eerst
-                        ruimte = False
-                        break
-                if ruimte:
+                if all(per_hour_assigned_counts[h][attr] < 1 for h in block_hours):
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
                         per_hour_assigned_counts[h][attr] += 1
@@ -204,16 +202,12 @@ def assign_student(s):
             if placed:
                 continue
 
-            # --- Dan: tweede posities volgens BA, rij 5–11 ---
+            # Stap 2: Tweede posities BA
             for attr in tweede_posities_BA:
-                if attr not in s["attracties"]: 
+                if attr not in s["attracties"]:
                     continue
-                ruimte = True
-                for h in block_hours:
-                    if per_hour_assigned_counts[h][attr] >= aantallen.get(attr, 1):  # max 2
-                        ruimte = False
-                        break
-                if ruimte:
+                max_pos = aantallen.get(attr,1)
+                if all(per_hour_assigned_counts[h][attr] < max_pos for h in block_hours):
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
                         per_hour_assigned_counts[h][attr] += 1
@@ -222,10 +216,14 @@ def assign_student(s):
                     placed = True
                     break
 
-            # --- Als geen eerste of tweede plek mogelijk, dan extra ---
+            # Stap 3: Anders naar extra
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
+
+# Toewijzen
+for s in studenten_sorted:
+    assign_student(s)
 
 # -----------------------------
 # Excel output
