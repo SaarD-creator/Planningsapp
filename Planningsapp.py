@@ -146,18 +146,14 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
-# Tweede posities logica – functioneel
+# Tweede posities logica – functioneel & visueel
 # -----------------------------
-# kolom BA (53), rijen 5-11
 tweede_posities = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
-
-# Bereken per uur welke attracties "taboe" zijn omdat er te weinig studenten zijn
-rode_vakjes_per_uur = defaultdict(set)
+rode_vakjes_per_uur = defaultdict(set)  # uur -> attr die taboe zijn
 for uur in open_uren:
     beschikbaar = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
     aantal_tweede = sum(1 for attr in tweede_posities if aantallen.get(attr,0) >= 2)
     if beschikbaar < aantal_tweede:
-        # markeer deze attracties als taboe
         for attr in tweede_posities:
             if aantallen.get(attr,0) >= 2:
                 rode_vakjes_per_uur[uur].add(attr)
@@ -189,7 +185,7 @@ def assign_student(s):
             for attr in attracties_te_plannen:
                 if attr not in s["attracties"]: continue
                 if attr in s["assigned_attracties"]: continue
-                # respecteer rode vakjes
+                # rode vakjes respecteren
                 if any(attr in rode_vakjes_per_uur.get(h,set()) for h in block_hours):
                     continue
                 ruimte=True
@@ -207,7 +203,6 @@ def assign_student(s):
                     break
             if not placed:
                 for h in block_hours:
-                    # respecteer rode vakjes
                     vrije_attr = [a for a in attracties_te_plannen if a not in rode_vakjes_per_uur.get(h,set())]
                     if vrije_attr:
                         extra_assignments[h].append(s["naam"])
@@ -215,111 +210,82 @@ def assign_student(s):
 for s in studenten_sorted:
     assign_student(s)
 
-
 # -----------------------------
 # Excel output
 # -----------------------------
-wb_out=Workbook()
-ws_out=wb_out.active
-ws_out.title="Planning"
+wb_out = Workbook()
+ws_out = wb_out.active
+ws_out.title = "Planning"
 
-header_fill=PatternFill(start_color="BDD7EE",fill_type="solid")
-attr_fill=PatternFill(start_color="E2EFDA",fill_type="solid")
-pv_fill=PatternFill(start_color="FFF2CC",fill_type="solid")
-extra_fill=PatternFill(start_color="FCE4D6",fill_type="solid")
-center_align=Alignment(horizontal="center",vertical="center")
-thin_border=Border(left=Side(style="thin"),right=Side(style="thin"),
-                   top=Side(style="thin"),bottom=Side(style="thin"))
+# Styles
+header_fill = PatternFill(start_color="BDD7EE", fill_type="solid")
+attr_fill = PatternFill(start_color="E2EFDA", fill_type="solid")
+pv_fill = PatternFill(start_color="FFF2CC", fill_type="solid")
+extra_fill = PatternFill(start_color="FCE4D6", fill_type="solid")
+rood_fill = PatternFill(start_color="FFC7CE", fill_type="solid")
+center_align = Alignment(horizontal="center", vertical="center")
+thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
+                     top=Side(style="thin"), bottom=Side(style="thin"))
 
 # Header
 ws_out.cell(1,1,vandaag).font=Font(bold=True)
-for col_idx,uur in enumerate(sorted(open_uren),start=2):
+for col_idx, uur in enumerate(sorted(open_uren), start=2):
     ws_out.cell(1,col_idx,f"{uur}:00").font=Font(bold=True)
     ws_out.cell(1,col_idx).fill=header_fill
     ws_out.cell(1,col_idx).alignment=center_align
     ws_out.cell(1,col_idx).border=thin_border
 
 rij_out=2
+# Attracties invullen
 for attr in attracties_te_plannen:
-    max_pos=max(aantallen.get(attr,1), max(per_hour_assigned_counts[h].get(attr,0) for h in open_uren))
+    max_pos = max(aantallen.get(attr,1), max(per_hour_assigned_counts[h].get(attr,0) for h in open_uren))
     for pos_idx in range(1,max_pos+1):
-        naam_attr=attr if max_pos==1 else f"{attr} {pos_idx}"
+        naam_attr = attr if max_pos==1 else f"{attr} {pos_idx}"
         ws_out.cell(rij_out,1,naam_attr).font=Font(bold=True)
         ws_out.cell(rij_out,1).fill=attr_fill
         ws_out.cell(rij_out,1).border=thin_border
-        for col_idx,uur in enumerate(sorted(open_uren),start=2):
-            naam=assigned_map.get((uur,attr),[])
-            naam=naam[pos_idx-1] if pos_idx-1<len(naam) else ""
-            ws_out.cell(rij_out,col_idx,naam).alignment=center_align
-            ws_out.cell(rij_out,col_idx).border=thin_border
-        rij_out+=1
+        for col_idx, uur in enumerate(sorted(open_uren), start=2):
+            cel = ws_out.cell(rij_out,col_idx)
+            # rood indien taboe (rode vakjes)
+            if pos_idx==2 and attr in rode_vakjes_per_uur.get(uur,set()):
+                cel.fill = rood_fill
+                cel.value = ""  # echt geen studenten hier
+            else:
+                namen = assigned_map.get((uur,attr),[])
+                cel.value = namen[pos_idx-1] if pos_idx-1<len(namen) else ""
+            cel.alignment=center_align
+            cel.border=thin_border
+        rij_out +=1
 
 # Pauzevlinders
-rij_out+=1
-for pv_idx,pvnaam in enumerate(pauzevlinder_namen,start=1):
+rij_out +=1
+for pv_idx, pvnaam in enumerate(pauzevlinder_namen,start=1):
     ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font=Font(bold=True)
     ws_out.cell(rij_out,1).fill=pv_fill
     ws_out.cell(rij_out,1).border=thin_border
-    for col_idx,uur in enumerate(sorted(open_uren),start=2):
-        ws_out.cell(rij_out,col_idx,pvnaam if uur in required_pauze_hours else "").alignment=center_align
+    for col_idx, uur in enumerate(sorted(open_uren), start=2):
+        ws_out.cell(rij_out,col_idx, pvnaam if uur in required_pauze_hours else "").alignment=center_align
         ws_out.cell(rij_out,col_idx).border=thin_border
-    rij_out+=1
+    rij_out +=1
 
 # Extra
-rij_out+=1
+rij_out +=1
 ws_out.cell(rij_out,1,"Extra").font=Font(bold=True)
 ws_out.cell(rij_out,1).fill=extra_fill
 ws_out.cell(rij_out,1).border=thin_border
 
-for col_idx,uur in enumerate(sorted(open_uren),start=2):
-    for r_offset, naam in enumerate(extra_assignments[uur]):
-        ws_out.cell(rij_out+1+r_offset,col_idx,naam).alignment=center_align
-
-# -----------------------------
-# Tweede posities automatisch invullen per attractie (rode vakjes indien te weinig studenten)
-# -----------------------------
-rood_fill = PatternFill(start_color="FFC7CE", fill_type="solid")
-
-# Tweede posities in Excel: kolom BA (53), rijen 5-11
-tweede_posities = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
-
-# Rij in output sheet waar tweede posities starten (onder Extra)
-rij_tweede = rij_out + 1
-
-# Voor elke uur-kolom
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
-    # Studenten beschikbaar op dit uur zonder pauzevlinders
-    beschikbaar = sum(
-        1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"]
-    )
-
-    # Per attractie in volgorde van BA5:BA11
-    for pos_idx, attr in enumerate(tweede_posities, start=1):
-        # Alleen tweede posities nodig als aantallen >=2
-        if aantallen.get(attr, 0) < 2:
-            continue
-
-        cel = ws_out.cell(rij_tweede + pos_idx - 1, col_idx)
-        if beschikbaar > 0:
-            # Vul met een naam uit extra_assignments als mogelijk
-            if extra_assignments[uur]:
-                cel.value = extra_assignments[uur].pop(0)
-            cel.alignment = center_align
-            beschikbaar -= 1
-        else:
-            # Te weinig studenten → rood en leeg
-            cel.value = ""
-            cel.fill = rood_fill
-            cel.alignment = center_align
-
+    for r_offset, naam in enumerate(extra_assignments[uur]):
+        ws_out.cell(rij_out+1+r_offset, col_idx, naam).alignment=center_align
 
 # Kolombreedte
 for col in range(1,len(open_uren)+2):
     ws_out.column_dimensions[get_column_letter(col)].width=18
 
-output=BytesIO()
+# Output
+output = BytesIO()
 wb_out.save(output)
 output.seek(0)
 st.success("Planning gegenereerd!")
-st.download_button("Download planning",data=output.getvalue(),
+st.download_button("Download planning", data=output.getvalue(),
                    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
