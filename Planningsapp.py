@@ -232,7 +232,8 @@ def assign_student(s):
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
-
+for s in studenten_sorted:
+    assign_student(s)
 
 
 # -----------------------------
