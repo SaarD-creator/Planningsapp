@@ -189,7 +189,7 @@ extra_assignments = defaultdict(list)
 studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])
 
 def assign_student(s):
-    # Sorteer de beschikbare uren van de student
+    # Sorteer de beschikbare uren
     beschikbare_uren = sorted([u for u in s["uren_beschikbaar"] if u in open_uren])
     if not beschikbare_uren:
         return
@@ -202,66 +202,48 @@ def assign_student(s):
         if L == 0:
             continue
 
-        # Blokken als hulpmiddel, maar ondergeschikt aan taboe/regels
-        block_sizes = partition_run_lengths(L)  # 3-4-2-1
+        # Blokken als hulpmiddel (3-4-2-1), maar ondergeschikt aan alle regels
+        block_sizes = partition_run_lengths(L)
         start_idx = 0
 
         for b in block_sizes:
-            block_hours = run[start_idx:start_idx + b]
+            block_hours = run[start_idx:start_idx+b]
             start_idx += b
 
-            placed = False
+            # Per uur plaatsen, zodat geen student wordt vergeten
+            for h in block_hours:
+                # Check attracties die vrije plekken hebben (eerste of tweede positie niet-rood)
+                vrije_attracties_h = [
+                    a for a in attracties_te_plannen
+                    if len(assigned_map.get((h, a), [])) < aantallen.get(a, 1)
+                    and not (len(assigned_map.get((h, a), [])) == 1 and a in rode_vakjes_per_uur[h])
+                ]
 
-            # Probeer attracties te vullen
-            for attr in attracties_te_plannen:
-                if attr not in s["attracties"]:
+                if not vrije_attracties_h:
+                    # Geen plek → pas in extra_assignments
+                    extra_assignments[h].append(s["naam"])
                     continue
-                if attr in s["assigned_attracties"]:
-                    continue
 
-                kan_plaatsen = True
-                for h in block_hours:
-                    huidig_aantal = len(assigned_map.get((h, attr), []))
-                    max_aantal = aantallen.get(attr, 1)
+                # Plaats student bij eerste beschikbare attractie
+                for a in vrije_attracties_h:
+                    huidig_aantal = len(assigned_map.get((h, a), []))
 
-                    # Eerste positie altijd toegestaan
-                    if huidig_aantal >= max_aantal:
-                        kan_plaatsen = False
+                    # Eerste positie altijd
+                    if huidig_aantal == 0:
+                        assigned_map[(h, a)].append(s["naam"])
+                        per_hour_assigned_counts[h][a] += 1
+                        s["assigned_hours"].append(h)
+                        s["assigned_attracties"].add(a)
                         break
 
-                    # Tweede positie taboe check
-                    if huidig_aantal == 1 and attr in rode_vakjes_per_uur[h]:
-                        # Tweede positie mag niet ingevuld worden, eerste is al ingevuld
-                        continue
+                    # Tweede positie alleen als niet rood
+                    elif huidig_aantal == 1 and a not in rode_vakjes_per_uur[h]:
+                        assigned_map[(h, a)].append(s["naam"])
+                        per_hour_assigned_counts[h][a] += 1
+                        s["assigned_hours"].append(h)
+                        s["assigned_attracties"].add(a)
+                        break
 
-                if kan_plaatsen:
-                    for h in block_hours:
-                        huidig_aantal = len(assigned_map.get((h, attr), []))
-                        # Eerste positie altijd
-                        if huidig_aantal == 0:
-                            assigned_map[(h, attr)].append(s["naam"])
-                            per_hour_assigned_counts[h][attr] += 1
-                            s["assigned_hours"].append(h)
-                        # Tweede positie alleen als niet rood
-                        elif huidig_aantal == 1 and attr not in rode_vakjes_per_uur[h]:
-                            assigned_map[(h, attr)].append(s["naam"])
-                            per_hour_assigned_counts[h][attr] += 1
-                            s["assigned_hours"].append(h)
-                    s["assigned_attracties"].add(attr)
-                    placed = True
-                    break
-
-            # Extra assignments alleen bij overschot, niet door rode vakjes
-            if not placed:
-                for h in block_hours:
-                    # Alleen toevoegen als er geen attractie meer open is voor dit uur
-                    vrije_attracties = [
-                        a for a in attracties_te_plannen
-                        if len(assigned_map.get((h, a), [])) < aantallen.get(a, 1)
-                        and not (len(assigned_map.get((h, a), [])) == 1 and a in rode_vakjes_per_uur[h])
-                    ]
-                    if not vrije_attracties:
-                        extra_assignments[h].append(s["naam"])
 
 
 for s in studenten_sorted:
