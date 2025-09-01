@@ -170,22 +170,13 @@ for uur in open_uren:
                 rode_vakjes_per_uur[uur].add(a)
 
 # -----------------------------
-# Assign per student (per uur)
+# CONSTANTEN EN INIT
 # -----------------------------
-assigned_map = defaultdict(list)  # (uur, attr) -> list van student-namen
-per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in open_uren}
-extra_assignments = defaultdict(list)
-
-studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
-
-for s in studenten:
-    s.setdefault("assigned_hours", [])
-    s.setdefault("assigned_attracties", set())
+MAX_CONSEC = 4   # max aaneengesloten uren per attractie
 
 # -----------------------------
-# Hulpfuncties
+# HULPFUNCTIES
 # -----------------------------
-
 def max_consecutive_hours(hours):
     """Bepaal de langste aaneengesloten reeks uren in een lijst."""
     if not hours:
@@ -233,9 +224,15 @@ def contiguous_runs(sorted_hours):
     return runs
 
 # -----------------------------
-# Nieuwe assign_student
+# STUDENTTOEWIJZING
 # -----------------------------
 def assign_student(s):
+    # zorg dat de velden bestaan
+    if "assigned_hours" not in s:
+        s["assigned_hours"] = []
+    if "assigned_attracties" not in s:
+        s["assigned_attracties"] = set()
+
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
     uren = sorted(uren)
     runs = contiguous_runs(uren)
@@ -257,13 +254,12 @@ def assign_student(s):
                 if attr in s["assigned_attracties"]:
                     continue
 
-                # check capaciteit
+                # check capaciteit + max_consec
                 ruimte = True
                 for h in block_hours:
                     if per_hour_assigned_counts[h][attr] >= aantallen.get(attr, 1):
                         ruimte = False
                         break
-                    # max aaneengesloten uren check
                     if s["assigned_hours"] and max_consecutive_hours(s["assigned_hours"] + [h]) > MAX_CONSEC:
                         ruimte = False
                         break
@@ -271,7 +267,7 @@ def assign_student(s):
                 if ruimte:
                     # plaats student
                     for h in block_hours:
-                        assigned_map[(h, attr)].append(s["naam"])
+                        assigned_map.setdefault((h, attr), []).append(s["naam"])
                         per_hour_assigned_counts[h][attr] += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
@@ -283,11 +279,15 @@ def assign_student(s):
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
 
-
-
+# -----------------------------
+# STUDENTEN INPLANNEN
+# -----------------------------
+# sorteer studenten: eerst wie het minst aantal attracties kan
+studenten_sorted = sorted(studenten, key=lambda s: len(s["attracties"]))
 
 for s in studenten_sorted:
     assign_student(s)
+
 
 
 # -----------------------------
