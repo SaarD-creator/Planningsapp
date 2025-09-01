@@ -169,10 +169,15 @@ for uur in open_uren:
             if aantallen.get(a,1) >= 2:
                 rode_vakjes_per_uur[uur].add(a)
 
+import random
+
 # -----------------------------
-# CONSTANTEN EN INIT
+# CONSTANTEN EN BASISDATA
 # -----------------------------
-MAX_CONSEC = 4   # max aaneengesloten uren per attractie
+MAX_CONSEC = 4   # max 4 opeenvolgende uren bij 1 attractie
+BLOK_VOLGORDE = [3, 4, 2, 1]  # voorkeur voor bloklengtes
+open_uren = list(range(9, 21))  # pas aan naar je echte open uren
+
 
 # -----------------------------
 # HULPFUNCTIES
@@ -191,102 +196,114 @@ def max_consecutive_hours(hours):
             run = 1
     return max_run
 
-def partition_run_lengths(L):
-    """Flexibele blokken: prioritair 3 uur, dan 2,4,1 om shift te vullen."""
-    blocks = [3, 2, 4, 1]
-    dp = [(10**9, [])] * (L+1)
-    dp[0] = (0, [])
-    for i in range(1, L+1):
-        best = (10**9, [])
-        for b in blocks:
-            if i-b < 0:
+def maak_rode_vakjes(studenten, aantallen, open_uren):
+    """
+    Bereken voor elk uur welke tweede posities taboe (rood) moeten zijn.
+    - Als aantal studenten == aantal attracties → alle tweede posities rood.
+    - Als er meer studenten zijn dan attracties → tweede posities bovenaan BA-lijst mogen open.
+    """
+    rode_vakjes = {h: set() for h in open_uren}
+    for h in open_uren:
+        actieve_students = [
+            s for s in studenten if h not in s.get("pauze", [])
+        ]
+        n_students = len(actieve_students)
+        n_attracties = sum(aantallen.values())
+        if n_students == n_attracties:
+            for a in aantallen.keys():
+                if aantallen[a] >= 2:
+                    rode_vakjes[h].add((a, 2))
+        elif n_students > n_attracties:
+            # hier eventueel je kolom BA-lijst (rij 5-11) gebruiken
+            pass
+    return rode_vakjes
+
+# -----------------------------
+# INIT STRUCTUREN
+# -----------------------------
+assigned_map = {}  # (uur, attractie, positie) -> student
+per_hour_assigned_counts = {h: {a: 0 for a in aantallen.keys()} for h in open_uren}
+extra_assignments = {h: [] for h in open_uren}
+
+# studenten init
+for s in studenten:
+    s.setdefault("assigned_hours", [])
+    s.setdefault("assigned_attracties", set())
+
+# bereken rode vakjes op voorhand
+rode_vakjes = maak_rode_vakjes(studenten, aantallen, open_uren)
+
+# -----------------------------
+# STUDENT-TOEWIJZING
+# -----------------------------
+def assign_student(student):
+    # doorloop bloklengtes in de juiste volgorde
+    for blok in BLOK_VOLGORDE:
+        for h in open_uren:
+            # check of dit blok in het rooster past
+            if h + blok - 1 > open_uren[-1]:
                 continue
-            prev_ones, prev_blocks = dp[i-b]
-            new_blocks = prev_blocks + [b]
-            ones = prev_ones + (1 if b == 1 else 0)
-            if ones < best[0]:
-                best = (ones, new_blocks)
-        dp[i] = best
-    return dp[L][1]
+            uren_blok = list(range(h, h+blok))
 
-def contiguous_runs(sorted_hours):
-    runs = []
-    if not sorted_hours:
-        return runs
-    run = [sorted_hours[0]]
-    for h in sorted_hours[1:]:
-        if h == run[-1] + 1:
-            run.append(h)
-        else:
-            runs.append(run)
-            run = [h]
-    runs.append(run)
-    return runs
+            # check dat student deze uren vrij is
+            if any(u in student.get("pauze", []) for u in uren_blok):
+                continue
+            if any(u in student["assigned_hours"] for u in uren_blok):
+                continue
 
-# -----------------------------
-# STUDENTTOEWIJZING
-# -----------------------------
-def assign_student(s):
-    # zorg dat de velden bestaan
-    if "assigned_hours" not in s:
-        s["assigned_hours"] = []
-    if "assigned_attracties" not in s:
-        s["assigned_attracties"] = set()
+            # check max_consec
+            if max_consecutive_hours(student["assigned_hours"] + uren_blok) > MAX_CONSEC:
+                continue
 
-    uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
-    uren = sorted(uren)
-    runs = contiguous_runs(uren)
-
-    for run in runs:
-        L = len(run)
-        if L == 0:
-            continue
-        block_sizes = partition_run_lengths(L)
-        start_idx = 0
-
-        for b in block_sizes:
-            block_hours = run[start_idx:start_idx+b]
-            start_idx += b
-            placed = False
-
-            # loop door attracties die student kan
-            for attr in s["attracties"]:
-                if attr in s["assigned_attracties"]:
+            # zoek een attractie die vrij is in dit blok
+            for attr in student["kan"]:
+                ruimte = True
+                for u in uren_blok:
+                    # check of max posities al gevuld
+                    if per_hour_assigned_counts[u][attr] >= aantallen.get(attr, 1):
+                        ruimte = False
+                        break
+                    # check rode vakjes
+                    pos = per_hour_assigned_counts[u][attr] + 1
+                    if (attr, pos) in rode_vakjes[u]:
+                        ruimte = False
+                        break
+                if not ruimte:
                     continue
 
-                # check capaciteit + max_consec
-                ruimte = True
-                for h in block_hours:
-                    if per_hour_assigned_counts[h][attr] >= aantallen.get(attr, 1):
-                        ruimte = False
-                        break
-                    if s["assigned_hours"] and max_consecutive_hours(s["assigned_hours"] + [h]) > MAX_CONSEC:
-                        ruimte = False
-                        break
+                # toewijzen
+                for u in uren_blok:
+                    pos = per_hour_assigned_counts[u][attr] + 1
+                    assigned_map[(u, attr, pos)] = student["naam"]
+                    per_hour_assigned_counts[u][attr] += 1
+                student["assigned_hours"].extend(uren_blok)
+                student["assigned_attracties"].add(attr)
+                return  # student heeft een blok gekregen
 
-                if ruimte:
-                    # plaats student
-                    for h in block_hours:
-                        assigned_map.setdefault((h, attr), []).append(s["naam"])
-                        per_hour_assigned_counts[h][attr] += 1
-                        s["assigned_hours"].append(h)
-                    s["assigned_attracties"].add(attr)
-                    placed = True
-                    break
+    # geen attractie gevonden → zet bij extra
+    for blok in BLOK_VOLGORDE:
+        for h in open_uren:
+            if h + blok - 1 > open_uren[-1]:
+                continue
+            uren_blok = list(range(h, h+blok))
+            if any(u in student.get("pauze", []) for u in uren_blok):
+                continue
+            if any(u in student["assigned_hours"] for u in uren_blok):
+                continue
+            if max_consecutive_hours(student["assigned_hours"] + uren_blok) > MAX_CONSEC:
+                continue
 
-            # indien niet geplaatst → naar extra
-            if not placed:
-                for h in block_hours:
-                    extra_assignments[h].append(s["naam"])
+            for u in uren_blok:
+                extra_assignments[u].append(student["naam"])
+            student["assigned_hours"].extend(uren_blok)
+            return
 
 # -----------------------------
-# STUDENTEN INPLANNEN
+# MAIN LUS: ALLE STUDENTEN INPLANNEN
 # -----------------------------
-# sorteer studenten: eerst wie het minst aantal attracties kan
-studenten_sorted = sorted(studenten, key=lambda s: len(s["attracties"]))
-
-for s in studenten_sorted:
+for s in sorted(studenten, key=lambda x: len(x["kan"])):
     assign_student(s)
+
 
 
 
