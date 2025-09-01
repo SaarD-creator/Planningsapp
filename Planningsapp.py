@@ -211,73 +211,81 @@ for s in studenten_sorted:
 # -----------------------------
 wb_out = Workbook()
 ws_out = wb_out.active
-ws_out.title="Planning"
+ws_out.title = "Planning"
 
-header_fill=PatternFill(start_color="BDD7EE",fill_type="solid")
-attr_fill=PatternFill(start_color="E2EFDA",fill_type="solid")
-pv_fill=PatternFill(start_color="FFF2CC",fill_type="solid")
-extra_fill=PatternFill(start_color="FCE4D6",fill_type="solid")
-rode_fill=PatternFill(start_color="FF0000",fill_type="solid")
-center_align=Alignment(horizontal="center",vertical="center")
-thin_border=Border(left=Side(style="thin"),right=Side(style="thin"),
-                   top=Side(style="thin"),bottom=Side(style="thin"))
+# Styling
+header_fill = PatternFill(start_color="BDD7EE", fill_type="solid")
+attr_fill = PatternFill(start_color="E2EFDA", fill_type="solid")
+pv_fill = PatternFill(start_color="FFF2CC", fill_type="solid")
+extra_fill = PatternFill(start_color="FCE4D6", fill_type="solid")
+rode_fill = PatternFill(start_color="FF9999", fill_type="solid")  # rood
+center_align = Alignment(horizontal="center", vertical="center")
+thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
+                     top=Side(style="thin"), bottom=Side(style="thin"))
 
 # Header
-ws_out.cell(1,1,vandaag).font=Font(bold=True)
-for col_idx,uur in enumerate(sorted(open_uren),start=2):
-    ws_out.cell(1,col_idx,f"{uur}:00").font=Font(bold=True)
-    ws_out.cell(1,col_idx).fill=header_fill
-    ws_out.cell(1,col_idx).alignment=center_align
-    ws_out.cell(1,col_idx).border=thin_border
+ws_out.cell(1, 1, vandaag).font = Font(bold=True)
+for col_idx, uur in enumerate(sorted(open_uren), start=2):
+    ws_out.cell(1, col_idx, f"{uur}:00").font = Font(bold=True)
+    ws_out.cell(1, col_idx).fill = header_fill
+    ws_out.cell(1, col_idx).alignment = center_align
+    ws_out.cell(1, col_idx).border = thin_border
 
-# Attracties
-rij_out=2
+rij_out = 2
 for attr in attracties_te_plannen:
-    max_pos=max(aantallen.get(attr,1), max(assigned_map.get((uur,attr),[]).__len__() for uur in open_uren))
-    for pos_idx in range(1,max_pos+1):
-        ws_out.cell(rij_out,1,f"{attr} {pos_idx}" if max_pos>1 else attr).font=Font(bold=True)
-        ws_out.cell(rij_out,1).fill=attr_fill
-        ws_out.cell(rij_out,1).border=thin_border
-        for col_idx,uur in enumerate(sorted(open_uren),start=2):
-            # check rode vakjes
-            if pos_idx==2 and vrij_per_uur[uur].get(attr,0)==0:
-                ws_out.cell(rij_out,col_idx,"").fill=rode_fill
+    max_pos = max(aantallen.get(attr,1), max(len(assigned_map.get((h,attr),[])) for h in open_uren))
+    for pos_idx in range(1, max_pos+1):
+        naam_attr = attr if max_pos==1 else f"{attr} {pos_idx}"
+        ws_out.cell(rij_out, 1, naam_attr).font = Font(bold=True)
+        ws_out.cell(rij_out, 1).fill = attr_fill
+        ws_out.cell(rij_out, 1).border = thin_border
+        for col_idx, uur in enumerate(sorted(open_uren), start=2):
+            cell = ws_out.cell(rij_out, col_idx)
+            # Rode vakjes controleren
+            if pos_idx == 2 and attr in rode_vakjes_per_uur[uur]:
+                cell.value = ""
+                cell.fill = rode_fill
             else:
-                naam=assigned_map.get((uur,attr),[])
-                naam=naam[pos_idx-1] if pos_idx-1<len(naam) else ""
-                ws_out.cell(rij_out,col_idx,naam)
-            ws_out.cell(rij_out,col_idx).alignment=center_align
-            ws_out.cell(rij_out,col_idx).border=thin_border
-        rij_out+=1
+                namen = assigned_map.get((uur, attr), [])
+                cell.value = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
+            cell.alignment = center_align
+            cell.border = thin_border
+        rij_out += 1
 
 # Pauzevlinders
-rij_out+=1
-for pv_idx,pvnaam in enumerate(pauzevlinder_namen,start=1):
-    ws_out.cell(rij_out,1,f"Pauzevlinder {pv_idx}").font=Font(bold=True)
-    ws_out.cell(rij_out,1).fill=pv_fill
-    ws_out.cell(rij_out,1).border=thin_border
-    for col_idx,uur in enumerate(sorted(open_uren),start=2):
-        ws_out.cell(rij_out,col_idx,pvnaam if uur in required_pauze_hours else "").alignment=center_align
-        ws_out.cell(rij_out,col_idx).border=thin_border
-    rij_out+=1
+rij_out += 1
+for pv_idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
+    ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True)
+    ws_out.cell(rij_out, 1).fill = pv_fill
+    ws_out.cell(rij_out, 1).border = thin_border
+    for col_idx, uur in enumerate(sorted(open_uren), start=2):
+        cell = ws_out.cell(rij_out, col_idx)
+        cell.value = pvnaam if uur in required_pauze_hours else ""
+        cell.alignment = center_align
+        cell.border = thin_border
+    rij_out += 1
 
 # Extra
-rij_out+=1
-ws_out.cell(rij_out,1,"Extra").font=Font(bold=True)
-ws_out.cell(rij_out,1).fill=extra_fill
-ws_out.cell(rij_out,1).border=thin_border
-for col_idx,uur in enumerate(sorted(open_uren),start=2):
+rij_out += 1
+ws_out.cell(rij_out, 1, "Extra").font = Font(bold=True)
+ws_out.cell(rij_out, 1).fill = extra_fill
+ws_out.cell(rij_out, 1).border = thin_border
+for col_idx, uur in enumerate(sorted(open_uren), start=2):
     for r_offset, naam in enumerate(extra_assignments[uur]):
-        ws_out.cell(rij_out+1+r_offset,col_idx,naam).alignment=center_align
+        cell = ws_out.cell(rij_out + 1 + r_offset, col_idx)
+        cell.value = naam
+        cell.alignment = center_align
 
 # Kolombreedte
-for col in range(1,len(open_uren)+2):
-    ws_out.column_dimensions[get_column_letter(col)].width=18
+for col in range(1, len(open_uren)+2):
+    ws_out.column_dimensions[get_column_letter(col)].width = 18
 
 # Output
-output=BytesIO()
+output = BytesIO()
 wb_out.save(output)
 output.seek(0)
 st.success("Planning gegenereerd!")
-st.download_button("Download planning",data=output.getvalue(),
+st.download_button("Download planning",
+                   data=output.getvalue(),
                    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+
