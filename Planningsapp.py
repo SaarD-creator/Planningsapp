@@ -177,6 +177,9 @@ per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in
 extra_assignments = defaultdict(list)
 
 studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
+# -----------------------------
+# Hulpfuncties
+# -----------------------------
 
 def max_consecutive_hours(hours):
     """Bepaal de langste aaneengesloten reeks uren in een lijst."""
@@ -192,77 +195,85 @@ def max_consecutive_hours(hours):
             run = 1
     return max_run
 
+def partition_run_lengths(L):
+    """Flexibele blokken: prioritair 3 uur, dan 2,4,1 om shift te vullen."""
+    blocks = [3, 2, 4, 1]
+    dp = [(10**9, [])] * (L+1)
+    dp[0] = (0, [])
+    for i in range(1, L+1):
+        best = (10**9, [])
+        for b in blocks:
+            if i-b < 0:
+                continue
+            prev_ones, prev_blocks = dp[i-b]
+            new_blocks = prev_blocks + [b]
+            ones = prev_ones + (1 if b == 1 else 0)
+            if ones < best[0]:
+                best = (ones, new_blocks)
+        dp[i] = best
+    return dp[L][1]
 
+def contiguous_runs(sorted_hours):
+    runs = []
+    if not sorted_hours:
+        return runs
+    run = [sorted_hours[0]]
+    for h in sorted_hours[1:]:
+        if h == run[-1] + 1:
+            run.append(h)
+        else:
+            runs.append(run)
+            run = [h]
+    runs.append(run)
+    return runs
+
+# -----------------------------
+# Nieuwe assign_student
+# -----------------------------
 def assign_student(s):
-    """
-    Plaats een student volgens:
-    - Eerst attracties die hij kan, in de opgegeven volgorde.
-    - Vul shift op met blokken (3-4-2-1), maar blokken zijn ondergeschikt.
-    - Geen taboe-plaatsen (tweede posities overslaan indien rood).
-    - Max 4 opeenvolgende uren, max 6 totaal.
-    - Extra = pas als geen attractie beschikbaar.
-    """
-
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
     uren = sorted(uren)
-    if not uren:
-        return
-
     runs = contiguous_runs(uren)
 
     for run in runs:
         L = len(run)
         if L == 0:
             continue
-
         block_sizes = partition_run_lengths(L)
         start_idx = 0
 
         for b in block_sizes:
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
-
             placed = False
 
-            # probeer attracties die student kan, in vaste volgorde
+            # loop door attracties die student kan
             for attr in s["attracties"]:
-                if attr not in attracties_te_plannen:
+                if attr in s["assigned_attracties"]:
                     continue
-                if len(s["assigned_attracties"]) >= s["aantal_attracties"]:
-                    break
 
-                # check taboe-regel
-                max_pos = aantallen.get(attr, 1)
-                for pos_idx in range(1, max_pos+1):
-                    # taboe = tweede positie terwijl aantal studenten <= aantal tweede posities
-                    if pos_idx == 2 and sum(aantallen.values()) <= len(studenten_workend):
-                        continue  
+                # check capaciteit
+                ruimte = True
+                for h in block_hours:
+                    if per_hour_assigned_counts[h][attr] >= aantallen.get(attr, 1):
+                        ruimte = False
+                        break
+                    # max aaneengesloten uren check
+                    if s["assigned_hours"] and max_consecutive_hours(s["assigned_hours"] + [h]) > MAX_CONSEC:
+                        ruimte = False
+                        break
 
-                    # check of blok kan worden geplaatst
-                    ruimte = True
-                    for h in block_hours:
-                        if per_hour_assigned_counts[h][attr] >= aantallen.get(attr, 1):
-                            ruimte = False
-                            break
-                        if s["assigned_hours"] and max_consecutive_hours(s["assigned_hours"]+[h]) > MAX_CONSEC:
-                            ruimte = False
-                            break
-                    if not ruimte:
-                        continue
-
-                    # plaats blok
+                if ruimte:
+                    # plaats student
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
                         per_hour_assigned_counts[h][attr] += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
                     placed = True
-                    break  # stop na eerste geslaagde plaatsing
+                    break
 
-                if placed:
-                    break  # stop attractielijst, blok is geplaatst
-
-            # als blok nergens kon → naar extra
+            # indien niet geplaatst → naar extra
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
