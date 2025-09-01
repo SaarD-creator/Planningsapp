@@ -134,21 +134,21 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
-# Bereken taboe/rode vakjes per uur (samengevoegd)
+# Rode vakjes per uur bepalen
 # -----------------------------
 rode_vakjes_per_uur = defaultdict(set)
 for uur in open_uren:
-    beschikbaar = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
-    benodigd = 0
-    # tel voor elke attractie hoeveel studenten minimaal nodig zijn (1 voor enkel, 2 als max>=2)
-    for attr in attracties_te_plannen:
-        plekken = aantallen.get(attr,1)
-        benodigd += min(2, plekken)
-    # als er niet genoeg studenten zijn voor alle benodigde plekken, markeer tweede posities als taboe
-    if beschikbaar < benodigd:
-        for attr in attracties_te_plannen:
-            if aantallen.get(attr,0) >= 2:
-                rode_vakjes_per_uur[uur].add(attr)
+    # beschikbare studenten voor dit uur, pauzevlinders uitgesloten
+    beschikbaar = [s for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"]]
+    aantal_beschikbaar = len(beschikbaar)
+    
+    # tweede posities (aantallen >= 2) die voor dit uur minimaal nodig zijn
+    tweede_posities = [attr for attr in attracties_te_plannen if aantallen.get(attr,0) >= 2]
+    
+    # als er niet genoeg studenten zijn, markeer de overtollige tweede posities als taboe
+    if aantal_beschikbaar < len(tweede_posities):
+        for attr in tweede_posities[aantal_beschikbaar:]:
+            rode_vakjes_per_uur[uur].add(attr)
 
 # -----------------------------
 # Assign studenten
@@ -161,6 +161,7 @@ studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"]
 def assign_student(s):
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
     runs = contiguous_runs(uren)
+    
     for run in runs:
         L = len(run)
         if L == 0: continue
@@ -170,11 +171,12 @@ def assign_student(s):
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
             placed = False
+            
             # probeer attracties in kritieke volgorde
             for attr in attracties_te_plannen:
                 if attr not in s["attracties"]: continue
                 if attr in s["assigned_attracties"]: continue
-                # check of attractie in taboe-uren zit
+                # rode/taboe vakjes per uur respecteren
                 if any(attr in rode_vakjes_per_uur.get(h,set()) for h in block_hours):
                     continue
                 # check of er nog plek is
@@ -191,16 +193,18 @@ def assign_student(s):
                     s["assigned_attracties"].add(attr)
                     placed = True
                     break
-            # als nog steeds niet geplaatst, extra assignments op vrije, niet-taboe plekken
+            
+            # als nog niet geplaatst, extra assignments op vrije, niet-taboe plekken
             if not placed:
                 for h in block_hours:
                     vrije_attr = [a for a in attracties_te_plannen if a not in rode_vakjes_per_uur.get(h,set())]
                     if vrije_attr:
                         extra_assignments[h].append(s["naam"])
 
-# studenten toewijzen
+# Toewijzen van alle studenten
 for s in studenten_sorted:
     assign_student(s)
+
 
 
 
