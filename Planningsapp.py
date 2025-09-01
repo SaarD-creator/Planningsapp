@@ -146,19 +146,21 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
-# Tweede posities logic (taboe-uren)
+# Tweede posities logica – functioneel
 # -----------------------------
 # kolom BA (53), rijen 5-11
 tweede_posities = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
-rode_vakjes_per_uur = defaultdict(set)  # uur -> set van attr met te weinig studenten
 
+# Bereken per uur welke attracties "taboe" zijn omdat er te weinig studenten zijn
+rode_vakjes_per_uur = defaultdict(set)
 for uur in open_uren:
     beschikbaar = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
-    # aantal tweede posities die ingevuld moeten worden
     aantal_tweede = sum(1 for attr in tweede_posities if aantallen.get(attr,0) >= 2)
     if beschikbaar < aantal_tweede:
-        # markeer deze attracties/uur als taboe
-        rode_vakjes_per_uur[uur] = set(attr for attr in tweede_posities if aantallen.get(attr,0) >= 2)
+        # markeer deze attracties als taboe
+        for attr in tweede_posities:
+            if aantallen.get(attr,0) >= 2:
+                rode_vakjes_per_uur[uur].add(attr)
 
 # -----------------------------
 # Assign per student met respect voor rode vakjes
@@ -187,8 +189,8 @@ def assign_student(s):
             for attr in attracties_te_plannen:
                 if attr not in s["attracties"]: continue
                 if attr in s["assigned_attracties"]: continue
-                # taboe check: rode vakjes overslaan
-                if any(attr in rode_vakjes_per_uur.get(h, set()) for h in block_hours):
+                # respecteer rode vakjes
+                if any(attr in rode_vakjes_per_uur.get(h,set()) for h in block_hours):
                     continue
                 ruimte=True
                 for h in block_hours:
@@ -205,10 +207,10 @@ def assign_student(s):
                     break
             if not placed:
                 for h in block_hours:
-                    # extra_assignments respecteert ook rode vakjes
-                    if attr in rode_vakjes_per_uur.get(h,set()):
-                        continue
-                    extra_assignments[h].append(s["naam"])
+                    # respecteer rode vakjes
+                    vrije_attr = [a for a in attracties_te_plannen if a not in rode_vakjes_per_uur.get(h,set())]
+                    if vrije_attr:
+                        extra_assignments[h].append(s["naam"])
 
 for s in studenten_sorted:
     assign_student(s)
