@@ -301,67 +301,19 @@ studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"
 def current_student_hours(s):
     return sorted(s["assigned_hours"])
 
-# Nu: per student toewijzen
-for s in studenten_sorted:
-    # beschikbare uren (binnen open_uren en die de student vrij heeft)
-    uren = [u for u in s["uren_beschikbaar"] if u in open_uren and u not in s["assigned_hours"]]
-    if not uren:
-        continue
-    uren = sorted(uren)
-    # split in contiguouse runs
-    runs = contiguous_runs(uren)
-    # voor elk run: bepaal ideale blokverdeling met DP
-    for run in runs:
-        L = len(run)
-        if L == 0:
-            continue
-        block_sizes = partition_run_lengths(L)
-        start_idx = 0
-        for b in block_sizes:
-            block_hours = run[start_idx:start_idx+b]
-            start_idx += b
-            # zoek eerste attractie in gesorteerde attractielijst die s kan doen en waar voor ALLE uren in block nog ruimte is
-            assigned = False
-            for attr in sorted(attracties_te_plannen, key=lambda a: kritieke_score(a, studenten_workend)):
-                if attr not in s["attracties"]:
-                    continue
-                if attr in s["assigned_attracties"]:
-                    continue  # "hij is al eens op deze attractie gezet"
-                # check max per student per attr (niet verplicht, maar we houden limiet)
-                # count how many hours s already heeft op deze attr:
-                already_on_attr = sum(1 for h in s["assigned_hours"] if (s["naam"] in assigned_map.get((h,attr), [])))
-                if already_on_attr + len(block_hours) > MAX_PER_STUDENT_ATTR:
-                    continue
-                # check voor alle uren in block of er nog posities beschikbaar
-                ruimte = True
-                for h in block_hours:
-                    allowed = per_hour_positions.get(h, {}).get(attr, 0)
-                    used = per_hour_assigned_counts[h].get(attr, 0)
-                    if used >= allowed:
-                        ruimte = False
-                        break
-                    # ook check max consecutive: indien we voegen, zou de student te veel opeenvolgende uren krijgen?
-                if not ruimte:
-                    continue
-                # check max_consecutive constraint if we voegen deze block
-                hypothetische = sorted(set(current_student_hours(s) + block_hours))
-                if max_consecutive_hours(hypothetische) > MAX_CONSEC:
-                    continue
+# Enkel de eerste student toewijzen
+eerste_student = studenten[0]
+beschikbare_attracties = [a for a in attracties if not a['bezet']]
 
-                # Als alle checks ok -> toewijzen
-                for h in block_hours:
-                    assigned_map[(h, attr)].append(s["naam"])
-                    per_hour_assigned_counts[h][attr] += 1
-                    s["assigned_hours"].append(h)
-                s["assigned_attracties"].add(attr)
-                assigned = True
-                break
-
-            if not assigned:
-                # kon geen passende attractie vinden voor dit block -> laat onvervuld
-                # we schrijven niets; later bij iteratieve vullingen zou je swaps/extra studenten proberen
-                # voor nu markeer block als niet toegewezen (geen wijziging)
-                continue
+for i in range(min(eerste_student['aantal'], len(beschikbare_attracties))):
+    attractie = beschikbare_attracties[i]
+    planning.append({
+        "student": eerste_student['naam'],
+        "attractie": attractie['naam'],
+        "shift": eerste_student['shift']
+    })
+    # Markeer attractie als bezet
+    attractie['bezet'] = True
 
 # -----------------------------
 # Excel output (maak sheet met planning)
