@@ -178,6 +178,21 @@ extra_assignments = defaultdict(list)
 
 studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
 
+def max_consecutive_hours(hours):
+    """Bepaal de langste aaneengesloten reeks uren in een lijst."""
+    if not hours:
+        return 0
+    hours = sorted(set(hours))
+    max_run = run = 1
+    for i in range(1, len(hours)):
+        if hours[i] == hours[i-1] + 1:
+            run += 1
+            max_run = max(max_run, run)
+        else:
+            run = 1
+    return max_run
+
+
 def assign_student(s):
     """
     Plaats een student volgens:
