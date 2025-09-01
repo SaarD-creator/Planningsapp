@@ -256,42 +256,33 @@ for col_idx,uur in enumerate(sorted(open_uren),start=2):
     for r_offset, naam in enumerate(extra_assignments[uur]):
         ws_out.cell(rij_out+1+r_offset,col_idx,naam).alignment=center_align
 
-# -----------------------------
 # Tweede posities check & invullen
-# -----------------------------
-from openpyxl.styles import PatternFill
-
-# Rood voor niet ingevulde tweede posities
 rood_fill = PatternFill(start_color="FFC7CE", fill_type="solid")
 
-# Studenten beschikbaar per uur (zonder pauzevlinders)
-beschikbare_per_uur = {}
-for uur in open_uren:
-    beschikbare_per_uur[uur] = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
+# Tweede posities in Excel: kolom BA (53), rijen 5-11
+tweede_posities = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
 
-# Tweede posities in Excel staan in kolom BA, rijen 5 t/m 11
-# We lezen deze attracties
-tweede_posities = [ws.cell(rij, 53).value for rij in range(5,12) if ws.cell(rij,53).value]
+# Start rij in output sheet voor tweede posities (onder Extra)
+rij_tweede = rij_out + 1
 
-# Rij in output sheet waar tweede posities starten
-rij_tweede = rij_out + 2  # kleine offset om onder "Extra" te beginnen
-
-# Per uur invullen
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
-    studenten_over = beschikbare_per_uur[uur] - len([a for a in attracties_te_plannen if aantallen.get(a,1)>=2])
-    # Itereer over tweede posities
+    # Studenten beschikbaar op dit uur zonder pauzevlinders
+    beschikbaar = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
+    # Aantal tweede posities voor dit uur
+    aantal_tweede = sum(1 for attr in tweede_posities if aantallen.get(attr,0) >= 2)
+    # Verschil
+    verschil = beschikbaar - aantal_tweede
+    
     for pos_idx, attr in enumerate(tweede_posities, start=1):
         cel = ws_out.cell(rij_tweede + pos_idx - 1, col_idx)
-        # Vul als er genoeg studenten beschikbaar zijn
-        if studenten_over > 0:
-            # probeer een naam uit extra_assignments
+        if verschil >= 0:
+            # vul met naam uit extra_assignments als mogelijk
             if extra_assignments[uur]:
-                naam = extra_assignments[uur].pop(0)
-                cel.value = naam
-                cel.alignment = center_align
-            studenten_over -= 1
+                cel.value = extra_assignments[uur].pop(0)
+            cel.alignment = center_align
         else:
-            cel.value = ""  # leeg
+            # niet genoeg studenten → rood
+            cel.value = ""
             cel.fill = rood_fill
             cel.alignment = center_align
 
