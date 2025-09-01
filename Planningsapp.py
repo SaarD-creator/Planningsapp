@@ -1,4 +1,5 @@
 import streamlit as st
+import random
 from collections import defaultdict
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -31,11 +32,27 @@ def max_consecutive_hours(urenlijst):
     maxr = huidig = 1
     for i in range(1, len(urenlijst)):
         huidig = huidig+1 if urenlijst[i]==urenlijst[i-1]+1 else 1
-        maxr = max(maxr, huidig)
+        maxr = max(maxr,huidig)
     return maxr
 
-def greedy_blocks(L):
-    """Zoveel mogelijk blokken van 3, dan 2, dan 4, dan 1"""
+def contiguous_runs(sorted_hours):
+    runs=[]
+    if not sorted_hours: return runs
+    run=[sorted_hours[0]]
+    for h in sorted_hours[1:]:
+        if h==run[-1]+1:
+            run.append(h)
+        else:
+            runs.append(run)
+            run=[h]
+    runs.append(run)
+    return runs
+
+def flexible_blocks(L):
+    """
+    Flexibele blokken verdeling: voorkeur 3 > 2 > 4 > 1
+    Pas blokken aan om de hele shift van de student in te vullen
+    """
     blocks=[]
     while L>0:
         if L>=3:
@@ -44,25 +61,24 @@ def greedy_blocks(L):
         elif L==2:
             blocks.append(2)
             L-=2
-        elif L==4:
-            blocks.append(4)
-            L-=4
-        else:
+        elif L==1:
             blocks.append(1)
             L-=1
-    return blocks
-
-def contiguous_runs(sorted_hours):
-    runs=[]
-    if not sorted_hours: return runs
-    run=[sorted_hours[0]]
-    for h in sorted_hours[1:]:
-        if h==run[-1]+1: run.append(h)
+        else:  # L==4
+            blocks.append(4)
+            L-=4
+    # probeer optimalisatie: combineer 2+1 ->3
+    i=0
+    while i < len(blocks)-1:
+        if blocks[i]==2 and blocks[i+1]==1:
+            blocks[i]=3
+            blocks.pop(i+1)
+        elif blocks[i]==1 and blocks[i+1]==2:
+            blocks[i]=3
+            blocks.pop(i+1)
         else:
-            runs.append(run)
-            run=[h]
-    runs.append(run)
-    return runs
+            i+=1
+    return blocks
 
 # -----------------------------
 # Studenten inlezen
@@ -100,16 +116,15 @@ pauzevlinder_namen=[ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'
 
 def compute_pauze_hours(open_uren):
     if 10 in open_uren and 18 in open_uren:
-        return [h for h in open_uren if 12<=h<=17]
+        return [h for h in open_uren if 12 <= h <= 17]
     elif 12 in open_uren and 18 in open_uren:
-        return [h for h in open_uren if 13<=h<=18]
-    elif min(open_uren)>=14:
+        return [h for h in open_uren if 13 <= h <= 18]
+    elif min(open_uren) >= 14:
         return list(open_uren)
     else:
-        return [h for h in open_uren if 12<=h<=17]
+        return [h for h in open_uren if 12 <= h <= 17]
 
-required_pauze_hours = compute_pauze_hours(open_uren)
-
+required_pauze_hours=compute_pauze_hours(open_uren)
 for idx,pvnaam in enumerate(pauzevlinder_namen,start=1):
     if not pvnaam: continue
     for s in studenten:
@@ -140,29 +155,21 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
-# Per-uur positions & attractielijsten
+# Per-uur: positions
 # -----------------------------
-per_hour_positions={h:{attr:aantallen.get(attr,0) for attr in attracties_te_plannen} for h in open_uren}
-
-per_hour_attractielijsten={}
-for h in open_uren:
-    sorted_attrs=sorted(attracties_te_plannen,key=lambda a: kritieke_score(a,studenten_workend))
-    lst=[]
-    for a in sorted_attrs:
-        for _ in range(per_hour_positions[h][a]):
-            lst.append(a)
-    per_hour_attractielijsten[h]=lst
+per_hour_positions={uur:{attr:aantallen.get(attr,0) for attr in attracties_te_plannen} for uur in open_uren}
+per_hour_attractielijsten={uur: sorted(attracties_te_plannen,key=lambda a: kritieke_score(a,studenten_workend)) for uur in open_uren}
 
 # -----------------------------
-# ASSIGNMENT
+# Assignment
 # -----------------------------
-assigned_map = defaultdict(list)  # (uur, attr) -> list of namen
-per_hour_assigned_counts = {h:{a:0 for a in attracties_te_plannen} for h in open_uren}
+assigned_map = defaultdict(list)
+per_hour_assigned_counts = {uur:{a:0 for a in attracties_te_plannen} for uur in open_uren}
 MAX_CONSEC = 4
 MAX_PER_STUDENT_ATTR = 6
 extra_assignments = defaultdict(list)
 
-studenten_sorted = sorted(studenten_workend,key=lambda s:s["aantal_attracties"])  # min first
+studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])  # min first
 
 def assign_student_block(s, block_hours):
     uur0 = block_hours[0]
@@ -173,21 +180,19 @@ def assign_student_block(s, block_hours):
         if a not in seen:
             seen.add(a)
             cand_ordered.append(a)
-    for attr in cand_ordered:
-        if attr not in s["attracties"]: continue
+    for attr in cand_ordered + [a for a in s["attracties"] if a not in cand_ordered]:
         if attr in s["assigned_attracties"]: continue
         if any(assigned_map.get((h,attr)) for h in block_hours): continue
-        already_on_attr=sum(1 for h in s["assigned_hours"] if s["naam"] in assigned_map.get((h,attr),[]))
-        if already_on_attr + len(block_hours) > MAX_PER_STUDENT_ATTR: continue
+        already_on_attr = sum(1 for h in s["assigned_hours"] if s["naam"] in assigned_map.get((h,attr),[]))
+        if already_on_attr+len(block_hours) > MAX_PER_STUDENT_ATTR: continue
         ruimte=True
         for h in block_hours:
-            if per_hour_assigned_counts[h][attr]>=per_hour_positions[h][attr]:
+            if per_hour_assigned_counts[h].get(attr,0) >= per_hour_positions[h].get(attr,0):
                 ruimte=False
                 break
         if not ruimte: continue
-        hypothetische=sorted(set(s["assigned_hours"]+block_hours))
-        if max_consecutive_hours(hypothetische)>MAX_CONSEC: continue
-        # assign
+        hypothetische = sorted(set(s["assigned_hours"] + block_hours))
+        if max_consecutive_hours(hypothetische) > MAX_CONSEC: continue
         for h in block_hours:
             assigned_map[(h,attr)].append(s["naam"])
             per_hour_assigned_counts[h][attr]+=1
@@ -196,40 +201,19 @@ def assign_student_block(s, block_hours):
         return True
     return False
 
-# per student
 for s in studenten_sorted:
-    uren=[u for u in s["uren_beschikbaar"] if u in open_uren and u not in s["assigned_hours"]]
+    uren = sorted([u for u in s["uren_beschikbaar"] if u in open_uren and u not in s["assigned_hours"]])
     if not uren: continue
-    runs=contiguous_runs(uren)
+    runs = contiguous_runs(uren)
     for run in runs:
-        L=len(run)
+        L = len(run)
         if L==0: continue
-        block_sizes = greedy_blocks(L)
+        block_sizes = flexible_blocks(L)
         start_idx=0
         for b in block_sizes:
-            block_hours=run[start_idx:start_idx+b]
-            start_idx+=b
-            assigned=assign_student_block(s,block_hours)
-            if not assigned:
-                # fallback naar andere attracties
-                fallback_attrs=[a for a in s["attracties"] if a not in s["assigned_attracties"]]
-                for attr in fallback_attrs:
-                    ruimte=True
-                    for h in block_hours:
-                        if per_hour_assigned_counts[h].get(attr,0)>=per_hour_positions[h].get(attr,0):
-                            ruimte=False
-                            break
-                    hypothetische=sorted(set(s["assigned_hours"]+block_hours))
-                    if max_consecutive_hours(hypothetische)>MAX_CONSEC:
-                        ruimte=False
-                    if ruimte:
-                        for h in block_hours:
-                            assigned_map[(h,attr)].append(s["naam"])
-                            per_hour_assigned_counts[h][attr]+=1
-                            s["assigned_hours"].append(h)
-                        s["assigned_attracties"].add(attr)
-                        assigned=True
-                        break
+            block_hours = run[start_idx:start_idx+b]
+            start_idx += b
+            assigned = assign_student_block(s, block_hours)
             if not assigned:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
@@ -240,16 +224,13 @@ for s in studenten_sorted:
 wb_out=Workbook()
 ws_out=wb_out.active
 ws_out.title="Planning"
-
 header_fill=PatternFill(start_color="BDD7EE",fill_type="solid")
 attr_fill=PatternFill(start_color="E2EFDA",fill_type="solid")
 pv_fill=PatternFill(start_color="FFF2CC",fill_type="solid")
 extra_fill=PatternFill(start_color="FCE4D6",fill_type="solid")
 center_align=Alignment(horizontal="center",vertical="center")
-thin_border=Border(left=Side(style="thin"),right=Side(style="thin"),
-                   top=Side(style="thin"),bottom=Side(style="thin"))
+thin_border=Border(left=Side(style="thin"),right=Side(style="thin"),top=Side(style="thin"),bottom=Side(style="thin"))
 
-# header
 ws_out.cell(1,1,vandaag).font=Font(bold=True)
 for col_idx,uur in enumerate(sorted(open_uren),start=2):
     ws_out.cell(1,col_idx,f"{uur}:00").font=Font(bold=True)
@@ -267,8 +248,8 @@ for attr in attracties_te_plannen:
         ws_out.cell(rij_out,1).fill=attr_fill
         ws_out.cell(rij_out,1).border=thin_border
         for col_idx,uur in enumerate(sorted(open_uren),start=2):
-            assigned_list=assigned_map.get((uur,attr),[])
-            naam=assigned_list[pos_idx-1] if pos_idx-1<len(assigned_list) else ""
+            assigned_list = assigned_map.get((uur,attr),[])
+            naam = assigned_list[pos_idx-1] if pos_idx-1<len(assigned_list) else ""
             ws_out.cell(rij_out,col_idx,naam).alignment=center_align
             ws_out.cell(rij_out,col_idx).border=thin_border
         rij_out+=1
@@ -285,14 +266,14 @@ for pv_idx,pvnaam in enumerate(pauzevlinder_namen,start=1):
         ws_out.cell(rij_out,col_idx).border=thin_border
     rij_out+=1
 
-# extra studenten (per uur, meerdere namen onder elkaar)
+# extra-studenten (flexibel blok)
 rij_out+=1
 ws_out.cell(rij_out,1,"Extra").font=Font(bold=True)
 ws_out.cell(rij_out,1).fill=extra_fill
 ws_out.cell(rij_out,1).border=thin_border
 
 for col_idx,uur in enumerate(sorted(open_uren),start=2):
-    extra_list=extra_assignments.get(uur,[])
+    extra_list = extra_assignments.get(uur,[])
     for r_offset,n in enumerate(extra_list):
         ws_out.cell(rij_out+1+r_offset,col_idx,n).alignment=center_align
 
