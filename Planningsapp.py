@@ -1,6 +1,3 @@
-# beste tot nu toe met logische indeling
-
-
 import streamlit as st
 import random
 from collections import defaultdict
@@ -40,7 +37,6 @@ def max_consecutive_hours(urenlijst):
     return maxr
 
 def partition_run_lengths(L):
-    """Flexibele blokken: prioritair 3 uur, dan 2,4,1 om shift te vullen."""
     blocks = [3,2,4,1]
     dp = [(10**9, [])]*(L+1)
     dp[0] = (0, [])
@@ -150,9 +146,24 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
-# Assign per student
+# Tweede posities logic (taboe-uren)
 # -----------------------------
-assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
+# kolom BA (53), rijen 5-11
+tweede_posities = [ws.cell(rij,53).value for rij in range(5,12) if ws.cell(rij,53).value]
+rode_vakjes_per_uur = defaultdict(set)  # uur -> set van attr met te weinig studenten
+
+for uur in open_uren:
+    beschikbaar = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
+    # aantal tweede posities die ingevuld moeten worden
+    aantal_tweede = sum(1 for attr in tweede_posities if aantallen.get(attr,0) >= 2)
+    if beschikbaar < aantal_tweede:
+        # markeer deze attracties/uur als taboe
+        rode_vakjes_per_uur[uur] = set(attr for attr in tweede_posities if aantallen.get(attr,0) >= 2)
+
+# -----------------------------
+# Assign per student met respect voor rode vakjes
+# -----------------------------
+assigned_map = defaultdict(list)
 per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in open_uren}
 MAX_CONSEC = 4
 MAX_PER_STUDENT_ATTR = 6
@@ -173,10 +184,12 @@ def assign_student(s):
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
             placed=False
-            # probeer eerste beschikbare attractie
             for attr in attracties_te_plannen:
                 if attr not in s["attracties"]: continue
                 if attr in s["assigned_attracties"]: continue
+                # taboe check: rode vakjes overslaan
+                if any(attr in rode_vakjes_per_uur.get(h, set()) for h in block_hours):
+                    continue
                 ruimte=True
                 for h in block_hours:
                     if per_hour_assigned_counts[h][attr]>=aantallen.get(attr,1):
@@ -192,10 +205,14 @@ def assign_student(s):
                     break
             if not placed:
                 for h in block_hours:
+                    # extra_assignments respecteert ook rode vakjes
+                    if attr in rode_vakjes_per_uur.get(h,set()):
+                        continue
                     extra_assignments[h].append(s["naam"])
 
 for s in studenten_sorted:
     assign_student(s)
+
 
 # -----------------------------
 # Excel output
