@@ -177,6 +177,11 @@ per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in
 extra_assignments = defaultdict(list)
 
 studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
+
+for s in studenten:
+    s.setdefault("assigned_hours", [])
+    s.setdefault("assigned_attracties", set())
+
 # -----------------------------
 # Hulpfuncties
 # -----------------------------
