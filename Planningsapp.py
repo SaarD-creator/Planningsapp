@@ -65,6 +65,19 @@ def partition_run_lengths(L):
     return dp[L][3]
 
 
+per_hour_attractielijsten = {}
+for uur in open_uren:
+    # Sorteer attracties op basis van kritieke score (weinig kandidaten eerst)
+    sorted_attrs = sorted(attracties_te_plannen, key=lambda a: kritieke_score(a, studenten_workend))
+    lst = []
+    for a in sorted_attrs:
+        npos = per_hour_positions[uur].get(a, 0)
+        for _ in range(npos):
+            lst.append(a)
+    per_hour_attractielijsten[uur] = lst
+
+
+
 def contiguous_runs(sorted_hours):
     runs = []
     if not sorted_hours:
