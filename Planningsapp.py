@@ -36,7 +36,7 @@ def max_consecutive_hours(urenlijst):
     return maxr
 
 def partition_run_lengths(L):
-    """Flexibele blokken: prioritair 3-4-2-1"""
+    """Flexibele blokken: 3-4-2-1"""
     blocks = [3,4,2,1]
     dp = [(10**9, [])]*(L+1)
     dp[0] = (0, [])
@@ -143,23 +143,28 @@ studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_b
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
 # -----------------------------
-# Bereken vrije posities per uur (rode vakjes)
+# Rode vakjes per uur berekenen
 # -----------------------------
-vrij_per_uur = {}
+rode_vakjes_per_uur = {}
 for uur in open_uren:
-    beschikbaar = [s for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"]]
-    aantal_beschikbaar = len(beschikbaar)
+    # beschikbare studenten (pauzevlinders uitgesloten)
+    beschikbare_studenten = [s for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"]]
+    n_studenten = len(beschikbare_studenten)
+    
+    # tweede posities (aantallen >=2)
     tweede_posities = [attr for attr in attracties_te_plannen if aantallen.get(attr,0) >= 2]
+    n_tweede_posities = len(tweede_posities)
+    
     rode_vakjes = set()
-    if aantal_beschikbaar < len(tweede_posities):
-        rode_vakjes = set(tweede_posities[aantal_beschikbaar:])
-    vrij_per_uur[uur] = {}
-    for attr in attracties_te_plannen:
-        max_plekken = aantallen.get(attr,1)
-        if attr in rode_vakjes:
-            vrij_per_uur[uur][attr] = 0
-        else:
-            vrij_per_uur[uur][attr] = max_plekken
+    if n_studenten <= n_tweede_posities:
+        # alle tweede posities rood
+        rode_vakjes = set(tweede_posities)
+    else:
+        extra = n_studenten - n_tweede_posities
+        prioriteit = [ws[f'BA{r}'].value for r in range(5,12) if ws[f'BA{r}'].value]
+        rode_vakjes = set([a for a in tweede_posities if a not in prioriteit[:extra]])
+    
+    rode_vakjes_per_uur[uur] = rode_vakjes
 
 # -----------------------------
 # Studenten toewijzen
@@ -175,7 +180,7 @@ def assign_student(s):
     for run in runs:
         L = len(run)
         if L==0: continue
-        blocks = partition_run_lengths(L)
+        blocks = partition_run_lengths(L)  # 3-4-2-1
         start_idx = 0
         for b in blocks:
             block_hours = run[start_idx:start_idx+b]
@@ -184,22 +189,22 @@ def assign_student(s):
             for attr in attracties_te_plannen:
                 if attr not in s["attracties"]: continue
                 if attr in s["assigned_attracties"]: continue
-                if all(vrij_per_uur[h].get(attr,0) > 0 for h in block_hours):
+                if all(attr not in rode_vakjes_per_uur[h] for h in block_hours):
                     for h in block_hours:
                         assigned_map[(h,attr)].append(s["naam"])
-                        vrij_per_uur[h][attr] -= 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
                     placed = True
                     break
             if not placed:
                 for h in block_hours:
-                    vrije_attr = [a for a in attracties_te_plannen if vrij_per_uur[h].get(a,0) > 0]
+                    vrije_attr = [a for a in attracties_te_plannen if a not in rode_vakjes_per_uur[h]]
                     if vrije_attr:
                         extra_assignments[h].append(s["naam"])
 
 for s in studenten_sorted:
     assign_student(s)
+
 
 # -----------------------------
 # Excel output
