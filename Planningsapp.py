@@ -143,6 +143,7 @@ for uur in open_uren:
     beschikbaar = sum(1 for s in studenten_workend if uur in s["uren_beschikbaar"] and not s["is_pauzevlinder"])
     aantal_tweede = sum(1 for attr in tweede_posities if aantallen.get(attr,0)>=2)
     if beschikbaar < aantal_tweede:
+        # taboe voor tweede posities die niet genoeg studenten hebben
         for attr in tweede_posities:
             if aantallen.get(attr,0)>=2:
                 rode_vakjes_per_uur[uur].add(attr)
@@ -150,7 +151,7 @@ for uur in open_uren:
 # -----------------------------
 # Assign studenten
 # -----------------------------
-assigned_map = defaultdict(list)
+assigned_map = defaultdict(list)  # (uur, attr) -> list van studenten
 per_hour_assigned_counts = {uur:{a:0 for a in attracties_te_plannen} for uur in open_uren}
 extra_assignments = defaultdict(list)
 studenten_sorted = sorted(studenten_workend,key=lambda s:s["aantal_attracties"])
@@ -162,38 +163,64 @@ def assign_student(s):
         L = len(run)
         if L==0: continue
         blocks = partition_run_lengths(L)
-        start_idx=0
+        start_idx = 0
         for b in blocks:
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
-            placed=False
-            for attr in attracties_te_plannen:
+            placed = False
+            # eerst tweede posities invullen volgens BA5-BA11
+            for attr in tweede_posities:
                 if attr not in s["attracties"]: continue
                 if attr in s["assigned_attracties"]: continue
                 # rode vakjes respecteren
                 if any(attr in rode_vakjes_per_uur.get(h,set()) for h in block_hours):
                     continue
-                ruimte=True
+                # check ruimte
+                ruimte = True
                 for h in block_hours:
-                    if per_hour_assigned_counts[h][attr]>=aantallen.get(attr,1):
-                        ruimte=False
+                    if per_hour_assigned_counts[h][attr] >= aantallen.get(attr,1):
+                        ruimte = False
                         break
                 if ruimte:
                     for h in block_hours:
                         assigned_map[(h,attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr]+=1
+                        per_hour_assigned_counts[h][attr] += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
-                    placed=True
+                    placed = True
                     break
+            # als niet geplaatst, normale attracties
+            if not placed:
+                for attr in attracties_te_plannen:
+                    if attr not in s["attracties"]: continue
+                    if attr in s["assigned_attracties"]: continue
+                    # rode vakjes respecteren
+                    if any(attr in rode_vakjes_per_uur.get(h,set()) for h in block_hours):
+                        continue
+                    ruimte = True
+                    for h in block_hours:
+                        if per_hour_assigned_counts[h][attr] >= aantallen.get(attr,1):
+                            ruimte = False
+                            break
+                    if ruimte:
+                        for h in block_hours:
+                            assigned_map[(h,attr)].append(s["naam"])
+                            per_hour_assigned_counts[h][attr] += 1
+                            s["assigned_hours"].append(h)
+                        s["assigned_attracties"].add(attr)
+                        placed = True
+                        break
+            # als nog steeds niet geplaatst, extra assignments
             if not placed:
                 for h in block_hours:
-                    vrije_attr=[a for a in attracties_te_plannen if a not in rode_vakjes_per_uur.get(h,set())]
+                    vrije_attr = [a for a in attracties_te_plannen if a not in rode_vakjes_per_uur.get(h,set())]
                     if vrije_attr:
                         extra_assignments[h].append(s["naam"])
 
+# studenten toewijzen
 for s in studenten_sorted:
     assign_student(s)
+
 
 
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
