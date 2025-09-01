@@ -172,87 +172,112 @@ for uur in open_uren:
             lst.append(a)
     per_hour_attractielijsten[uur]=lst
 
+
 # -----------------------------
-# Assignment met debug
+# ASSIGNMENT LOOP – FLEXIBEL BLOKKEN
 # -----------------------------
-assigned_map = defaultdict(list)
-per_hour_assigned_counts = {uur:{a:0 for a in attracties_te_plannen} for uur in open_uren}
+assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
+per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in open_uren}
 MAX_CONSEC = 4
 MAX_PER_STUDENT_ATTR = 6
+extra_assignments = defaultdict(list)  # uur -> list of names
 
-studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])
+studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])  # min first
 
+def assign_student_block(s, block_hours):
+    """
+    Probeer student s toe te wijzen aan block_hours
+    return True als toegewezen, False anders
+    """
+    # Attracties in volgorde van het eerste uur van het block
+    uur0 = block_hours[0]
+    candidate_attrs = per_hour_attractielijsten.get(uur0, [])
+    seen = set()
+    cand_ordered = []
+    for a in candidate_attrs:
+        if a not in seen:
+            seen.add(a)
+            cand_ordered.append(a)
+    
+    for attr in cand_ordered:
+        if attr not in s["attracties"]: 
+            continue
+        if attr in s["assigned_attracties"]: 
+            continue
+        # check bestaande blokken op deze attractie
+        if any(assigned_map.get((h,attr)) for h in block_hours):
+            continue
+        # max per attr
+        already_on_attr = sum(1 for h in s["assigned_hours"] if s["naam"] in assigned_map.get((h,attr),[]))
+        if already_on_attr + len(block_hours) > MAX_PER_STUDENT_ATTR:
+            continue
+        # capaciteit check
+        ruimte = True
+        for h in block_hours:
+            allowed = per_hour_positions.get(h, {}).get(attr,0)
+            used = per_hour_assigned_counts[h].get(attr,0)
+            if used >= allowed:
+                ruimte = False
+                break
+        if not ruimte:
+            continue
+        # max consecutive check
+        hypothetische = sorted(set(s["assigned_hours"] + block_hours))
+        if max_consecutive_hours(hypothetische) > MAX_CONSEC:
+            continue
+        # alles ok -> toewijzen
+        for h in block_hours:
+            assigned_map[(h,attr)].append(s["naam"])
+            per_hour_assigned_counts[h][attr] += 1
+            s["assigned_hours"].append(h)
+        s["assigned_attracties"].add(attr)
+        return True
+    return False
+
+# per student
 for s in studenten_sorted:
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren and u not in s["assigned_hours"]]
-    if not uren: 
-        print(f"{s['naam']} heeft geen beschikbare uren")
+    if not uren:
         continue
     uren = sorted(uren)
     runs = contiguous_runs(uren)
-    
     for run in runs:
         L = len(run)
         if L == 0: continue
-        
-        # partition + flexibele aanpassing
+        # probeer flexibele partitioning: 3 > 2 > 4 > 1
         block_sizes = partition_run_lengths(L)
         start_idx = 0
-        
-        for b_idx, b in enumerate(block_sizes):
+        for i, b in enumerate(block_sizes):
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
-            assigned = False
-            
-            uur0 = block_hours[0]
-            candidate_attrs = per_hour_attractielijsten.get(uur0, [])
-            seen = set()
-            cand_ordered = []
-            for a in candidate_attrs:
-                if a not in seen:
-                    seen.add(a)
-                    cand_ordered.append(a)
-            
-            for attr in cand_ordered:
-                reasons = []
-                if attr not in s["attracties"]:
-                    reasons.append("niet in student-attracties")
-                    continue
-                if attr in s["assigned_attracties"]:
-                    reasons.append("attractie al toegewezen aan student")
-                    continue
-                if any(assigned_map.get((h,attr)) for h in block_hours):
-                    reasons.append("blok opzelfde attractie al bestaat")
-                    continue
-                already_on_attr = sum(1 for h in s["assigned_hours"] if s["naam"] in assigned_map.get((h,attr),[]))
-                if already_on_attr + len(block_hours) > MAX_PER_STUDENT_ATTR:
-                    reasons.append("max per student per attractie overschreden")
-                    continue
-                ruimte = True
-                for h in block_hours:
-                    allowed = per_hour_positions.get(h, {}).get(attr,0)
-                    used = per_hour_assigned_counts[h].get(attr,0)
-                    if used >= allowed:
-                        ruimte = False
-                        reasons.append(f"capaciteit vol op uur {h}")
-                        break
-                hypothetische = sorted(set(s["assigned_hours"] + block_hours))
-                if max_consecutive_hours(hypothetische) > MAX_CONSEC:
-                    reasons.append("max consecutive overschreden")
-                    continue
-                
-                # assign block
-                for h in block_hours:
-                    assigned_map[(h,attr)].append(s["naam"])
-                    per_hour_assigned_counts[h][attr] += 1
-                    s["assigned_hours"].append(h)
-                s["assigned_attracties"].add(attr)
-                assigned = True
-                print(f"Toegewezen {s['naam']} op {attr} uren {block_hours}")
-                break
-            
+            assigned = assign_student_block(s, block_hours)
             if not assigned:
-                print(f"{s['naam']} kon block {block_hours} niet toegewezen krijgen. Redenen: {reasons}")
-                # hier kun je optioneel block iets inkorten of verlengen tot max 4 uur
+                # fallback: probeer attr buiten eerste uur attractielijst
+                fallback_attrs = [a for a in s["attracties"] if a not in s["assigned_attracties"]]
+                for attr in fallback_attrs:
+                    ruimte = True
+                    for h in block_hours:
+                        allowed = per_hour_positions.get(h, {}).get(attr,0)
+                        used = per_hour_assigned_counts[h].get(attr,0)
+                        if used >= allowed:
+                            ruimte = False
+                            break
+                    hypothetische = sorted(set(s["assigned_hours"] + block_hours))
+                    if max_consecutive_hours(hypothetische) > MAX_CONSEC:
+                        ruimte = False
+                    if ruimte:
+                        for h in block_hours:
+                            assigned_map[(h,attr)].append(s["naam"])
+                            per_hour_assigned_counts[h][attr] += 1
+                            s["assigned_hours"].append(h)
+                        s["assigned_attracties"].add(attr)
+                        assigned = True
+                        break
+            # als nog steeds niet geplaatst, zet in extra
+            if not assigned:
+                for h in block_hours:
+                    extra_assignments[h].append(s["naam"])
+
 
 
 # -----------------------------
