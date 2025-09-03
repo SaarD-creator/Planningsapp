@@ -128,30 +128,68 @@ for idx,pvnaam in enumerate(pauzevlinder_namen,start=1):
             break
 
 # -----------------------------
-# Attracties & aantallen
+# Attracties & aantallen (raw)
 # -----------------------------
-aantallen={}
-attracties_te_plannen=[]
-for kol in range(47,65):
-    naam=ws.cell(1,kol).value
+aantallen_raw = {}
+attracties_te_plannen = []
+for kol in range(47, 65):  # AU-BL
+    naam = ws.cell(1, kol).value
     if naam:
-        try: aantal=int(ws.cell(2,kol).value)
-        except: aantal=0
-        aantallen[naam]=max(0,min(2,aantal))
-        if aantallen[naam]>=1:
+        try:
+            aantal = int(ws.cell(2, kol).value)
+        except:
+            aantal = 0
+        aantallen_raw[naam] = max(0, min(2, aantal))
+        if aantallen_raw[naam] >= 1:
             attracties_te_plannen.append(naam)
 
-def kritieke_score(attr,studenten_list):
+# Priority order for second spots (column BA, rows 5-11)
+second_priority_order = [
+    ws["BA" + str(rij)].value for rij in range(5, 12)
+    if ws["BA" + str(rij)].value
+]
+
+# -----------------------------
+# Compute aantallen per hour + red spots
+# -----------------------------
+aantallen = {uur: {a: 1 for a in attracties_te_plannen} for uur in open_uren}
+red_spots = {uur: set() for uur in open_uren}
+
+for uur in open_uren:
+    # Students available this hour (excluding pauzevlinders on duty)
+    student_count = sum(
+        1 for s in studenten
+        if uur in s["uren_beschikbaar"] and not (
+            s["is_pauzevlinder"] and uur in required_pauze_hours
+        )
+    )
+    # Attracties (baseline = all with >=1 spot)
+    attractie_count = sum(1 for a in attracties_te_plannen if aantallen_raw[a] >= 1)
+    extra_spots = student_count - attractie_count
+
+    # Allocate second spots by priority
+    for attr in second_priority_order:
+        if attr in aantallen_raw and aantallen_raw[attr] == 2:
+            if extra_spots > 0:
+                aantallen[uur][attr] = 2
+                extra_spots -= 1
+            else:
+                red_spots[uur].add(attr)
+
+def kritieke_score(attr, studenten_list):
     return sum(1 for s in studenten_list if attr in s["attracties"])
 
-studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])]
-attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
+studenten_workend = [
+    s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])
+]
+attracties_te_plannen.sort(key=lambda a: kritieke_score(a, studenten_workend))
+
 
 # -----------------------------
 # Assign per student
 # -----------------------------
 assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
-per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in open_uren}
+per_hour_assigned_counts = {uur: {a: 0 for a in attracties_te_plannen} for uur in open_uren}
 MAX_CONSEC = 4
 MAX_PER_STUDENT_ATTR = 6
 extra_assignments = defaultdict(list)
@@ -177,8 +215,11 @@ def assign_student(s):
                 if attr in s["assigned_attracties"]: continue
                 ruimte=True
                 for h in block_hours:
-                    if per_hour_assigned_counts[h][attr]>=aantallen.get(attr,1):
+                    if attr in red_spots.get(h, set()):
                         ruimte=False
+                        break
+                    if per_hour_assigned_counts[h][attr] >= aantallen[h].get(attr, 1):
+                        ruimte = False
                         break
                 if ruimte:
                     for h in block_hours:
@@ -227,10 +268,18 @@ for attr in attracties_te_plannen:
         ws_out.cell(rij_out,1).fill=attr_fill
         ws_out.cell(rij_out,1).border=thin_border
         for col_idx,uur in enumerate(sorted(open_uren),start=2):
-            naam=assigned_map.get((uur,attr),[])
-            naam=naam[pos_idx-1] if pos_idx-1<len(naam) else ""
-            ws_out.cell(rij_out,col_idx,naam).alignment=center_align
-            ws_out.cell(rij_out,col_idx).border=thin_border
+            # Red fill for unassigned second spots
+            red_fill = PatternFill(start_color="D9D9D9", fill_type="solid")
+            
+            if attr in red_spots.get(uur, set()) and pos_idx == 2:
+                ws_out.cell(rij_out, col_idx, "").fill = red_fill
+                ws_out.cell(rij_out, col_idx).border = thin_border
+            else:
+                naam = assigned_map.get((uur, attr), [])
+                naam = naam[pos_idx-1] if pos_idx-1 < len(naam) else ""
+                ws_out.cell(rij_out, col_idx, naam).alignment = center_align
+                ws_out.cell(rij_out, col_idx).border = thin_border
+
         rij_out+=1
 
 # Pauzevlinders
