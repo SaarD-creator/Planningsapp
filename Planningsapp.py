@@ -224,13 +224,14 @@ def assign_student(s):
                     if attr in red_spots.get(h, set()):
                         ruimte = False
                         break
-                    if per_hour_assigned_counts[h].get(attr, 0) >= aantallen[h].get(attr, 1):
+                    if per_hour_assigned_counts.get(h, {}).get(attr, 0) >= aantallen.get(h, {}).get(attr, 1):
                         ruimte = False
                         break
                 if ruimte:
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
-                        per_hour_assigned_counts[h].get(attr, 0) += 1
+                        per_hour_assigned_counts.setdefault(h, {}).setdefault(attr, 0)
+                        per_hour_assigned_counts[h][attr] += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
                     placed = True
@@ -246,12 +247,13 @@ def assign_student(s):
                         if attr in red_spots.get(h, set()):
                             ruimte = False
                             break
-                        if per_hour_assigned_counts[h].get(attr, 0) >= aantallen[h].get(attr, 1):
+                        if per_hour_assigned_counts.get(h, {}).get(attr, 0) >= aantallen.get(h, {}).get(attr, 1):
                             ruimte = False
                             break
                     if ruimte:
                         for h in block_hours:
                             assigned_map[(h, attr)].append(s["naam"])
+                            per_hour_assigned_counts.setdefault(h, {}).setdefault(attr, 0)
                             per_hour_assigned_counts[h][attr] += 1
                             s["assigned_hours"].append(h)
                         s["assigned_attracties"].add(attr)
@@ -264,6 +266,7 @@ def assign_student(s):
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
+
 
 
 # -----------------------------
