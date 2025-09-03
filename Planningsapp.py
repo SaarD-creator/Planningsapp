@@ -200,41 +200,79 @@ def assign_student(s):
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
     uren = sorted(uren)
     runs = contiguous_runs(uren)
+
     for run in runs:
         L = len(run)
-        if L==0: continue
+        if L == 0:
+            continue
         block_sizes = partition_run_lengths(L)
         start_idx = 0
+
         for b in block_sizes:
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
-            placed=False
-            # probeer eerste beschikbare attractie
-            for attr in attracties_te_plannen:
-                if attr not in s["attracties"]: continue
-                if attr in s["assigned_attracties"]: continue
-                ruimte=True
+            placed = False
+
+            # ----------------------
+            # 1. Try preferred attracties
+            # ----------------------
+            for attr in s["attracties"]:
+                if attr in s["assigned_attracties"]:
+                    continue
+                ruimte = True
                 for h in block_hours:
                     if attr in red_spots.get(h, set()):
-                        ruimte=False
+                        ruimte = False
                         break
                     if per_hour_assigned_counts[h][attr] >= aantallen[h].get(attr, 1):
                         ruimte = False
                         break
                 if ruimte:
                     for h in block_hours:
-                        assigned_map[(h,attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr]+=1
+                        assigned_map[(h, attr)].append(s["naam"])
+                        per_hour_assigned_counts[h][attr] += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
-                    placed=True
+                    placed = True
                     break
+
+            # ----------------------
+            # 2. If none of preferred worked, try any non-red attractie
+            # ----------------------
+            if not placed:
+                for attr in attracties_te_plannen:
+                    ruimte = True
+                    for h in block_hours:
+                        if attr in red_spots.get(h, set()):
+                            ruimte = False
+                            break
+                        if per_hour_assigned_counts[h][attr] >= aantallen[h].get(attr, 1):
+                            ruimte = False
+                            break
+                    if ruimte:
+                        for h in block_hours:
+                            assigned_map[(h, attr)].append(s["naam"])
+                            per_hour_assigned_counts[h][attr] += 1
+                            s["assigned_hours"].append(h)
+                        s["assigned_attracties"].add(attr)
+                        placed = True
+                        break
+
+            # ----------------------
+            # 3. If still no place, mark as Extra
+            # ----------------------
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
 
+
+# -----------------------------
+# Assign all students (sorted)
+# -----------------------------
+studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
 for s in studenten_sorted:
     assign_student(s)
+
 
 # -----------------------------
 # Excel output
