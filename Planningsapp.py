@@ -224,7 +224,7 @@ def assign_student(s):
                     if attr in red_spots.get(h, set()):
                         ruimte = False
                         break
-                    if per_hour_assigned_counts[h][attr] >= aantallen[h].get(attr, 1):
+                    if per_hour_assigned_counts[h].get(attr, 0) >= aantallen[h].get(attr, 1):
                         ruimte = False
                         break
                 if ruimte:
@@ -246,7 +246,7 @@ def assign_student(s):
                         if attr in red_spots.get(h, set()):
                             ruimte = False
                             break
-                        if per_hour_assigned_counts[h][attr] >= aantallen[h].get(attr, 1):
+                        if per_hour_assigned_counts[h].get(attr, 0) >= aantallen[h].get(attr, 1):
                             ruimte = False
                             break
                     if ruimte:
