@@ -152,22 +152,26 @@ second_priority_order = [
 # -----------------------------
 # Compute aantallen per hour + red spots
 # -----------------------------
-aantallen = {uur: {a: 1 for a in attracties_te_plannen} for uur in open_uren}
-red_spots = {uur: set() for uur in open_uren}
+aantallen = {}
+red_spots = {}
 
 for uur in open_uren:
-    # Students available this hour (excluding pauzevlinders on duty)
+    # Studenten die dit uur kunnen werken (excl. pauzevlinders tijdens hun pauze)
     student_count = sum(
         1 for s in studenten
-        if uur in s["uren_beschikbaar"] and not (
-            s["is_pauzevlinder"] and uur in required_pauze_hours
-        )
+        if uur in s["uren_beschikbaar"]
+        and not (s["is_pauzevlinder"] and uur in required_pauze_hours)
     )
-    # Attracties (baseline = all with >=1 spot)
-    attractie_count = sum(1 for a in attracties_te_plannen if aantallen_raw[a] >= 1)
-    extra_spots = student_count - attractie_count
 
-    # Allocate second spots by priority
+    # Basis = alle attracties die minstens 1 plek hebben
+    aantallen[uur] = {a: 1 for a in attracties_te_plannen if aantallen_raw[a] >= 1}
+    red_spots[uur] = set()
+
+    # Bereken hoeveel extra plekken er mogelijk zijn
+    base_count = len(aantallen[uur])
+    extra_spots = student_count - base_count
+
+    # Geef tweede plekken volgens prioriteitslijst
     for attr in second_priority_order:
         if attr in aantallen_raw and aantallen_raw[attr] == 2:
             if extra_spots > 0:
@@ -176,25 +180,20 @@ for uur in open_uren:
             else:
                 red_spots[uur].add(attr)
 
-def kritieke_score(attr, studenten_list):
-    return sum(1 for s in studenten_list if attr in s["attracties"])
-
-studenten_workend = [
-    s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])
-]
-attracties_te_plannen.sort(key=lambda a: kritieke_score(a, studenten_workend))
+# Initializeer counters met dezelfde structuur
+per_hour_assigned_counts = {uur: {a: 0 for a in aantallen[uur]} for uur in open_uren}
 
 
 # -----------------------------
 # Assign per student
 # -----------------------------
 assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
-per_hour_assigned_counts = {uur: {a: 0 for a in attracties_te_plannen} for uur in open_uren}
+extra_assignments = defaultdict(list)
 MAX_CONSEC = 4
 MAX_PER_STUDENT_ATTR = 6
-extra_assignments = defaultdict(list)
 
-studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])
+studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
+
 
 def assign_student(s):
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
@@ -214,7 +213,7 @@ def assign_student(s):
             placed = False
 
             # ----------------------
-            # 1. Try preferred attracties
+            # 1. Probeer eigen attracties
             # ----------------------
             for attr in s["attracties"]:
                 if attr in s["assigned_attracties"]:
@@ -230,7 +229,6 @@ def assign_student(s):
                 if ruimte:
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
-                        per_hour_assigned_counts.setdefault(h, {}).setdefault(attr, 0)
                         per_hour_assigned_counts[h][attr] += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
@@ -238,7 +236,7 @@ def assign_student(s):
                     break
 
             # ----------------------
-            # 2. If none of preferred worked, try any non-red attractie
+            # 2. Anders probeer een andere vrije attractie
             # ----------------------
             if not placed:
                 for attr in attracties_te_plannen:
@@ -253,7 +251,6 @@ def assign_student(s):
                     if ruimte:
                         for h in block_hours:
                             assigned_map[(h, attr)].append(s["naam"])
-                            per_hour_assigned_counts.setdefault(h, {}).setdefault(attr, 0)
                             per_hour_assigned_counts[h][attr] += 1
                             s["assigned_hours"].append(h)
                         s["assigned_attracties"].add(attr)
@@ -261,20 +258,17 @@ def assign_student(s):
                         break
 
             # ----------------------
-            # 3. If still no place, mark as Extra
+            # 3. Als niets lukt, Extra
             # ----------------------
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
 
 
-
-# -----------------------------
-# Assign all students (sorted)
-# -----------------------------
-studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
+# Run assignment
 for s in studenten_sorted:
     assign_student(s)
+
 
 
 # -----------------------------
