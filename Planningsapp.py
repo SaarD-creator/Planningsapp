@@ -1,5 +1,3 @@
-# beste tot nu toe met logische indeling
-
 
 import streamlit as st
 import random
@@ -23,25 +21,39 @@ if not uploaded_file:
     st.warning("Upload eerst een Excel-bestand om verder te gaan.")
     st.stop()
 
-wb = load_workbook(uploaded_file)
+wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
 
 # -----------------------------
 # Hulpfuncties
 # -----------------------------
-def max_consecutive_hours(hours):
-    """Bepaal de langste aaneengesloten reeks uren in een lijst."""
-    if not hours:
+def max_consecutive_hours(urenlijst):
+    if not urenlijst:
         return 0
-    hours = sorted(set(hours))
-    max_run = run = 1
-    for i in range(1, len(hours)):
-        if hours[i] == hours[i-1] + 1:
-            run += 1
-            max_run = max(max_run, run)
-        else:
-            run = 1
-    return max_run
+    urenlijst = sorted(set(urenlijst))
+    maxr = huidig = 1
+    for i in range(1, len(urenlijst)):
+        huidig = huidig + 1 if urenlijst[i] == urenlijst[i-1] + 1 else 1
+        maxr = max(maxr, huidig)
+    return maxr
+
+def partition_run_lengths(L):
+    """Flexibele blokken: prioritair 3 uur, dan 2,4,1 om shift te vullen."""
+    blocks = [3,2,4,1]
+    dp = [(10**9, [])]*(L+1)
+    dp[0] = (0, [])
+    for i in range(1, L+1):
+        best = (10**9, [])
+        for b in blocks:
+            if i-b < 0:
+                continue
+            prev_ones, prev_blocks = dp[i-b]
+            new_blocks = prev_blocks + [b]
+            ones = prev_ones + (1 if b==1 else 0)
+            if ones < best[0]:
+                best = (ones, new_blocks)
+        dp[i] = best
+    return dp[L][1]
 
 def contiguous_runs(sorted_hours):
     runs=[]
@@ -56,19 +68,6 @@ def contiguous_runs(sorted_hours):
             run=[h]
     runs.append(run)
     return runs
-
-def partition_run_lengths(L):
-    """Blokken van 3-4-2-1 als voorkeur, ondergeschikt aan andere eisen"""
-    blocks = [3,4,2,1]
-    result = []
-    i = 0
-    while L > 0:
-        for b in blocks:
-            if b <= L:
-                result.append(b)
-                L -= b
-                break
-    return result
 
 # -----------------------------
 # Studenten inlezen
@@ -92,8 +91,7 @@ for rij in range(2,500):
         "is_pauzevlinder":False,
         "pv_number":None,
         "assigned_attracties":set(),
-        "assigned_hours":[],
-        "kan": []
+        "assigned_hours":[]
     })
 
 # -----------------------------
@@ -149,89 +147,53 @@ def kritieke_score(attr,studenten_list):
 studenten_workend=[s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])]
 attracties_te_plannen.sort(key=lambda a: kritieke_score(a,studenten_workend))
 
-# Vul 'kan' lijst per student
-for s in studenten_workend:
-    s["kan"] = [a for a in s["attracties"] if a in attracties_te_plannen]
-
 # -----------------------------
-# Rode vakjes per uur berekenen
+# Assign per student
 # -----------------------------
-def maak_rode_vakjes(studenten, aantallen, open_uren):
-    rode_vakjes = {h: set() for h in open_uren}
-    for h in open_uren:
-        actieve_students = [s for s in studenten if h in s["uren_beschikbaar"] and not s["is_pauzevlinder"]]
-        n_students = len(actieve_students)
-        attracties_2_posities = [a for a in aantallen if aantallen[a] >= 2]
-        n_attracties = len(attracties_2_posities)
-        if n_students <= n_attracties:
-            for a in attracties_2_posities:
-                rode_vakjes[h].add((a,2))
-    return rode_vakjes
-
-rode_vakjes = maak_rode_vakjes(studenten_workend, aantallen, open_uren)
-
-# -----------------------------
-# Initialiseer toewijzingsstructuren
-# -----------------------------
-assigned_map = {}  # (uur, attractie, positie) -> student
-per_hour_assigned_counts = {uur: {a: 0 for a in aantallen} for uur in open_uren}
-extra_assignments = {uur: [] for uur in open_uren}
-
-# -----------------------------
-# CONSTANTEN
-# -----------------------------
+assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
+per_hour_assigned_counts = {uur: {a:0 for a in attracties_te_plannen} for uur in open_uren}
 MAX_CONSEC = 4
-BLOK_VOLGORDE = [3,4,2,1]
+MAX_PER_STUDENT_ATTR = 6
+extra_assignments = defaultdict(list)
 
-# -----------------------------
-# Functie om student in te plannen
-# -----------------------------
-def assign_student(student):
-    # Sorteer uren op beschikbaarheid
-    uren_lijst = sorted(student["uren_beschikbaar"])
-    runs = contiguous_runs(uren_lijst)
+studenten_sorted = sorted(studenten_workend, key=lambda s:s["aantal_attracties"])
+
+def assign_student(s):
+    uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
+    uren = sorted(uren)
+    runs = contiguous_runs(uren)
     for run in runs:
-        run_len = len(run)
-        blokken = partition_run_lengths(run_len)
+        L = len(run)
+        if L==0: continue
+        block_sizes = partition_run_lengths(L)
         start_idx = 0
-        for b in blokken:
-            uren_blok = run[start_idx:start_idx+b]
+        for b in block_sizes:
+            block_hours = run[start_idx:start_idx+b]
             start_idx += b
             placed=False
-            # Probeer attracties van de student
-            for attr in student["kan"]:
-                ruimte = True
-                for u in uren_blok:
-                    pos = per_hour_assigned_counts[u][attr] + 1
-                    if pos > aantallen[attr] or (attr,pos) in rode_vakjes[u]:
-                        ruimte = False
+            # probeer eerste beschikbare attractie
+            for attr in attracties_te_plannen:
+                if attr not in s["attracties"]: continue
+                if attr in s["assigned_attracties"]: continue
+                ruimte=True
+                for h in block_hours:
+                    if per_hour_assigned_counts[h][attr]>=aantallen.get(attr,1):
+                        ruimte=False
                         break
-                if not ruimte:
-                    continue
-                # Plaats student
-                for u in uren_blok:
-                    pos = per_hour_assigned_counts[u][attr] + 1
-                    assigned_map[(u,attr,pos)] = student["naam"]
-                    per_hour_assigned_counts[u][attr] +=1
-                    student["assigned_hours"].append(u)
-                student["assigned_attracties"].add(attr)
-                placed=True
-                break
+                if ruimte:
+                    for h in block_hours:
+                        assigned_map[(h,attr)].append(s["naam"])
+                        per_hour_assigned_counts[h][attr]+=1
+                        s["assigned_hours"].append(h)
+                    s["assigned_attracties"].add(attr)
+                    placed=True
+                    break
             if not placed:
-                # Zet uren bij extra
-                for u in uren_blok:
-                    extra_assignments[u].append(student["naam"])
-                    student["assigned_hours"].append(u)
+                for h in block_hours:
+                    extra_assignments[h].append(s["naam"])
 
-# -----------------------------
-# Alle studenten inplannen
-# -----------------------------
-for s in sorted(studenten_workend, key=lambda x: x["aantal_attracties"]):
+for s in studenten_sorted:
     assign_student(s)
-
-
-
-
 
 # -----------------------------
 # Excel output
@@ -302,3 +264,4 @@ output.seek(0)
 st.success("Planning gegenereerd!")
 st.download_button("Download planning",data=output.getvalue(),
                    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+
