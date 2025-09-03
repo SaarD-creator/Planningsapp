@@ -230,7 +230,7 @@ def assign_student(s):
                 if ruimte:
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr] += 1
+                        per_hour_assigned_counts[h].get(attr, 0) += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
                     placed = True
