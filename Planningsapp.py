@@ -152,26 +152,22 @@ second_priority_order = [
 # -----------------------------
 # Compute aantallen per hour + red spots
 # -----------------------------
-aantallen = {}
-red_spots = {}
+aantallen = {uur: {a: 1 for a in attracties_te_plannen} for uur in open_uren}
+red_spots = {uur: set() for uur in open_uren}
 
 for uur in open_uren:
-    # Studenten die dit uur kunnen werken (excl. pauzevlinders tijdens hun pauze)
+    # Hoeveel studenten beschikbaar dit uur (excl. pauzevlinders op duty)
     student_count = sum(
         1 for s in studenten
-        if uur in s["uren_beschikbaar"]
-        and not (s["is_pauzevlinder"] and uur in required_pauze_hours)
+        if uur in s["uren_beschikbaar"] and not (
+            s["is_pauzevlinder"] and uur in required_pauze_hours
+        )
     )
+    # Hoeveel attracties minimaal bemand moeten worden
+    base_spots = sum(1 for a in attracties_te_plannen if aantallen_raw[a] >= 1)
+    extra_spots = student_count - base_spots
 
-    # Basis = alle attracties die minstens 1 plek hebben
-    aantallen[uur] = {a: 1 for a in attracties_te_plannen if aantallen_raw[a] >= 1}
-    red_spots[uur] = set()
-
-    # Bereken hoeveel extra plekken er mogelijk zijn
-    base_count = len(aantallen[uur])
-    extra_spots = student_count - base_count
-
-    # Geef tweede plekken volgens prioriteitslijst
+    # Allocate 2e plekken volgens prioriteit
     for attr in second_priority_order:
         if attr in aantallen_raw and aantallen_raw[attr] == 2:
             if extra_spots > 0:
@@ -180,27 +176,30 @@ for uur in open_uren:
             else:
                 red_spots[uur].add(attr)
 
-# Initializeer counters met dezelfde structuur
-per_hour_assigned_counts = {uur: {a: 0 for a in aantallen[uur]} for uur in open_uren}
-
-
 # -----------------------------
-# Assign per student
-# -----------------------------
-assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
-extra_assignments = defaultdict(list)
-MAX_CONSEC = 4
-MAX_PER_STUDENT_ATTR = 6
-
-# -----------------------------
-# Studenten die effectief inzetbaar zijn (minstens 1 uur beschikbaar in open_uren)
+# Studenten die effectief inzetbaar zijn
 # -----------------------------
 studenten_workend = [
     s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])
 ]
 
-studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
+# Sorteer attracties op "kritieke score" (hoeveel studenten ze kunnen doen)
+def kritieke_score(attr, studenten_list):
+    return sum(1 for s in studenten_list if attr in s["attracties"])
 
+attracties_te_plannen.sort(key=lambda a: kritieke_score(a, studenten_workend))
+
+# -----------------------------
+# Assign per student
+# -----------------------------
+assigned_map = defaultdict(list)  # (uur, attr) -> list of student-names
+per_hour_assigned_counts = {uur: {a: 0 for a in attracties_te_plannen} for uur in open_uren}
+extra_assignments = defaultdict(list)
+
+MAX_CONSEC = 4
+MAX_PER_STUDENT_ATTR = 6
+
+studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
 
 def assign_student(s):
     uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
@@ -208,31 +207,31 @@ def assign_student(s):
     runs = contiguous_runs(uren)
 
     for run in runs:
-        L = len(run)
-        if L == 0:
+        if not run:
             continue
-        block_sizes = partition_run_lengths(L)
+        block_sizes = partition_run_lengths(len(run))
         start_idx = 0
-
         for b in block_sizes:
             block_hours = run[start_idx:start_idx+b]
             start_idx += b
             placed = False
 
-            # ----------------------
-            # 1. Probeer eigen attracties
-            # ----------------------
-            for attr in s["attracties"]:
+            for attr in attracties_te_plannen:
+                if attr not in s["attracties"]:
+                    continue
                 if attr in s["assigned_attracties"]:
                     continue
+
+                # Check of deze attractie op ALLE uren van dit blok nog plek heeft
                 ruimte = True
                 for h in block_hours:
                     if attr in red_spots.get(h, set()):
                         ruimte = False
                         break
-                    if per_hour_assigned_counts.get(h, {}).get(attr, 0) >= aantallen.get(h, {}).get(attr, 1):
+                    if per_hour_assigned_counts[h][attr] >= aantallen[h].get(attr, 1):
                         ruimte = False
                         break
+
                 if ruimte:
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
@@ -242,37 +241,11 @@ def assign_student(s):
                     placed = True
                     break
 
-            # ----------------------
-            # 2. Anders probeer een andere vrije attractie
-            # ----------------------
-            if not placed:
-                for attr in attracties_te_plannen:
-                    ruimte = True
-                    for h in block_hours:
-                        if attr in red_spots.get(h, set()):
-                            ruimte = False
-                            break
-                        if per_hour_assigned_counts.get(h, {}).get(attr, 0) >= aantallen.get(h, {}).get(attr, 1):
-                            ruimte = False
-                            break
-                    if ruimte:
-                        for h in block_hours:
-                            assigned_map[(h, attr)].append(s["naam"])
-                            per_hour_assigned_counts[h][attr] += 1
-                            s["assigned_hours"].append(h)
-                        s["assigned_attracties"].add(attr)
-                        placed = True
-                        break
-
-            # ----------------------
-            # 3. Als niets lukt, Extra
-            # ----------------------
             if not placed:
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
 
-
-# Run assignment
+# Loop over alle studenten en wijs ze toe
 for s in studenten_sorted:
     assign_student(s)
 
