@@ -255,8 +255,8 @@ def place_block(student, block_hours, attr):
 # -----------------------------
 # Nieuwe assign_student
 # -----------------------------
-def assign_student(student):
-    uren = [u for u in student["uren_beschikbaar"] if u in open_uren]
+def assign_student(s):
+    uren = [u for u in s["uren_beschikbaar"] if u in open_uren]
     uren = sorted(uren)
     runs = contiguous_runs(uren)
 
@@ -264,7 +264,6 @@ def assign_student(student):
         L = len(run)
         if L == 0:
             continue
-
         block_sizes = partition_run_lengths(L)
         start_idx = 0
 
@@ -273,18 +272,46 @@ def assign_student(student):
             start_idx += b
             placed = False
 
-            for attr in student["attracties"]:
-                if attr in student["assigned_attracties"]:
+            # probeer attracties die de student kan doen
+            for attr in attracties_te_plannen:
+                if attr not in s["attracties"]:
                     continue
-                if can_place_block(student, block_hours, attr):
-                    place_block(student, block_hours, attr)
+                if attr in s["assigned_attracties"]:
+                    continue
+
+                ruimte = True
+                pos_per_hour = {}
+
+                for h in block_hours:
+                    # Hoeveel plekken mag dit uur open zijn?
+                    max_spots = aantallen[h].get(attr, 1)  # standaard 1 of 2
+
+                    # Rood: blokkeer alleen de 2e plek
+                    if attr in red_spots.get(h, set()):
+                        max_spots = 1
+
+                    assigned = per_hour_assigned_counts[h][attr]
+
+                    if assigned < max_spots:
+                        pos_per_hour[h] = assigned + 1  # noteer welke positie we nemen
+                    else:
+                        ruimte = False
+                        break
+
+                if ruimte:
+                    # blok plaatsen
+                    for h in block_hours:
+                        assigned_map[(h, attr)].append(s["naam"])
+                        per_hour_assigned_counts[h][attr] += 1
+                        s["assigned_hours"].append(h)
+                    s["assigned_attracties"].add(attr)
                     placed = True
-                    break
+                    break  # stop bij eerste passende attractie
 
             if not placed:
+                # geen attractie gevonden → alle uren naar extra
                 for h in block_hours:
-                    extra_assignments[h].append(student["naam"])
-
+                    extra_assignments[h].append(s["naam"])
 
 
 
@@ -314,7 +341,11 @@ for col_idx,uur in enumerate(sorted(open_uren),start=2):
 
 rij_out=2
 for attr in attracties_te_plannen:
-    max_pos=max(aantallen.get(attr,1), max(per_hour_assigned_counts[h].get(attr,0) for h in open_uren))
+    max_pos = max(
+        max(aantallen[uur].get(attr, 1) for uur in open_uren),
+        max(per_hour_assigned_counts[h].get(attr, 0) for h in open_uren)
+    )
+
     for pos_idx in range(1,max_pos+1):
         naam_attr=attr if max_pos==1 else f"{attr} {pos_idx}"
         ws_out.cell(rij_out,1,naam_attr).font=Font(bold=True)
