@@ -358,6 +358,8 @@ def assign_student(s):
 for s in studenten_sorted:
     assign_student(s)
 
+naam2student = {s["naam"]: s for s in studenten_workend}
+
 def local_shift_for_extra():
     for uur in sorted(open_uren):
         for attr in attracties_te_plannen:
