@@ -1,6 +1,6 @@
 # we zien de red spots al, gwn nog teveel bij extra
 
-
+kak
 import streamlit as st
 import random
 from collections import defaultdict
