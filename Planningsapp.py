@@ -551,7 +551,8 @@ for s in studenten_sorted:
 # =============================
 # Extra-studenten herverdelen met swaps
 # =============================
-redistribute_extra_with_swaps_v3()
+redistribute_extra_with_swaps_v4()
+
 
 
 
