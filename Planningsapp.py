@@ -358,7 +358,60 @@ def assign_student(s):
 for s in studenten_sorted:
     assign_student(s)
 
+def local_shift_for_extra():
+    for uur in sorted(open_uren):
+        for attr in attracties_te_plannen:
+            extra_namen = [naam for naam in extra_assignments.get(uur, []) if attr in naam2student[naam]["attracties"] or True]
+            if not extra_namen:
+                continue
+            for extra_naam in extra_namen:
+                s_extra = naam2student[extra_naam]
 
+                # Huidige bezetting op dat uur
+                geplande_studenten = assigned_map.get((uur, attr), [])
+
+                # Als er nog plek vrij is, laat Extra-student zelf plaatsen
+                if len(geplande_studenten) < _max_spots_for(attr, uur):
+                    assigned_map.setdefault((uur, attr), []).append(extra_naam)
+                    per_hour_assigned_counts[uur][attr] += 1
+                    s_extra["assigned_hours"].append(uur)
+                    s_extra["assigned_attracties"].add(attr)
+                    extra_assignments[uur].remove(extra_naam)
+                    continue
+
+                # Kijk naar buurstudenten die vlak voor of na dit uur bij dezelfde attractie staan
+                all_assigned_hours = []
+                for s in studenten_workend:
+                    if attr in s["assigned_attracties"]:
+                        all_assigned_hours.extend([(h,s) for h in s["assigned_hours"]])
+
+                # Sorteer op afstand tot 'uur'
+                all_assigned_hours.sort(key=lambda x: abs(x[0]-uur))
+
+                shifted = False
+                for h, buur in all_assigned_hours:
+                    if abs(h-uur) == 1:  # direct buur uur
+                        # Check of buur beschikbaar is voor extra uur
+                        extra_uur = h + 1 if h < uur else h - 1
+                        if extra_uur in buur["uren_beschikbaar"] and extra_uur not in buur["assigned_hours"]:
+                            # Voeg buur toe op extra_uur
+                            assigned_map.setdefault((extra_uur, attr), []).append(buur["naam"])
+                            per_hour_assigned_counts[extra_uur][attr] += 1
+                            buur["assigned_hours"].append(extra_uur)
+                            # Nu kan Extra-student op oorspronkelijke uur
+                            assigned_map.setdefault((uur, attr), []).append(extra_naam)
+                            per_hour_assigned_counts[uur][attr] += 1
+                            s_extra["assigned_hours"].append(uur)
+                            s_extra["assigned_attracties"].add(attr)
+                            extra_assignments[uur].remove(extra_naam)
+                            shifted = True
+                            break
+                if shifted:
+                    continue
+
+
+
+local_shift_for_extra()
 
 
 
