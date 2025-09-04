@@ -316,7 +316,8 @@ def assign_student(s):
                     extra_assignments[h].append(s["naam"])
 
 
-
+for s in studenten_sorted:
+    assign_student(s)
 
 # -----------------------------
 # Excel output
