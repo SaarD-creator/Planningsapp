@@ -360,10 +360,19 @@ for s in studenten_sorted:
 
 naam2student = {s["naam"]: s for s in studenten_workend}
 
+# =============================
+# Mapping naam -> student
+# =============================
+naam2student = {s["naam"]: s for s in studenten_workend}
+
+# =============================
+# Extra: lokale verschuivingen
+# =============================
 def local_shift_for_extra():
     """
     Voor studenten die bij Extra staan: kijk of de vrijgekomen plek
     kan worden ingevuld door verschuiving van een buurstudent.
+    Alleen attracties die de studenten kunnen worden gebruikt.
     """
     for uur in sorted(open_uren):
         for attr in attracties_te_plannen:
@@ -406,9 +415,9 @@ def local_shift_for_extra():
                 break
 
 
-
-
+# Nu de lokale verschuivingen uitvoeren
 local_shift_for_extra()
+
 
 
 
