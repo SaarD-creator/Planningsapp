@@ -365,9 +365,10 @@ naam2student = {s["naam"]: s for s in studenten_workend}
 def redistribute_for_extra_with_swaps():
     """
     Voor elk uur met extra-studenten en een vrije plek:
-    - Zoek eerst naburige uren (voor, na) om blokken van 1 te vermijden.
-    - Verplaats een student die al bij die attractie staat naar het vrije uur.
-    - Plaats de extra-student op de vrijgekomen plek van de verplaatste student.
+    - Zoek een student die in naburige uren bij dezelfde attractie staat.
+    - Verplaats die student naar het uur van de extra-student.
+    - Plaats de extra-student op de vrijgekomen plek.
+    - Vermijd blokken van 1 uur indien mogelijk.
     """
     for uur in sorted(open_uren):
         for attr in attracties_te_plannen:
@@ -377,18 +378,15 @@ def redistribute_for_extra_with_swaps():
             if vrije_pos <= 0:
                 continue  # geen vrije plek
 
-            # Extra-studenten die dit uur beschikbaar zijn en deze attractie kunnen doen
-            extra_namen = [
-                naam for naam in extra_assignments.get(uur, [])
-                if any(a in naam2student[naam]["attracties"] for a in attracties_te_plannen)
-            ]
+            # Extra-studenten die deze attractie kunnen doen
+            extra_namen = [naam for naam in extra_assignments.get(uur, []) if attr in naam2student[naam]["attracties"]]
             if not extra_namen:
                 continue
 
             for extra_naam in extra_namen:
                 E = naam2student[extra_naam]
 
-                # Vind kandidaten in naburige uren
+                # Vind kandidaten: studenten die op naburige uren bij attr staan
                 kandidaten = []
                 for delta in [-1, 1, -2, 2, -3, 3]:
                     naburig_uur = uur + delta
@@ -397,23 +395,27 @@ def redistribute_for_extra_with_swaps():
                     geplande_namen = assigned_map.get((naburig_uur, attr), [])
                     for b_naam in geplande_namen:
                         B = naam2student[b_naam]
+                        # Alleen overweeg als B echt op naburig_uur bij attr stond
                         if naburig_uur in B["assigned_hours"]:
                             kandidaten.append((B, naburig_uur))
 
                 if not kandidaten:
                     continue
 
-                # Sorteer kandidaten op langste blok eerst (vermijd blokken van 1)
+                # Sorteer op langste blok om 1-uurs blokken te vermijden
                 kandidaten.sort(key=lambda x: -max_consecutive_hours(sorted(x[0]["assigned_hours"])))
 
-                # Pak de eerste geschikte kandidaat
+                # Kies de eerste geschikte kandidaat
                 B, B_uur = kandidaten[0]
 
-                # Kies een attractie van B op B_uur (veilig via set)
-                if B["assigned_attracties"]:
-                    attr_vorig = next(iter(B["assigned_attracties"]))
-                else:
-                    attr_vorig = attr
+                # Bepaal de attractie die B op dat uur echt deed
+                attr_vorig = None
+                for a in attracties_te_plannen:
+                    if B["naam"] in assigned_map.get((B_uur, a), []):
+                        attr_vorig = a
+                        break
+                if attr_vorig is None:
+                    continue  # niets gevonden, skip
 
                 # Verplaats B naar het uur van extra-student
                 assigned_map[(B_uur, attr_vorig)].remove(B["naam"])
@@ -432,7 +434,6 @@ def redistribute_for_extra_with_swaps():
 
                 # Verwijder E uit extra
                 extra_assignments[uur].remove(extra_naam)
-
 
 
 for s in studenten_sorted:
