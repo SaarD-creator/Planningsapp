@@ -361,55 +361,50 @@ for s in studenten_sorted:
 naam2student = {s["naam"]: s for s in studenten_workend}
 
 def local_shift_for_extra():
+    """
+    Voor studenten die bij Extra staan: kijk of de vrijgekomen plek
+    kan worden ingevuld door verschuiving van een buurstudent.
+    """
     for uur in sorted(open_uren):
         for attr in attracties_te_plannen:
-            extra_namen = [naam for naam in extra_assignments.get(uur, []) if attr in naam2student[naam]["attracties"] or True]
+            # Welke extra-studenten zouden hier kunnen staan?
+            extra_namen = [naam for naam in extra_assignments.get(uur, [])
+                            if attr in naam2student[naam]["attracties"]]
             if not extra_namen:
                 continue
+
+            geplande_namen = assigned_map.get((uur, attr), [])
             for extra_naam in extra_namen:
                 s_extra = naam2student[extra_naam]
+                for idx, buur_naam in enumerate(geplande_namen):
+                    buur = naam2student[buur_naam]
+                    # Vrije uren buur vóór of na huidige attractie
+                    vrije_uren_buur = [u for u in buur["uren_beschikbaar"] 
+                                       if u not in buur["assigned_hours"]]
+                    # Check of buur kan schuiven
+                    mogelijke_uren = [u for u in [uur-1, uur+1] if u in vrije_uren_buur and u in open_uren]
+                    if not mogelijke_uren:
+                        continue
+                    gekozen_uur = mogelijke_uren[0]
 
-                # Huidige bezetting op dat uur
-                geplande_studenten = assigned_map.get((uur, attr), [])
+                    # Plaats buur op dat vrije uur
+                    assigned_map.setdefault((gekozen_uur, attr), []).append(buur_naam)
+                    per_hour_assigned_counts[gekozen_uur][attr] = per_hour_assigned_counts[gekozen_uur].get(attr,0)+1
+                    buur["assigned_hours"].append(gekozen_uur)
 
-                # Als er nog plek vrij is, laat Extra-student zelf plaatsen
-                if len(geplande_studenten) < _max_spots_for(attr, uur):
-                    assigned_map.setdefault((uur, attr), []).append(extra_naam)
+                    # Plaats extra student op oorspronkelijke uur
+                    assigned_map[(uur, attr)].append(extra_naam)
                     per_hour_assigned_counts[uur][attr] += 1
                     s_extra["assigned_hours"].append(uur)
                     s_extra["assigned_attracties"].add(attr)
+
+                    # Verwijder uit extra_assignments
                     extra_assignments[uur].remove(extra_naam)
+                    break  # stop bij eerste bruikbare buur
+                else:
                     continue
+                break
 
-                # Kijk naar buurstudenten die vlak voor of na dit uur bij dezelfde attractie staan
-                all_assigned_hours = []
-                for s in studenten_workend:
-                    if attr in s["assigned_attracties"]:
-                        all_assigned_hours.extend([(h,s) for h in s["assigned_hours"]])
-
-                # Sorteer op afstand tot 'uur'
-                all_assigned_hours.sort(key=lambda x: abs(x[0]-uur))
-
-                shifted = False
-                for h, buur in all_assigned_hours:
-                    if abs(h-uur) == 1:  # direct buur uur
-                        # Check of buur beschikbaar is voor extra uur
-                        extra_uur = h + 1 if h < uur else h - 1
-                        if extra_uur in buur["uren_beschikbaar"] and extra_uur not in buur["assigned_hours"]:
-                            # Voeg buur toe op extra_uur
-                            assigned_map.setdefault((extra_uur, attr), []).append(buur["naam"])
-                            per_hour_assigned_counts[extra_uur][attr] += 1
-                            buur["assigned_hours"].append(extra_uur)
-                            # Nu kan Extra-student op oorspronkelijke uur
-                            assigned_map.setdefault((uur, attr), []).append(extra_naam)
-                            per_hour_assigned_counts[uur][attr] += 1
-                            s_extra["assigned_hours"].append(uur)
-                            s_extra["assigned_attracties"].add(attr)
-                            extra_assignments[uur].remove(extra_naam)
-                            shifted = True
-                            break
-                if shifted:
-                    continue
 
 
 
