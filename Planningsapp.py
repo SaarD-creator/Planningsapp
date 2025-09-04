@@ -364,36 +364,32 @@ naam2student = {s["naam"]: s for s in studenten_workend}
 
 def redistribute_extra_with_swaps_v2():
     """
-    Swaps zodat extra-studenten altijd een plekje krijgen indien mogelijk.
-    Vermijdt zoveel mogelijk 1-uurs blokken.
+    Redistribute extra-studenten:
+    - Voor elk uur met een vrije plek en een student bij extra.
+    - Kijk eerst naar naburige uren om lange blokken te behouden.
+    - Swaps: verplaats bestaande student naar het uur van extra-student,
+      zodat extra-student een plek krijgt waar hij/zij kan.
     """
     for uur in sorted(open_uren):
-        extra_namen = extra_assignments.get(uur, [])
-        if not extra_namen:
-            continue
+        for attr in attracties_te_plannen:
+            max_pos = _max_spots_for(attr, uur)
+            huidige_bezet = per_hour_assigned_counts[uur].get(attr, 0)
+            vrije_pos = max_pos - huidige_bezet
+            if vrije_pos <= 0:
+                continue  # geen vrije plek
 
-        for extra_naam in list(extra_namen):
-            E = naam2student[extra_naam]
-
-            # Alle attracties die E kan doen
-            candidate_attrs = [a for a in attracties_te_plannen if a in E["attracties"]]
-
-            # Controleer eerst of er vrije plek direct is
-            placed = False
-            for attr in candidate_attrs:
-                if per_hour_assigned_counts[uur][attr] < _max_spots_for(attr, uur):
-                    assigned_map[(uur, attr)].append(E["naam"])
-                    per_hour_assigned_counts[uur][attr] += 1
-                    E["assigned_hours"].append(uur)
-                    E["assigned_attracties"].add(attr)
-                    extra_assignments[uur].remove(extra_naam)
-                    placed = True
-                    break
-            if placed:
+            # Extra-studenten die deze attractie kunnen doen
+            extra_namen = [
+                naam for naam in extra_assignments.get(uur, [])
+                if attr in naam2student[naam]["attracties"]
+            ]
+            if not extra_namen:
                 continue
 
-            # Anders: probeer swap met iemand die in naburige uren bij attr zit
-            for attr in candidate_attrs:
+            for extra_naam in extra_namen:
+                E = naam2student[extra_naam]
+
+                # Zoek kandidaten: studenten die op naburige uren bij attr staan
                 kandidaten = []
                 for delta in [-1, 1, -2, 2, -3, 3]:
                     naburig_uur = uur + delta
@@ -403,40 +399,50 @@ def redistribute_extra_with_swaps_v2():
                     for b_naam in geplande_namen:
                         B = naam2student[b_naam]
                         if naburig_uur in B["assigned_hours"]:
-                            kandidaten.append(B)
+                            kandidaten.append((B, naburig_uur))
 
-                # Sorteer op langste blok
-                kandidaten.sort(key=lambda B: -max_consecutive_hours(sorted(B["assigned_hours"])))
+                if not kandidaten:
+                    continue
 
-                for B in kandidaten:
-                    # Zoek in uur een andere attractie waar B naartoe kan
-                    for attr2 in B["attracties"]:
-                        if attr2 == attr:
-                            continue
-                        if per_hour_assigned_counts[uur][attr2] < _max_spots_for(attr2, uur):
-                            # Swap B naar attr2
-                            assigned_map[(uur, attr)].remove(B["naam"])
-                            per_hour_assigned_counts[uur][attr] -= 1
-                            assigned_map[(uur, attr2)].append(B["naam"])
-                            per_hour_assigned_counts[uur][attr2] += 1
-                            B["assigned_attracties"].discard(attr)
-                            B["assigned_attracties"].add(attr2)
-                            B["assigned_hours"].remove(uur)
-                            B["assigned_hours"].append(uur)
+                # Sorteer kandidaten op langste blok om 1-uurs blokken te vermijden
+                kandidaten.sort(key=lambda x: -max_consecutive_hours(sorted(x[0]["assigned_hours"])))
 
-                            # Plaats E op vrijgekomen attr
-                            assigned_map[(uur, attr)].append(E["naam"])
-                            per_hour_assigned_counts[uur][attr] += 1
-                            E["assigned_hours"].append(uur)
-                            E["assigned_attracties"].add(attr)
+                # Pak de eerste kandidaat
+                B, B_uur = kandidaten[0]
 
-                            extra_assignments[uur].remove(extra_naam)
-                            placed = True
-                            break
-                    if placed:
+                # Vind de attractie die B op dat uur echt deed
+                attr_vorig = None
+                for a in attracties_te_plannen:
+                    if B["naam"] in assigned_map.get((B_uur, a), []):
+                        attr_vorig = a
                         break
-                if placed:
-                    break
+                if attr_vorig is None:
+                    continue  # niets gevonden, skip
+
+                # Swaps: zorg dat per_hour_assigned_counts altijd bestaat
+                per_hour_assigned_counts.setdefault(uur, {})
+                per_hour_assigned_counts.setdefault(B_uur, {})
+                per_hour_assigned_counts[uur].setdefault(attr, 0)
+                per_hour_assigned_counts[B_uur].setdefault(attr_vorig, 0)
+
+                # Verplaats B naar het uur van extra-student
+                assigned_map[(B_uur, attr_vorig)].remove(B["naam"])
+                per_hour_assigned_counts[B_uur][attr_vorig] -= 1
+                B["assigned_hours"].remove(B_uur)
+
+                assigned_map.setdefault((uur, attr), []).append(B["naam"])
+                per_hour_assigned_counts[uur][attr] += 1
+                B["assigned_hours"].append(uur)
+
+                # Plaats E op de vrijgekomen plek van B
+                assigned_map.setdefault((B_uur, attr_vorig), []).append(E["naam"])
+                per_hour_assigned_counts[B_uur][attr_vorig] += 1
+                E["assigned_hours"].append(B_uur)
+                E["assigned_attracties"].add(attr_vorig)
+
+                # Verwijder E uit extra
+                extra_assignments[uur].remove(extra_naam)
+
 
 
 for s in studenten_sorted:
