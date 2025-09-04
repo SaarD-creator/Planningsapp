@@ -363,15 +363,10 @@ for s in studenten_sorted:
 # =============================
 naam2student = {s["naam"]: s for s in studenten_workend}
 
-# =============================
-# Vul resterende gaten (greedy) + lokale swaps voor 1-uur Extra
-# =============================
 def _fill_gaps_and_local_swaps():
-    """
-    1. Vul eerst lege plekken met studenten uit extra_assignments (greedy).
-    2. Voor studenten die slechts 1 uur in extra staan: 
-       lokale swap met buur van attractie zodat ze alsnog geplaatst worden.
-    """
+    # Mapping naam -> student
+    naam2student = {s["naam"]: s for s in studenten_workend}
+
     # --- 1. Greedy vullen ---
     for uur in sorted(open_uren):
         for naam in list(extra_assignments.get(uur, [])):
@@ -379,45 +374,44 @@ def _fill_gaps_and_local_swaps():
             if not s:
                 continue
             candidate_attrs = [a for a in attracties_te_plannen if a in s["attracties"]]
-            # Sorteer op kritieke score (weinig beschikbare studenten eerst)
             candidate_attrs.sort(key=lambda a: sum(1 for st in studenten_workend if a in st["attracties"]))
-            placed = False
             for attr in candidate_attrs:
                 if per_hour_assigned_counts[uur].get(attr,0) < _max_spots_for(attr, uur):
                     assigned_map.setdefault((uur, attr), []).append(naam)
-                    per_hour_assigned_counts[uur][attr] = per_hour_assigned_counts[uur].get(attr,0) + 1
+                    per_hour_assigned_counts[uur][attr] += 1
                     s["assigned_hours"].append(uur)
                     s["assigned_attracties"].add(attr)
                     extra_assignments[uur].remove(naam)
-                    placed = True
-                    break
-            # Blijft eventueel in extra als niets kon
+                    break  # direct geplaatst
 
-    # --- 2. Lokale swaps voor studenten met 1-uur Extra ---
+    # --- 2. Lokale swaps voor 1-uur Extra ---
     for uur in sorted(open_uren):
         for naam in list(extra_assignments.get(uur, [])):
             s_extra = naam2student.get(naam)
             if not s_extra:
                 continue
-            # Candidate attracties die de student kan
+            # check of student echt maar 1 uur in Extra staat
+            extra_uren = [u for u in extra_assignments if s_extra["naam"] in extra_assignments[u]]
+            if len(extra_uren) != 1:
+                continue
+
             candidate_attrs = [a for a in attracties_te_plannen if a in s_extra["attracties"]]
+            placed = False
             for attr in candidate_attrs:
                 geplande_studenten = assigned_map.get((uur, attr), [])
-                if not geplande_studenten:
-                    continue
-                for buur_idx, buur_naam in enumerate(geplande_studenten):
+                for idx, buur_naam in enumerate(geplande_studenten):
                     buur = naam2student.get(buur_naam)
                     if not buur:
                         continue
-                    # Vrij uur van buur voor extra plaatsing
+                    # Vrije uren van buur binnen open_uren
                     vrije_uren_buur = [u for u in buur["uren_beschikbaar"] if u not in buur["assigned_hours"]]
                     if not vrije_uren_buur:
                         continue
                     # Kies het dichtstbijzijnde uur
                     gekozen_uur = min(vrije_uren_buur, key=lambda x: abs(x-uur))
-                    # Plaats buur op dat uur
+                    # Plaats buur op nieuw uur
                     assigned_map.setdefault((gekozen_uur, attr), []).append(buur_naam)
-                    per_hour_assigned_counts[gekozen_uur][attr] = per_hour_assigned_counts[gekozen_uur].get(attr,0)+1
+                    per_hour_assigned_counts[gekozen_uur][attr] += 1
                     buur["assigned_hours"].append(gekozen_uur)
                     # Plaats s_extra op oorspronkelijke uur
                     assigned_map[(uur, attr)].append(s_extra["naam"])
@@ -425,10 +419,11 @@ def _fill_gaps_and_local_swaps():
                     s_extra["assigned_hours"].append(uur)
                     s_extra["assigned_attracties"].add(attr)
                     extra_assignments[uur].remove(s_extra["naam"])
-                    break  # stop bij eerste bruikbare buur
-                else:
-                    continue
-                break
+                    placed = True
+                    break
+                if placed:
+                    break
+
                 
 _fill_gaps_and_local_swaps()
 
