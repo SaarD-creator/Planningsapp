@@ -312,6 +312,11 @@ def assign_student(s):
                 # geen attractie gevonden → alle uren naar extra
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
+# -----------------------------
+# Studenten toewijzen
+# -----------------------------
+for s in studenten_sorted:
+    assign_student(s)
 
 
 
