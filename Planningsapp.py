@@ -192,6 +192,13 @@ extra_assignments = defaultdict(list)
 MAX_CONSEC = 4
 MAX_PER_STUDENT_ATTR = 6
 
+# -----------------------------
+# Studenten die effectief inzetbaar zijn (minstens 1 uur beschikbaar in open_uren)
+# -----------------------------
+studenten_workend = [
+    s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])
+]
+
 studenten_sorted = sorted(studenten_workend, key=lambda s: s["aantal_attracties"])
 
 
