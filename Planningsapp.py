@@ -430,7 +430,7 @@ def redistribute_for_extra_fixed():
 for s in studenten_sorted:
     assign_student(s)
 
-redistribute_for_extra()
+redistribute_for_extra_fixed()
 
 
 
