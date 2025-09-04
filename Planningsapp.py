@@ -1,3 +1,5 @@
+# we zien de red spots al, gwn nog teveel bij extra
+
 
 import streamlit as st
 import random
@@ -268,59 +270,50 @@ def assign_student(s):
         start_idx = 0
 
         for b in block_sizes:
-            block_hours = run[start_idx:start_idx + b]
+            block_hours = run[start_idx:start_idx+b]
             start_idx += b
             placed = False
 
-            # Dynamische sortering: minst mogelijke studenten eerst (kritiek)
-            mogelijke_attrs = [a for a in s["attracties"] if a not in s["assigned_attracties"]]
-            mogelijke_attrs.sort(
-                key=lambda a: sum(
-                    1 for stud in studenten_workend
-                    if a in stud["attracties"] and any(h in stud["uren_beschikbaar"] for h in block_hours)
-                )
-            )
+            # probeer attracties die de student kan doen
+            for attr in attracties_te_plannen:
+                if attr not in s["attracties"]:
+                    continue
+                if attr in s["assigned_attracties"]:
+                    continue
 
-            for attr in mogelijke_attrs:
                 ruimte = True
                 pos_per_hour = {}
 
                 for h in block_hours:
                     # Hoeveel plekken mag dit uur open zijn?
-                    max_spots = aantallen[h].get(attr, 1)
+                    max_spots = aantallen[h].get(attr, 1)  # standaard 1 of 2
+
+                    # Rood: blokkeer alleen de 2e plek
                     if attr in red_spots.get(h, set()):
                         max_spots = 1
 
-                    assigned = per_hour_assigned_counts[h].get(attr, 0)  # FIX: veilige toegang
+                    assigned = per_hour_assigned_counts[h][attr]
 
                     if assigned < max_spots:
-                        pos_per_hour[h] = assigned + 1
+                        pos_per_hour[h] = assigned + 1  # noteer welke positie we nemen
                     else:
                         ruimte = False
                         break
 
                 if ruimte:
-                    # Blok plaatsen
+                    # blok plaatsen
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
-                        per_hour_assigned_counts[h][attr] = per_hour_assigned_counts[h].get(attr, 0) + 1
+                        per_hour_assigned_counts[h][attr] += 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
                     placed = True
                     break  # stop bij eerste passende attractie
 
             if not placed:
-                # Geen attractie gevonden → naar extra
+                # geen attractie gevonden → alle uren naar extra
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
-
-
-
-# -----------------------------
-# Studenten toewijzen
-# -----------------------------
-for s in studenten_sorted:
-    assign_student(s)
 
 
 
@@ -413,4 +406,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
