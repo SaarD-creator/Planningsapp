@@ -290,7 +290,7 @@ def assign_student(s):
                     if attr in red_spots.get(h, set()):
                         max_spots = 1
 
-                    assigned = per_hour_assigned_counts[h][attr]
+                    assigned = per_hour_assigned_counts[h].get(attr, 0)
                     if assigned < max_spots:
                         pos_per_hour[h] = assigned + 1
                     else:
