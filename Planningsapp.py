@@ -364,10 +364,10 @@ naam2student = {s["naam"]: s for s in studenten_workend}
 
 def redistribute_for_extra_with_swaps():
     """
-    Voor elk uur met extra-studenten:
-    - Probeer eerst naburige uren (±1, ±2, ±3) voor swap, zodat blokken intact blijven.
-    - Als dat niet lukt, zoek andere studenten die het uur kunnen invullen (swap).
-    - Plaats de extra-student op de vrijgekomen plek.
+    Voor elk uur met extra-studenten en een vrije plek:
+    - Zoek eerst naburige uren (voor, na) om blokken van 1 te vermijden.
+    - Verplaats een student die al bij die attractie staat naar het vrije uur.
+    - Plaats de extra-student op de vrijgekomen plek van de verplaatste student.
     """
     for uur in sorted(open_uren):
         for attr in attracties_te_plannen:
@@ -377,13 +377,18 @@ def redistribute_for_extra_with_swaps():
             if vrije_pos <= 0:
                 continue  # geen vrije plek
 
-            extra_namen = extra_assignments.get(uur, []).copy()  # copy om veilig te itereren
+            # Extra-studenten die dit uur beschikbaar zijn en deze attractie kunnen doen
+            extra_namen = [
+                naam for naam in extra_assignments.get(uur, [])
+                if any(a in naam2student[naam]["attracties"] for a in attracties_te_plannen)
+            ]
+            if not extra_namen:
+                continue
+
             for extra_naam in extra_namen:
                 E = naam2student[extra_naam]
-                if attr in E["attracties"]:
-                    continue  # deze extra-student kan de plek zelf invullen, skip
 
-                # 1️⃣ Eerst: naburige uren (±1, ±2, ±3)
+                # Vind kandidaten in naburige uren
                 kandidaten = []
                 for delta in [-1, 1, -2, 2, -3, 3]:
                     naburig_uur = uur + delta
@@ -395,48 +400,38 @@ def redistribute_for_extra_with_swaps():
                         if naburig_uur in B["assigned_hours"]:
                             kandidaten.append((B, naburig_uur))
 
-                # 2️⃣ Fallback: alle studenten die de attractie kunnen op dit uur
                 if not kandidaten:
-                    for s in studenten_workend:
-                        if s["naam"] == E["naam"]:
-                            continue
-                        if uur in open_uren and attr in s["attracties"] and s["naam"] in assigned_map.get((uur, attr), []):
-                            kandidaten.append((s, uur))
+                    continue
 
-                if not kandidaten:
-                    continue  # geen swap mogelijk
-
-                # Sorteer op langste blok om 1-uurs-blokken te vermijden
+                # Sorteer kandidaten op langste blok eerst (vermijd blokken van 1)
                 kandidaten.sort(key=lambda x: -max_consecutive_hours(sorted(x[0]["assigned_hours"])))
 
+                # Pak de eerste geschikte kandidaat
                 B, B_uur = kandidaten[0]
 
-                # 3️⃣ Verplaats B naar vrije plek bij attr
-                assigned_map[(B_uur, attr)].remove(B["naam"])
-                per_hour_assigned_counts[B_uur][attr] -= 1
+                # Kies een attractie van B op B_uur (veilig via set)
+                if B["assigned_attracties"]:
+                    attr_vorig = next(iter(B["assigned_attracties"]))
+                else:
+                    attr_vorig = attr
+
+                # Verplaats B naar het uur van extra-student
+                assigned_map[(B_uur, attr_vorig)].remove(B["naam"])
+                per_hour_assigned_counts[B_uur][attr_vorig] -= 1
                 B["assigned_hours"].remove(B_uur)
 
                 assigned_map.setdefault((uur, attr), []).append(B["naam"])
                 per_hour_assigned_counts[uur][attr] += 1
                 B["assigned_hours"].append(uur)
 
-                # 4️⃣ Plaats E op vrijgekomen plek van B
-                attr_vorig = None
-                for a in B["assigned_attracties"]:
-                    if B_uur in assigned_map and B["naam"] in assigned_map.get((B_uur, a), []):
-                        attr_vorig = a
-                        break
-                if not attr_vorig:
-                    attr_vorig = B["assigned_attracties"][-1]  # fallback
-
+                # Plaats E op de vrijgekomen plek van B
                 assigned_map.setdefault((B_uur, attr_vorig), []).append(E["naam"])
                 per_hour_assigned_counts[B_uur][attr_vorig] += 1
                 E["assigned_hours"].append(B_uur)
                 E["assigned_attracties"].add(attr_vorig)
 
-                # 5️⃣ Verwijder E uit extra
+                # Verwijder E uit extra
                 extra_assignments[uur].remove(extra_naam)
-
 
 
 
