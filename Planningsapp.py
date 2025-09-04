@@ -268,11 +268,11 @@ def assign_student(s):
         start_idx = 0
 
         for b in block_sizes:
-            block_hours = run[start_idx:start_idx+b]
+            block_hours = run[start_idx:start_idx + b]
             start_idx += b
             placed = False
 
-            # Dynamische sortering van mogelijke attracties
+            # Dynamische sortering: minst mogelijke studenten eerst (kritiek)
             mogelijke_attrs = [a for a in s["attracties"] if a not in s["assigned_attracties"]]
             mogelijke_attrs.sort(
                 key=lambda a: sum(
@@ -286,11 +286,13 @@ def assign_student(s):
                 pos_per_hour = {}
 
                 for h in block_hours:
+                    # Hoeveel plekken mag dit uur open zijn?
                     max_spots = aantallen[h].get(attr, 1)
                     if attr in red_spots.get(h, set()):
                         max_spots = 1
 
-                    assigned = per_hour_assigned_counts[h].get(attr, 0)
+                    assigned = per_hour_assigned_counts[h].get(attr, 0)  # FIX: veilige toegang
+
                     if assigned < max_spots:
                         pos_per_hour[h] = assigned + 1
                     else:
@@ -301,7 +303,7 @@ def assign_student(s):
                     # Blok plaatsen
                     for h in block_hours:
                         assigned_map[(h, attr)].append(s["naam"])
-                        per_hour_assigned_counts[h].get[attr] += 1
+                        per_hour_assigned_counts[h][attr] = per_hour_assigned_counts[h].get(attr, 0) + 1
                         s["assigned_hours"].append(h)
                     s["assigned_attracties"].add(attr)
                     placed = True
@@ -311,6 +313,7 @@ def assign_student(s):
                 # Geen attractie gevonden → naar extra
                 for h in block_hours:
                     extra_assignments[h].append(s["naam"])
+
 
 
 # -----------------------------
