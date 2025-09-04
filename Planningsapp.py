@@ -358,6 +358,101 @@ def assign_student(s):
 for s in studenten_sorted:
     assign_student(s)
 
+
+
+# =============================
+# TWEEDE PASS: gaten vullen + simpele swaps
+# =============================
+
+# Handig: snelle lookup van studenten
+naam2student = {s["naam"]: s for s in studenten}
+
+def _fill_gaps_singletons():
+    """
+    Greedy: vul resterende lege plekken per uur met studenten uit extra,
+    met blokjes van 1 uur.
+    """
+    for uur in sorted(open_uren):
+        # Werk met kopie, want we gaan muteren
+        for naam in list(extra_assignments[uur]):
+            s = naam2student.get(naam)
+            if not s:
+                continue
+            # Probeer elke attractie die student kan
+            candidate_attrs = [a for a in attracties_te_plannen if a in s["attracties"]]
+            # Eerst de 'moeilijke' attracties (laagste kritieke score)
+            candidate_attrs.sort(key=lambda a: sum(1 for st in studenten_workend if a in st["attracties"]))
+
+            placed = False
+            for attr in candidate_attrs:
+                if _has_capacity(attr, uur):
+                    assigned_map[(uur, attr)].append(naam)
+                    per_hour_assigned_counts[uur][attr] += 1
+                    s["assigned_hours"].append(uur)
+                    s["assigned_attracties"].add(attr)
+                    extra_assignments[uur].remove(naam)
+                    placed = True
+                    break
+            # Indien niet geplaatst, blijft hij voorlopig in extra voor mogelijke swap
+
+def _attempt_simple_swaps():
+    """
+    Simpele 1-stap swap binnen hetzelfde uur:
+    - Voor een student in extra op uur U die attr A kan (maar A zit vol),
+      probeer een huidige ingeroosterde student te verplaatsen naar een andere attr op U
+      waar nog plek is en die hij ook kan.
+    """
+    for uur in sorted(open_uren):
+        for naam in list(extra_assignments[uur]):
+            s = naam2student.get(naam)
+            if not s:
+                continue
+            wanted_attrs = [a for a in attracties_te_plannen if a in s["attracties"]]
+
+            swap_done = False
+            for attr in wanted_attrs:
+                # Alleen interessant als attr vol zit
+                if per_hour_assigned_counts[uur][attr] >= _max_spots_for(attr, uur):
+                    incumbents = list(assigned_map.get((uur, attr), []))
+                    for inc_naam in incumbents:
+                        inc = naam2student.get(inc_naam)
+                        if not inc:
+                            continue
+                        # Zoek een alternatieve attr op hetzelfde uur met ruimte die incumbent kan
+                        for alt_attr in inc["attracties"]:
+                            if alt_attr == attr:
+                                continue
+                            if _has_capacity(alt_attr, uur):
+                                # Verplaats incumbent naar alt_attr
+                                assigned_map[(uur, attr)].remove(inc_naam)
+                                per_hour_assigned_counts[uur][attr] -= 1
+
+                                assigned_map[(uur, alt_attr)].append(inc_naam)
+                                per_hour_assigned_counts[uur][alt_attr] += 1
+                                inc["assigned_attracties"].add(alt_attr)
+                                # (We laten eventuele 'lege' attr in inc.assigned_attracties zitten; onschadelijk)
+
+                                # Plaats nu de extra-student op de vrijgekomen plek
+                                assigned_map[(uur, attr)].append(naam)
+                                per_hour_assigned_counts[uur][attr] += 1
+                                s["assigned_hours"].append(uur)
+                                s["assigned_attracties"].add(attr)
+                                extra_assignments[uur].remove(naam)
+
+                                swap_done = True
+                                break
+                        if swap_done:
+                            break
+                if swap_done:
+                    break
+
+# Uitvoeren van de resolutiefase
+_fill_gaps_singletons()
+_attempt_simple_swaps()
+# Nog een keer greedy vullen (soms ontstaan er nieuwe gaten na swaps)
+_fill_gaps_singletons()
+
+
 # -----------------------------
 # Excel output
 # -----------------------------
