@@ -364,6 +364,10 @@ for s in studenten_sorted:
 # FIXED TWEEDE PASS: gaten vullen + swaps
 # =============================
 
+# Mapping van naam → student dict
+naam2student = {s["naam"]: s for s in studenten_workend}
+
+
 def _has_capacity(attr, uur):
     """
     Controleer of er nog plek is op deze attractie en dit uur.
