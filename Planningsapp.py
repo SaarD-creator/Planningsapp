@@ -382,8 +382,8 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
             cand_student = next((s for s in studenten_workend if s["naam"] == cand_naam), None)
             if not cand_student:
                 continue
-            # Kan deze student ook op uur?
-            if uur in cand_student["uren_beschikbaar"] and uur not in cand_student["assigned_hours"]:
+            # ENKEL checken of deze student dat uur mag werken (uren_beschikbaar)
+            if uur in cand_student["uren_beschikbaar"]:
                 # Zet cand_student ook op uur, attr, pos_idx
                 while len(assigned_map[(uur, attr)]) < pos_idx:
                     assigned_map[(uur, attr)].append("")
@@ -427,19 +427,20 @@ for _ in range(max_iterations):
                 naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
                 if naam:
                     continue
-                if not extra_assignments[uur]:
-                    continue
-                extra_naam = extra_assignments[uur][0]
-                extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
-                if not extra_student:
-                    continue
-                if attr in extra_student["attracties"]:
-                    # Kan direct geplaatst worden, dus hoort niet bij dit scenario
-                    continue
-                # Probeer doorschuiven
-                if doorschuif_leegplek(uur, attr, pos_idx, extra_naam, 1, max_iterations):
-                    extra_assignments[uur].remove(extra_naam)
-                    changes_made = True
+                # Probeer voor alle extra's op dit uur
+                extras_op_uur = list(extra_assignments[uur])  # kopie ivm mutatie
+                for extra_naam in extras_op_uur:
+                    extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
+                    if not extra_student:
+                        continue
+                    if attr in extra_student["attracties"]:
+                        # Kan direct geplaatst worden, dus hoort niet bij dit scenario
+                        continue
+                    # Probeer doorschuiven
+                    if doorschuif_leegplek(uur, attr, pos_idx, extra_naam, 1, max_iterations):
+                        extra_assignments[uur].remove(extra_naam)
+                        changes_made = True
+                        break  # stop met deze plek, ga naar volgende lege plek
     if not changes_made:
         break
 
@@ -531,5 +532,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
