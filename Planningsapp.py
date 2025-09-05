@@ -270,17 +270,23 @@ def _has_capacity(attr, uur):
     return per_hour_assigned_counts[uur][attr] < _max_spots_for(attr, uur)
 
 def _try_place_block_on_attr(student, block_hours, attr):
-    """Check capaciteit in alle uren en plaats dan in één keer, met max 4 uur per attractie per dag."""
+    """Check capaciteit in alle uren en plaats dan in één keer, met max 4 uur per attractie per dag (positie 1 en 2 tellen samen)."""
     # Capaciteit check
     for h in block_hours:
         if not _has_capacity(attr, h):
             return False
-    # Check max 4 uur per attractie per dag
-    if student["assigned_hours"].count(attr) + len(block_hours) > 4:
-        # Fout: maar assigned_hours bevat alleen uren, niet attracties. Dus we moeten zelf tellen:
-        n_already = sum(1 for h in student["assigned_hours"] if (h, attr) in assigned_map and student["naam"] in assigned_map[(h, attr)])
-        if n_already + len(block_hours) > 4:
-            return False
+    # Check max 4 unieke uren per attractie per dag (positie 1 en 2 tellen samen)
+    # Verzamel alle uren waarop deze student al bij deze attractie staat
+    uren_bij_attr = set()
+    for h in student["assigned_hours"]:
+        namen = assigned_map.get((h, attr), [])
+        if student["naam"] in namen:
+            uren_bij_attr.add(h)
+    # Voeg de nieuwe uren toe
+    nieuwe_uren = set(block_hours)
+    totaal_uren = uren_bij_attr | nieuwe_uren
+    if len(totaal_uren) > 4:
+        return False
     # Plaatsen
     for h in block_hours:
         assigned_map[(h, attr)].append(student["naam"])
@@ -538,5 +544,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
