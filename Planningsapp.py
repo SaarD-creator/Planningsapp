@@ -386,12 +386,10 @@ for s in studenten_sorted:
 def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     if stap > max_stappen:
         return False
-    # Zoek wie op uur U, attractie A, positie pos_idx hoort te staan
     namen = assigned_map.get((uur, attr), [])
     naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
     if naam:
         return False  # plek al gevuld
-    # Zoek wie vóór of na U op deze attractie stond
     prev_uur = uur - 1 if uur - 1 in open_uren else None
     next_uur = uur + 1 if uur + 1 in open_uren else None
     candidate_uren = [u for u in [prev_uur, next_uur] if u is not None]
@@ -401,9 +399,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
             cand_student = next((s for s in studenten_workend if s["naam"] == cand_naam), None)
             if not cand_student:
                 continue
-            # ENKEL checken of deze student dat uur mag werken (uren_beschikbaar)
             if uur in cand_student["uren_beschikbaar"]:
-                # Zet cand_student ook op uur, attr, pos_idx
                 while len(assigned_map[(uur, attr)]) < pos_idx:
                     assigned_map[(uur, attr)].append("")
                 assigned_map[(uur, attr)].insert(pos_idx-1, cand_naam)
@@ -411,25 +407,35 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
                 cand_student["assigned_hours"].append(uur)
                 cand_student["assigned_attracties"].add(attr)
                 per_hour_assigned_counts[uur][attr] += 1
-                # Zoek waar cand_student op uur stond (welke attractie)
                 for b_attr in attracties_te_plannen:
                     b_namen = assigned_map.get((uur, b_attr), [])
                     for b_pos, b_naam in enumerate(b_namen):
                         if b_naam == cand_naam and (b_attr != attr or b_pos != pos_idx-1):
-                            # Maak plek vrij op uur, b_attr, b_pos
                             assigned_map[(uur, b_attr)][b_pos] = ""
                             per_hour_assigned_counts[uur][b_attr] -= 1
                             cand_student["assigned_hours"].remove(uur)
-                            # Probeer student_naam (de extra) daar te plaatsen
                             extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
                             if extra_student and b_attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+                                # LAKS: check 4-uursregel, maar sta toe als niemand anders kan
+                                uren_bij_attr = set()
+                                for h in extra_student["assigned_hours"]:
+                                    namen = assigned_map.get((h, b_attr), [])
+                                    if extra_student["naam"] in namen:
+                                        uren_bij_attr.add(h)
+                                totaal_uren = uren_bij_attr | {uur}
+                                if len(totaal_uren) > 4:
+                                    # Check of iemand anders deze plek kan invullen
+                                    kandidaten = [s for s in studenten_workend if s["naam"] != extra_student["naam"] and uur in s["uren_beschikbaar"] and b_attr in s["attracties"]]
+                                    if kandidaten:
+                                        # Er is iemand anders, dus niet lakser plaatsen
+                                        return doorschuif_leegplek(uur, b_attr, b_pos+1, student_naam, stap+1, max_stappen)
+                                    # Niemand anders kan, dus tóch plaatsen
                                 assigned_map[(uur, b_attr)][b_pos] = student_naam
                                 extra_student["assigned_hours"].append(uur)
                                 extra_student["assigned_attracties"].add(b_attr)
                                 per_hour_assigned_counts[uur][b_attr] += 1
                                 return True
                             else:
-                                # Schuif verder
                                 return doorschuif_leegplek(uur, b_attr, b_pos+1, student_naam, stap+1, max_stappen)
     return False
 
@@ -551,5 +557,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
