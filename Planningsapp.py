@@ -270,10 +270,16 @@ def _has_capacity(attr, uur):
     return per_hour_assigned_counts[uur][attr] < _max_spots_for(attr, uur)
 
 def _try_place_block_on_attr(student, block_hours, attr):
-    """Check capaciteit in alle uren en plaats dan in één keer."""
+    """Check capaciteit in alle uren en plaats dan in één keer, met max 4 uur per attractie per dag."""
     # Capaciteit check
     for h in block_hours:
         if not _has_capacity(attr, h):
+            return False
+    # Check max 4 uur per attractie per dag
+    if student["assigned_hours"].count(attr) + len(block_hours) > 4:
+        # Fout: maar assigned_hours bevat alleen uren, niet attracties. Dus we moeten zelf tellen:
+        n_already = sum(1 for h in student["assigned_hours"] if (h, attr) in assigned_map and student["naam"] in assigned_map[(h, attr)])
+        if n_already + len(block_hours) > 4:
             return False
     # Plaatsen
     for h in block_hours:
