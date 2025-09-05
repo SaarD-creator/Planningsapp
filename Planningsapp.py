@@ -1,4 +1,7 @@
+#perfectttt, enkel nog probleempje als persoon met meeste attracties iets niet kan
+
 # we zien de red spots al, gwn nog teveel bij extra
+
 
 import streamlit as st
 import random
@@ -354,209 +357,91 @@ def assign_student(s):
 
 
 
-naam2student = {s["naam"]: s for s in studenten_workend}
-
-# =============================
-# Mapping naam -> student
-# =============================
-naam2student = {s["naam"]: s for s in studenten_workend}
-
-def redistribute_extra_with_swaps_v4(max_swaps=4):
-    """
-    Probeer eerst naburige blokken te verlengen om extra-studenten te plaatsen.
-    Als dit niet lukt, gebruik DFS swaps (max_swaps).
-    """
-    for uur in sorted(extra_assignments.keys()):
-        extra_namen = list(extra_assignments[uur])
-        for extra_naam in extra_namen:
-            E = naam2student[extra_naam]
-            geplaatst = False
-
-            # --- Stap 1: Kijk naburige blokken ---
-            for delta in [-3, -2, -1, 1, 2, 3]:
-                naburige_uur = uur + delta
-                if naburige_uur not in open_uren:
-                    continue
-                for attr in E["attracties"]:
-                    geplande_namen = assigned_map.get((naburige_uur, attr), []).copy()
-                    for B_naam in geplande_namen:
-                        B = naam2student[B_naam]
-                        # Controleer of B een blok kan opschuiven/verlengd worden
-                        B_hours_sorted = sorted(B["assigned_hours"])
-                        if delta < 0 and B_hours_sorted[0] == naburige_uur:
-                            # Probeer B een uur eerder te verplaatsen
-                            new_uur = naburige_uur - 1
-                        elif delta > 0 and B_hours_sorted[-1] == naburige_uur:
-                            # Probeer B een uur later te verplaatsen
-                            new_uur = naburige_uur + 1
-                        else:
-                            continue
-                        if new_uur in open_uren and per_hour_assigned_counts[new_uur].get(attr, 0) < _max_spots_for(attr, new_uur):
-                            # Verplaats B
-                            assigned_map[(naburige_uur, attr)].remove(B_naam)
-                            per_hour_assigned_counts[naburige_uur][attr] -= 1
-                            B["assigned_hours"].remove(naburige_uur)
-
-                            assigned_map.setdefault((new_uur, attr), []).append(B_naam)
-                            per_hour_assigned_counts.setdefault(new_uur, {}).setdefault(attr, 0)
-                            per_hour_assigned_counts[new_uur][attr] += 1
-                            B["assigned_hours"].append(new_uur)
-
-                            # Plaats E op vrijgekomen plek
-                            assigned_map.setdefault((uur, attr), []).append(E["naam"])
-                            per_hour_assigned_counts.setdefault(uur, {}).setdefault(attr, 0)
-                            per_hour_assigned_counts[uur][attr] += 1
-                            E["assigned_hours"].append(uur)
-                            E["assigned_attracties"].add(attr)
-
-                            extra_assignments[uur].remove(extra_naam)
-                            geplaatst = True
-                            break
-                    if geplaatst:
-                        break
-                if geplaatst:
-                    break
-
-            # --- Stap 2: Als niet geplaatst, gebruik DFS swaps (v3) ---
-            if not geplaatst:
-                def dfs(E, current_uur, depth, visited=set()):
-                    if depth > max_swaps:
-                        return False
-                    for attr in E["attracties"]:
-                        max_pos = _max_spots_for(attr, current_uur)
-                        current_count = per_hour_assigned_counts.get(current_uur, {}).get(attr, 0)
-                        if current_count < max_pos:
-                            assigned_map.setdefault((current_uur, attr), []).append(E["naam"])
-                            per_hour_assigned_counts.setdefault(current_uur, {}).setdefault(attr, 0)
-                            per_hour_assigned_counts[current_uur][attr] += 1
-                            E["assigned_hours"].append(current_uur)
-                            E["assigned_attracties"].add(attr)
-                            return True
-
-                        geplande_namen = assigned_map.get((current_uur, attr), []).copy()
-                        for B_naam in geplande_namen:
-                            if (B_naam, current_uur) in visited:
-                                continue
-                            B = naam2student[B_naam]
-                            visited.add((B_naam, current_uur))
-                            for delta2 in [-1, 1, -2, 2, -3, 3]:
-                                new_uur = current_uur + delta2
-                                if new_uur not in open_uren:
-                                    continue
-                                if per_hour_assigned_counts[new_uur].get(attr, 0) < _max_spots_for(attr, new_uur):
-                                    # Verplaats B
-                                    assigned_map[(current_uur, attr)].remove(B_naam)
-                                    per_hour_assigned_counts[current_uur][attr] -= 1
-                                    B["assigned_hours"].remove(current_uur)
-
-                                    assigned_map.setdefault((new_uur, attr), []).append(B_naam)
-                                    per_hour_assigned_counts.setdefault(new_uur, {}).setdefault(attr, 0)
-                                    per_hour_assigned_counts[new_uur][attr] += 1
-                                    B["assigned_hours"].append(new_uur)
-
-                                    # Plaats E op vrijgekomen plek
-                                    assigned_map.setdefault((current_uur, attr), []).append(E["naam"])
-                                    per_hour_assigned_counts[current_uur][attr] += 1
-                                    E["assigned_hours"].append(current_uur)
-                                    E["assigned_attracties"].add(attr)
-                                    return True
-                                else:
-                                    if dfs(B, new_uur, depth + 1, visited):
-                                        assigned_map.setdefault((current_uur, attr), []).append(E["naam"])
-                                        per_hour_assigned_counts[current_uur][attr] += 1
-                                        E["assigned_hours"].append(current_uur)
-                                        E["assigned_attracties"].add(attr)
-                                        return True
-                            visited.remove((B_naam, current_uur))
-                    return False
-
-                if dfs(E, uur, 1):
-                    extra_assignments[uur].remove(extra_naam)
-
-
-
-
-def try_swap_chain(E, uur, max_swaps):
-    """
-    Probeer E een plek te geven door swaps met andere studenten.
-    max_swaps: maximaal aantal studenten dat we verplaatsen
-    """
-    chain = []
-    visited = set()
-
-    def dfs(current_student, current_uur, depth):
-        if depth > max_swaps:
-            return False
-
-        # Kandidaten: studenten op dit uur bij attracties die current_student kan doen
-        for attr in current_student["attracties"]:
-            if per_hour_assigned_counts[current_uur][attr] < _max_spots_for(attr, current_uur):
-                # Vrije plek gevonden, kan chain sluiten
-                assigned_map[(current_uur, attr)].append(current_student["naam"])
-                per_hour_assigned_counts[current_uur][attr] += 1
-                current_student["assigned_hours"].append(current_uur)
-                current_student["assigned_attracties"].add(attr)
-                return True
-
-            geplande_namen = assigned_map.get((current_uur, attr), []).copy()
-            for b_naam in geplande_namen:
-                if b_naam in visited:
-                    continue
-                B = naam2student[b_naam]
-                visited.add(B["naam"])
-                # Zoek naburig uur voor B
-                naburige_uren = [u for u in sorted(open_uren) if u != current_uur and B["naam"] in assigned_map.get((u, attr), [])]
-                naburige_uren.sort(key=lambda x: abs(x - current_uur))  # Eerst naburig
-                for new_uur in naburige_uren:
-                    # Probeer B te verplaatsen naar new_uur
-                    # Vrije plek check
-                    if per_hour_assigned_counts[new_uur][attr] < _max_spots_for(attr, new_uur):
-                        # Verplaats B
-                        assigned_map[(current_uur, attr)].remove(B["naam"])
-                        per_hour_assigned_counts[current_uur][attr] -= 1
-                        B["assigned_hours"].remove(current_uur)
-
-                        assigned_map.setdefault((new_uur, attr), []).append(B["naam"])
-                        per_hour_assigned_counts[new_uur][attr] += 1
-                        B["assigned_hours"].append(new_uur)
-
-                        # Plaats current_student op de vrijgekomen plek
-                        assigned_map[(current_uur, attr)].append(current_student["naam"])
-                        per_hour_assigned_counts[current_uur][attr] += 1
-                        current_student["assigned_hours"].append(current_uur)
-                        current_student["assigned_attracties"].add(attr)
-                        return True
-                    else:
-                        # Dieper in chain: swap verder
-                        if dfs(B, new_uur, depth + 1):
-                            # Plaats current_student op vrijgekomen plek
-                            assigned_map[(current_uur, attr)].append(current_student["naam"])
-                            per_hour_assigned_counts[current_uur][attr] += 1
-                            current_student["assigned_hours"].append(current_uur)
-                            current_student["assigned_attracties"].add(attr)
-                            return True
-        return False
-
-    return dfs(E, uur, 1)
-
-
-
-
-# =============================
-# Assign studenten
-# =============================
 for s in studenten_sorted:
     assign_student(s)
 
-# =============================
-# Extra-studenten herverdelen met swaps
-# =============================
-redistribute_extra_with_swaps_v4()
+# -----------------------------
+# Post-processing: lege plekken opvullen door doorschuiven
+# -----------------------------
 
+def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
+    if stap > max_stappen:
+        return False
+    # Zoek wie op uur U, attractie A, positie pos_idx hoort te staan
+    namen = assigned_map.get((uur, attr), [])
+    naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
+    if naam:
+        return False  # plek al gevuld
+    # Zoek wie vóór of na U op deze attractie stond
+    prev_uur = uur - 1 if uur - 1 in open_uren else None
+    next_uur = uur + 1 if uur + 1 in open_uren else None
+    candidate_uren = [u for u in [prev_uur, next_uur] if u is not None]
+    for cand_uur in candidate_uren:
+        cand_namen = assigned_map.get((cand_uur, attr), [])
+        for cand_pos, cand_naam in enumerate(cand_namen):
+            cand_student = next((s for s in studenten_workend if s["naam"] == cand_naam), None)
+            if not cand_student:
+                continue
+            # Kan deze student ook op uur?
+            if uur in cand_student["uren_beschikbaar"] and uur not in cand_student["assigned_hours"]:
+                # Zet cand_student ook op uur, attr, pos_idx
+                while len(assigned_map[(uur, attr)]) < pos_idx:
+                    assigned_map[(uur, attr)].append("")
+                assigned_map[(uur, attr)].insert(pos_idx-1, cand_naam)
+                assigned_map[(uur, attr)] = assigned_map[(uur, attr)][:aantallen[uur].get(attr, 1)]
+                cand_student["assigned_hours"].append(uur)
+                cand_student["assigned_attracties"].add(attr)
+                per_hour_assigned_counts[uur][attr] += 1
+                # Zoek waar cand_student op uur stond (welke attractie)
+                for b_attr in attracties_te_plannen:
+                    b_namen = assigned_map.get((uur, b_attr), [])
+                    for b_pos, b_naam in enumerate(b_namen):
+                        if b_naam == cand_naam and (b_attr != attr or b_pos != pos_idx-1):
+                            # Maak plek vrij op uur, b_attr, b_pos
+                            assigned_map[(uur, b_attr)][b_pos] = ""
+                            per_hour_assigned_counts[uur][b_attr] -= 1
+                            cand_student["assigned_hours"].remove(uur)
+                            # Probeer student_naam (de extra) daar te plaatsen
+                            extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
+                            if extra_student and b_attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+                                assigned_map[(uur, b_attr)][b_pos] = student_naam
+                                extra_student["assigned_hours"].append(uur)
+                                extra_student["assigned_attracties"].add(b_attr)
+                                per_hour_assigned_counts[uur][b_attr] += 1
+                                return True
+                            else:
+                                # Schuif verder
+                                return doorschuif_leegplek(uur, b_attr, b_pos+1, student_naam, stap+1, max_stappen)
+    return False
 
-
-
-
+max_iterations = 5
+for _ in range(max_iterations):
+    changes_made = False
+    for uur in open_uren:
+        for attr in attracties_te_plannen:
+            max_pos = aantallen[uur].get(attr, 1)
+            if attr in red_spots.get(uur, set()):
+                max_pos = 1
+            for pos_idx in range(1, max_pos+1):
+                namen = assigned_map.get((uur, attr), [])
+                naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
+                if naam:
+                    continue
+                if not extra_assignments[uur]:
+                    continue
+                extra_naam = extra_assignments[uur][0]
+                extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
+                if not extra_student:
+                    continue
+                if attr in extra_student["attracties"]:
+                    # Kan direct geplaatst worden, dus hoort niet bij dit scenario
+                    continue
+                # Probeer doorschuiven
+                if doorschuif_leegplek(uur, attr, pos_idx, extra_naam, 1, max_iterations):
+                    extra_assignments[uur].remove(extra_naam)
+                    changes_made = True
+    if not changes_made:
+        break
 
 # -----------------------------
 # Excel output
