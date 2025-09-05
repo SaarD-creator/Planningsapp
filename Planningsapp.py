@@ -458,10 +458,35 @@ for _ in range(max_iterations):
                     extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
                     if not extra_student:
                         continue
+                    # EERST: probeer direct te plaatsen op voorkeursattractie (ook als >4u, als niemand anders kan)
+                    if attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+                        # Check 4-uursregel, maar lakser
+                        uren_bij_attr = set()
+                        for h in extra_student["assigned_hours"]:
+                            namen2 = assigned_map.get((h, attr), [])
+                            if extra_student["naam"] in namen2:
+                                uren_bij_attr.add(h)
+                        totaal_uren = uren_bij_attr | {uur}
+                        if len(totaal_uren) > 4:
+                            kandidaten = [s for s in studenten_workend if s["naam"] != extra_student["naam"] and uur in s["uren_beschikbaar"] and attr in s["attracties"]]
+                            if kandidaten:
+                                continue  # Er is iemand anders, dus niet lakser plaatsen
+                            # Niemand anders kan, dus tóch plaatsen
+                        # Plaats direct
+                        while len(assigned_map[(uur, attr)]) < pos_idx:
+                            assigned_map[(uur, attr)].append("")
+                        assigned_map[(uur, attr)].insert(pos_idx-1, extra_naam)
+                        assigned_map[(uur, attr)] = assigned_map[(uur, attr)][:aantallen[uur].get(attr, 1)]
+                        extra_student["assigned_hours"].append(uur)
+                        extra_student["assigned_attracties"].add(attr)
+                        per_hour_assigned_counts[uur][attr] += 1
+                        extra_assignments[uur].remove(extra_naam)
+                        changes_made = True
+                        break  # stop met deze plek, ga naar volgende lege plek
+                    # Anders: probeer doorschuiven
                     if attr in extra_student["attracties"]:
                         # Kan direct geplaatst worden, dus hoort niet bij dit scenario
                         continue
-                    # Probeer doorschuiven
                     if doorschuif_leegplek(uur, attr, pos_idx, extra_naam, 1, max_iterations):
                         extra_assignments[uur].remove(extra_naam)
                         changes_made = True
