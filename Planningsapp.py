@@ -3,7 +3,7 @@
 #perfectttt, enkel nog probleempje als persoon met meeste attracties iets niet kan
 
 # we zien de red spots al, gwn nog teveel bij extra
-kak
+
 
 import streamlit as st
 import random
@@ -479,13 +479,12 @@ while True:
                     extra_student = next((s for s in studenten if s["naam"] == extra_naam), None)
                     if not extra_student:
                         continue
-                    if attr in extra_student["attracties"]:
+                    # Alleen plaatsen als student op dit uur nog NIET is ingeroosterd
+                    if attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
                         while len(assigned_map[(uur, attr)]) < pos_idx:
                             assigned_map[(uur, attr)].append("")
                         assigned_map[(uur, attr)][pos_idx-1] = extra_naam
-                        # Belangrijk: update ook de uren en attracties van de student, negeer alle limieten!
-                        if uur not in extra_student["assigned_hours"]:
-                            extra_student["assigned_hours"].append(uur)
+                        extra_student["assigned_hours"].append(uur)
                         extra_student["assigned_attracties"].add(attr)
                         if extra_naam in extra_assignments[uur]:
                             extra_assignments[uur].remove(extra_naam)
@@ -582,7 +581,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
