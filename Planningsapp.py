@@ -371,6 +371,16 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
                             assigned_map[(uur, b_attr)][b_pos] = ""
                             per_hour_assigned_counts[uur][b_attr] -= 1
                             cand_student["assigned_hours"].remove(uur)
+                # Plaats de extra-student op de vrijgekomen plek
+                extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
+                if extra_student:
+                    while len(assigned_map[(uur, attr)]) < pos_idx:
+                        assigned_map[(uur, attr)].append("")
+                    assigned_map[(uur, attr)][pos_idx-1] = student_naam
+                    if uur not in extra_student["assigned_hours"]:
+                        extra_student["assigned_hours"].append(uur)
+                    extra_student["assigned_attracties"].add(attr)
+                    per_hour_assigned_counts[uur][attr] += 1
                 return True
     return False
 
