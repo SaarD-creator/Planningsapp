@@ -526,6 +526,41 @@ while True:
     if not changes_made:
         break
 
+ # -----------------------------
+# Ultieme brute-force: vul alle lege plekken met elke student die op dat uur beschikbaar is, het uur nog niet heeft, en de attractie kan (volgens Excel)
+# -----------------------------
+for uur in open_uren:
+    for attr in attracties_te_plannen:
+        if attr in red_spots.get(uur, set()):
+            continue
+        max_pos = aantallen[uur].get(attr, 1)
+        for pos_idx in range(1, max_pos+1):
+            namen = assigned_map.get((uur, attr), [])
+            plek_vrij = False
+            if pos_idx-1 < len(namen):
+                if not namen[pos_idx-1]:
+                    plek_vrij = True
+            else:
+                plek_vrij = True
+            if not plek_vrij:
+                continue
+            for s in studenten:
+                if (
+                    uur in s["uren_beschikbaar"]
+                    and uur not in s["assigned_hours"]
+                    and attr in s["attracties"]
+                ):
+                    while len(assigned_map[(uur, attr)]) < pos_idx:
+                        assigned_map[(uur, attr)].append("")
+                    assigned_map[(uur, attr)][pos_idx-1] = s["naam"]
+                    s["assigned_hours"].append(uur)
+                    s["assigned_attracties"].add(attr)
+                    if attr in per_hour_assigned_counts[uur]:
+                        per_hour_assigned_counts[uur][attr] += 1
+                    if s["naam"] in extra_assignments[uur]:
+                        extra_assignments[uur].remove(s["naam"])
+                    break
+
 # -----------------------------
 # Excel output
 # -----------------------------
