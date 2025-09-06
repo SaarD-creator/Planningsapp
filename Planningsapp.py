@@ -459,6 +459,38 @@ for _ in range(max_iterations):
         break
 
 # -----------------------------
+# Laatste check: extra's direct invullen als er nog lege plekken zijn
+# -----------------------------
+for uur in open_uren:
+    extras_op_uur = list(extra_assignments[uur])
+    if not extras_op_uur:
+        continue
+    for attr in attracties_te_plannen:
+        if attr in red_spots.get(uur, set()):
+            continue
+        max_pos = aantallen[uur].get(attr, 1)
+        for pos_idx in range(1, max_pos+1):
+            namen = assigned_map.get((uur, attr), [])
+            naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
+            if naam:
+                continue
+            for extra_naam in extras_op_uur:
+                extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
+                if not extra_student:
+                    continue
+                if attr in extra_student["attracties"]:
+                    while len(assigned_map[(uur, attr)]) < pos_idx:
+                        assigned_map[(uur, attr)].append("")
+                    assigned_map[(uur, attr)][pos_idx-1] = extra_naam
+                    if uur not in extra_student["assigned_hours"]:
+                        extra_student["assigned_hours"].append(uur)
+                    extra_student["assigned_attracties"].add(attr)
+                    per_hour_assigned_counts[uur][attr] += 1
+                    if extra_naam in extra_assignments[uur]:
+                        extra_assignments[uur].remove(extra_naam)
+                    break  # Stop na eerste succesvolle plaatsing
+
+# -----------------------------
 # Excel output
 # -----------------------------
 wb_out = Workbook()
@@ -546,5 +578,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
