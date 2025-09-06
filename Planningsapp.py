@@ -381,6 +381,19 @@ for s in studenten_sorted:
 def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     if stap > max_stappen:
         return False
+    # Directe brute-force: als de extra de attractie kan (volgens Excel), het uur beschikbaar is, en het uur nog niet in assigned_hours zit, plaats direct
+    extra_student = next((s for s in studenten if s["naam"] == student_naam), None)
+    if extra_student and attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+        while len(assigned_map[(uur, attr)]) < pos_idx:
+            assigned_map[(uur, attr)].append("")
+        assigned_map[(uur, attr)][pos_idx-1] = student_naam
+        extra_student["assigned_hours"].append(uur)
+        extra_student["assigned_attracties"].add(attr)
+        if attr in per_hour_assigned_counts[uur]:
+            per_hour_assigned_counts[uur][attr] += 1
+        if student_naam in extra_assignments[uur]:
+            extra_assignments[uur].remove(student_naam)
+        return True
     # Zoek wie op uur U, attractie A, positie pos_idx hoort te staan
     namen = assigned_map.get((uur, attr), [])
     naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
@@ -601,4 +614,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
