@@ -381,19 +381,6 @@ for s in studenten_sorted:
 def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     if stap > max_stappen:
         return False
-    # Directe brute-force: als de extra de attractie kan (volgens Excel), het uur beschikbaar is, en het uur nog niet in assigned_hours zit, plaats direct
-    extra_student = next((s for s in studenten if s["naam"] == student_naam), None)
-    if extra_student and attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
-        while len(assigned_map[(uur, attr)]) < pos_idx:
-            assigned_map[(uur, attr)].append("")
-        assigned_map[(uur, attr)][pos_idx-1] = student_naam
-        extra_student["assigned_hours"].append(uur)
-        extra_student["assigned_attracties"].add(attr)
-        if attr in per_hour_assigned_counts[uur]:
-            per_hour_assigned_counts[uur][attr] += 1
-        if student_naam in extra_assignments[uur]:
-            extra_assignments[uur].remove(student_naam)
-        return True
     # Zoek wie op uur U, attractie A, positie pos_idx hoort te staan
     namen = assigned_map.get((uur, attr), [])
     naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
@@ -470,101 +457,6 @@ for _ in range(max_iterations):
                         break  # stop met deze plek, ga naar volgende lege plek
     if not changes_made:
         break
-
-
-
-# -----------------------------
-# Vul extra_assignments[uur] aan met alle kandidaten die vergeten zijn door de max-4-uur-regel, NA de doorschuif-loop
-# -----------------------------
-for uur in open_uren:
-    for s in studenten:
-        if (
-            uur in s["uren_beschikbaar"]
-            and uur not in s["assigned_hours"]
-            and s["naam"] not in extra_assignments[uur]
-        ):
-            extra_assignments[uur].append(s["naam"])
-
-# -----------------------------
-# Verbeterde brute-force check: vul ALLE lege plekken met extra's die de attractie kunnen, blijf herhalen tot geen wijzigingen
-# -----------------------------
-while True:
-    changes_made = False
-    for uur in open_uren:
-        for attr in attracties_te_plannen:
-            if attr in red_spots.get(uur, set()):
-                continue
-            max_pos = aantallen[uur].get(attr, 1)
-            for pos_idx in range(1, max_pos+1):
-                namen = assigned_map.get((uur, attr), [])
-                plek_vrij = False
-                if pos_idx-1 < len(namen):
-                    if not namen[pos_idx-1]:
-                        plek_vrij = True
-                else:
-                    plek_vrij = True
-                if not plek_vrij:
-                    continue
-                # Probeer ALLE studenten die op dit uur beschikbaar zijn, de attractie kunnen (volgens Excel), en dat uur nog niet hebben
-                for s in studenten:
-                    if (
-                        uur in s["uren_beschikbaar"]
-                        and uur not in s["assigned_hours"]
-                        and attr in s["attracties"]
-                    ):
-                        while len(assigned_map[(uur, attr)]) < pos_idx:
-                            assigned_map[(uur, attr)].append("")
-                        assigned_map[(uur, attr)][pos_idx-1] = s["naam"]
-                        s["assigned_hours"].append(uur)
-                        s["assigned_attracties"].add(attr)
-                        if attr in per_hour_assigned_counts[uur]:
-                            per_hour_assigned_counts[uur][attr] += 1
-                        if s["naam"] in extra_assignments[uur]:
-                            extra_assignments[uur].remove(s["naam"])
-                        changes_made = True
-                        break
-    if not changes_made:
-        break
-
- # -----------------------------
-
-
-# Ultieme brute-force: debug-versie -> schrijf debug naar Excel werkblad
-debug_rows = []
-for uur in open_uren:
-    for attr in attracties_te_plannen:
-        if attr in red_spots.get(uur, set()):
-            continue
-        max_pos = aantallen[uur].get(attr, 1)
-        for pos_idx in range(1, max_pos+1):
-            namen = assigned_map.get((uur, attr), [])
-            plek_vrij = False
-            if pos_idx-1 < len(namen):
-                if not namen[pos_idx-1]:
-                    plek_vrij = True
-            else:
-                plek_vrij = True
-            if not plek_vrij:
-                continue
-            debug_rows.append([f"Lege plek bij {attr}", f"uur {uur}", f"pos {pos_idx}"])
-            for s in studenten:
-                debug_rows.append(["", f"Probeer student {s['naam']}", f"uren_beschikbaar: {s['uren_beschikbaar']}", f"assigned_hours: {s['assigned_hours']}", f"attracties: {s['attracties']}"])
-                if (
-                    uur in s["uren_beschikbaar"]
-                    and uur not in s["assigned_hours"]
-                    and attr in s["attracties"]
-                ):
-                    debug_rows.append(["", f"--> TOEGEVOEGD: {s['naam']} op {attr} {uur} pos {pos_idx}"])
-                    while len(assigned_map[(uur, attr)]) < pos_idx:
-                        assigned_map[(uur, attr)].append("")
-                    assigned_map[(uur, attr)][pos_idx-1] = s["naam"]
-                    s["assigned_hours"].append(uur)
-                    s["assigned_attracties"].add(attr)
-                    if attr in per_hour_assigned_counts[uur]:
-                        per_hour_assigned_counts[uur][attr] += 1
-                    if s["naam"] in extra_assignments[uur]:
-                        extra_assignments[uur].remove(s["naam"])
-                    break
 
 # -----------------------------
 # Excel output
@@ -645,13 +537,6 @@ for col_idx, uur in enumerate(sorted(open_uren), start=2):
 for col in range(1, len(open_uren) + 2):
     ws_out.column_dimensions[get_column_letter(col)].width = 18
 
-
-# Voeg debug werkblad toe
-ws_debug = wb_out.create_sheet("Debug")
-for i, row in enumerate(debug_rows, start=1):
-    for j, val in enumerate(row, start=1):
-        ws_debug.cell(i, j, str(val))
-
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
@@ -661,4 +546,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
