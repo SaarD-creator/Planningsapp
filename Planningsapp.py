@@ -506,6 +506,8 @@ for uur in open_uren:
         for attr in extra_student["attracties"]:
             if uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
                 # Check capaciteit
+                if attr not in per_hour_assigned_counts[uur]:
+                    continue  # deze attractie is niet gepland op dit uur
                 max_pos = aantallen[uur].get(attr, 1)
                 if attr in red_spots.get(uur, set()):
                     max_pos = 1
