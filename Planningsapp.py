@@ -2,7 +2,6 @@
 
 # we zien de red spots al, gwn nog teveel bij extra
 
-
 import streamlit as st
 import random
 from collections import defaultdict
@@ -166,7 +165,7 @@ for uur in open_uren:
         if uur in s["uren_beschikbaar"] and not (
             s["is_pauzevlinder"] and uur in required_pauze_hours
         )
-    )
+)
     # Hoeveel attracties minimaal bemand moeten worden
     base_spots = sum(1 for a in attracties_te_plannen if aantallen_raw[a] >= 1)
     extra_spots = student_count - base_spots
@@ -223,7 +222,6 @@ assigned_map = defaultdict(list)  # (uur, attr) -> [namen]
 occupied_positions = {uur: {} for uur in open_uren}  # (attr,pos) -> naam
 extra_assignments = defaultdict(list)
 
-
 # -----------------------------
 # Hulpfunctie: kan blok geplaatst worden?
 # -----------------------------
@@ -254,7 +252,6 @@ def place_block(student, block_hours, attr):
         student["assigned_hours"].append(h)
     student["assigned_attracties"].add(attr)
 
-
 # =============================
 # FLEXIBELE BLOKKEN & PLAATSLOGICA
 # =============================
@@ -270,8 +267,6 @@ def _has_capacity(attr, uur):
     return per_hour_assigned_counts[uur][attr] < _max_spots_for(attr, uur)
 
 def _try_place_block_on_attr(student, block_hours, attr):
-    """Check capaciteit in alle uren en plaats dan in één keer, met max 4 uur per attractie per dag (positie 1 en 2 tellen samen).
-    Als niemand anders kan, mag de student tóch geplaatst worden (lakser)."""
     # Capaciteit check
     for h in block_hours:
         if not _has_capacity(attr, h):
@@ -287,10 +282,8 @@ def _try_place_block_on_attr(student, block_hours, attr):
     if len(totaal_uren) > 4:
         # Check of iemand anders deze uren kan invullen
         for h in block_hours:
-            # Zoek alle studenten die beschikbaar zijn op dit uur en deze attractie kunnen doen
             kandidaten = [s for s in studenten_workend if s["naam"] != student["naam"] and h in s["uren_beschikbaar"] and attr in s["attracties"]]
             if kandidaten:
-                # Er is iemand anders, dus niet lakser plaatsen
                 return False
         # Niemand anders kan, dus lakser: tóch plaatsen
         pass
@@ -303,78 +296,42 @@ def _try_place_block_on_attr(student, block_hours, attr):
     return True
 
 def _try_place_block_any_attr(student, block_hours):
-    """Probeer dit blok te plaatsen op eender welke attractie die student kan."""
-    # Eerst attracties die nu het minst keuze hebben (kritiek), zodat we schaarste slim benutten
     candidate_attrs = [a for a in attracties_te_plannen if a in student["attracties"]]
     candidate_attrs.sort(key=lambda a: sum(1 for s in studenten_workend if a in s["attracties"]))
     for attr in candidate_attrs:
-        # vermijd dubbele toewijzing van hetzelfde attr als het niet per se moet
         if attr in student["assigned_attracties"]:
             continue
         if _try_place_block_on_attr(student, block_hours, attr):
             return True
-    # Als niets lukte zonder herhaling, laat herhaling van attractie toe als dat nodig is
     for attr in candidate_attrs:
         if _try_place_block_on_attr(student, block_hours, attr):
             return True
     return False
 
 def _place_block_with_fallback(student, hours_seq):
-    """
-    Probeer een reeks opeenvolgende uren te plaatsen.
-    - Eerst als blok van 3, anders 2, anders 1.
-    - Als niets lukt aan het begin van de reeks, schuif 1 uur op (dat uur gaat voorlopig naar extra),
-      en probeer verder; tweede pass zal het later alsnog proberen op te vullen.
-    Retourneert: lijst 'unplaced' uren die (voorlopig) niet geplaatst raakten.
-    """
     if not hours_seq:
         return []
-
-    # Probeer blok aan de voorkant, groot -> klein
     for size in [3, 2, 1]:
         if len(hours_seq) >= size:
             first_block = hours_seq[:size]
             if _try_place_block_any_attr(student, first_block):
-                # Rest recursief
                 return _place_block_with_fallback(student, hours_seq[size:])
-
-    # Helemaal niks paste aan de voorkant: markeer eerste uur tijdelijk als 'unplaced' en schuif door
     return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:])
-
-
 
 # -----------------------------
 # Nieuwe assign_student
 # -----------------------------
 def assign_student(s):
-    """
-    Plaats één student in de planning volgens alle regels:
-    - Alleen uren waar de student beschikbaar is én open_uren zijn.
-    - Geen overlap met pauzevlinder-uren.
-    - Alleen attracties die de student kan.
-    - Eerst lange blokken proberen (3 uur), dan korter (2 of 1).
-    - Blokken die niet passen, gaan voorlopig naar extra_assignments.
-    """
-    # Filter op effectieve inzetbare uren
     uren = sorted(u for u in s["uren_beschikbaar"] if u in open_uren)
     if s["is_pauzevlinder"]:
-        # Verwijder uren waarin pauzevlinder moet werken
         uren = [u for u in uren if u not in required_pauze_hours]
-
     if not uren:
-        return  # geen beschikbare uren
-
-    # Vind aaneengesloten runs van uren
+        return
     runs = contiguous_runs(uren)
-
     for run in runs:
-        # Plaats run met fallback (3->2->1), en schuif als het echt niet kan
         unplaced = _place_block_with_fallback(s, run)
-        # Wat niet lukte, gaat voorlopig naar extra
         for h in unplaced:
             extra_assignments[h].append(s["naam"])
-
-
 
 for s in studenten_sorted:
     assign_student(s)
@@ -430,8 +387,7 @@ for _ in range(max_iterations):
                 naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
                 if naam:
                     continue
-                # Probeer voor alle extra's op dit uur
-                extras_op_uur = list(extra_assignments[uur])  # kopie ivm mutatie
+                extras_op_uur = list(extra_assignments[uur])
                 for extra_naam in extras_op_uur:
                     extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
                     if not extra_student:
@@ -446,7 +402,11 @@ for _ in range(max_iterations):
                         per_hour_assigned_counts[uur][attr] += 1
                         extra_assignments[uur].remove(extra_naam)
                         changes_made = True
-                        break  # stop met deze plek, ga naar volgende lege plek
+                        break
+                    if doorschuif_leegplek(uur, attr, pos_idx, extra_naam, 1, max_iterations):
+                        extra_assignments[uur].remove(extra_naam)
+                        changes_made = True
+                        break
                 if changes_made:
                     break
             if changes_made:
@@ -455,6 +415,33 @@ for _ in range(max_iterations):
             break
     if not changes_made:
         break
+
+# --- Simpele extra-invulstap: vul lege plekken met extra's die de attractie kunnen (zonder tijdslimiet) ---
+for uur in open_uren:
+    for attr in attracties_te_plannen:
+        if attr in red_spots.get(uur, set()):
+            continue
+        max_pos = aantallen[uur].get(attr, 1)
+        for pos_idx in range(1, max_pos+1):
+            namen = assigned_map.get((uur, attr), [])
+            naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
+            if naam:
+                continue
+            extras_op_uur = list(extra_assignments[uur])
+            for extra_naam in extras_op_uur:
+                extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
+                if not extra_student:
+                    continue
+                if attr in extra_student["attracties"]:
+                    while len(assigned_map[(uur, attr)]) < pos_idx:
+                        assigned_map[(uur, attr)].append("")
+                    assigned_map[(uur, attr)].insert(pos_idx-1, extra_naam)
+                    assigned_map[(uur, attr)] = assigned_map[(uur, attr)][:aantallen[uur].get(attr, 1)]
+                    extra_student["assigned_hours"].append(uur)
+                    extra_student["assigned_attracties"].add(attr)
+                    per_hour_assigned_counts[uur][attr] += 1
+                    extra_assignments[uur].remove(extra_naam)
+                    break
 
 # -----------------------------
 # Excel output
@@ -483,7 +470,6 @@ for col_idx, uur in enumerate(sorted(open_uren), start=2):
 
 rij_out = 2
 for attr in attracties_te_plannen:
-    # FIX: correcte berekening max_pos
     max_pos = max(
         max(aantallen[uur].get(attr, 1) for uur in open_uren),
         max(per_hour_assigned_counts[uur].get(attr, 0) for uur in open_uren)
@@ -496,7 +482,6 @@ for attr in attracties_te_plannen:
         ws_out.cell(rij_out, 1).border = thin_border
 
         for col_idx, uur in enumerate(sorted(open_uren), start=2):
-            # Red fill voor ongebruikte 2e plekken
             red_fill = PatternFill(start_color="D9D9D9", fill_type="solid")
 
             if attr in red_spots.get(uur, set()) and pos_idx == 2:
