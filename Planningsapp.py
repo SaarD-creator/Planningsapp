@@ -528,8 +528,9 @@ while True:
 
  # -----------------------------
 
-# Ultieme brute-force: debug-versie
-import sys
+
+# Ultieme brute-force: debug-versie -> schrijf debug naar Excel werkblad
+debug_rows = []
 for uur in open_uren:
     for attr in attracties_te_plannen:
         if attr in red_spots.get(uur, set()):
@@ -545,15 +546,15 @@ for uur in open_uren:
                 plek_vrij = True
             if not plek_vrij:
                 continue
-            print(f"DEBUG: Lege plek bij {attr} uur {uur} pos {pos_idx}", file=sys.stderr)
+            debug_rows.append([f"Lege plek bij {attr}", f"uur {uur}", f"pos {pos_idx}"])
             for s in studenten:
-                print(f"  Probeer student {s['naam']} - uren_beschikbaar: {s['uren_beschikbaar']} assigned_hours: {s['assigned_hours']} attracties: {s['attracties']}", file=sys.stderr)
+                debug_rows.append(["", f"Probeer student {s['naam']}", f"uren_beschikbaar: {s['uren_beschikbaar']}", f"assigned_hours: {s['assigned_hours']}", f"attracties: {s['attracties']}"])
                 if (
                     uur in s["uren_beschikbaar"]
                     and uur not in s["assigned_hours"]
                     and attr in s["attracties"]
                 ):
-                    print(f"    --> TOEGEVOEGD: {s['naam']} op {attr} {uur} pos {pos_idx}", file=sys.stderr)
+                    debug_rows.append(["", f"--> TOEGEVOEGD: {s['naam']} op {attr} {uur} pos {pos_idx}"])
                     while len(assigned_map[(uur, attr)]) < pos_idx:
                         assigned_map[(uur, attr)].append("")
                     assigned_map[(uur, attr)][pos_idx-1] = s["naam"]
@@ -644,6 +645,13 @@ for col_idx, uur in enumerate(sorted(open_uren), start=2):
 for col in range(1, len(open_uren) + 2):
     ws_out.column_dimensions[get_column_letter(col)].width = 18
 
+
+# Voeg debug werkblad toe
+ws_debug = wb_out.create_sheet("Debug")
+for i, row in enumerate(debug_rows, start=1):
+    for j, val in enumerate(row, start=1):
+        ws_debug.cell(i, j, str(val))
+
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
@@ -653,5 +661,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
