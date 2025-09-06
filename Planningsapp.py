@@ -486,6 +486,9 @@ while True:
                         assigned_map[(uur, attr)][pos_idx-1] = extra_naam
                         extra_student["assigned_hours"].append(uur)
                         extra_student["assigned_attracties"].add(attr)
+                        # Update per_hour_assigned_counts zodat de Excel-output klopt
+                        if attr in per_hour_assigned_counts[uur]:
+                            per_hour_assigned_counts[uur][attr] += 1
                         if extra_naam in extra_assignments[uur]:
                             extra_assignments[uur].remove(extra_naam)
                         changes_made = True
