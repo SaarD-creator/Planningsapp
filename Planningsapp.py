@@ -516,11 +516,11 @@ for uur in open_uren:
                     naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
                     if naam:
                         continue
-                    # Check 4-uursregel, maar lakser
+                    # Check 4-uursregel, maar lakser: tel alle uren op deze attractie, ongeacht positie
                     uren_bij_attr = set()
                     for h in extra_student["assigned_hours"]:
-                        namen2 = assigned_map.get((h, attr), [])
-                        if extra_student["naam"] in namen2:
+                        # Check of student op deze attractie stond (positie 1 of 2)
+                        if extra_student["naam"] in assigned_map.get((h, attr), []):
                             uren_bij_attr.add(h)
                     totaal_uren = uren_bij_attr | {uur}
                     if len(totaal_uren) > 4:
