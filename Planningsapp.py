@@ -414,29 +414,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
                             assigned_map[(uur, b_attr)][b_pos] = ""
                             per_hour_assigned_counts[uur][b_attr] -= 1
                             cand_student["assigned_hours"].remove(uur)
-                            extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
-                            if extra_student and b_attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
-                                # LAKS: check 4-uursregel, maar sta toe als niemand anders kan
-                                uren_bij_attr = set()
-                                for h in extra_student["assigned_hours"]:
-                                    namen = assigned_map.get((h, b_attr), [])
-                                    if extra_student["naam"] in namen:
-                                        uren_bij_attr.add(h)
-                                totaal_uren = uren_bij_attr | {uur}
-                                if len(totaal_uren) > 4:
-                                    # Check of iemand anders deze plek kan invullen
-                                    kandidaten = [s for s in studenten_workend if s["naam"] != extra_student["naam"] and uur in s["uren_beschikbaar"] and b_attr in s["attracties"]]
-                                    if kandidaten:
-                                        # Er is iemand anders, dus niet lakser plaatsen
-                                        return doorschuif_leegplek(uur, b_attr, b_pos+1, student_naam, stap+1, max_stappen)
-                                    # Niemand anders kan, dus tóch plaatsen
-                                assigned_map[(uur, b_attr)][b_pos] = student_naam
-                                extra_student["assigned_hours"].append(uur)
-                                extra_student["assigned_attracties"].add(b_attr)
-                                per_hour_assigned_counts[uur][b_attr] += 1
-                                return True
-                            else:
-                                return doorschuif_leegplek(uur, b_attr, b_pos+1, student_naam, stap+1, max_stappen)
+                return True
     return False
 
 max_iterations = 5
@@ -458,21 +436,7 @@ for _ in range(max_iterations):
                     extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
                     if not extra_student:
                         continue
-                    # EERST: probeer direct te plaatsen op voorkeursattractie (ook als >4u, als niemand anders kan)
                     if attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
-                        # Check 4-uursregel, maar lakser
-                        uren_bij_attr = set()
-                        for h in extra_student["assigned_hours"]:
-                            namen2 = assigned_map.get((h, attr), [])
-                            if extra_student["naam"] in namen2:
-                                uren_bij_attr.add(h)
-                        totaal_uren = uren_bij_attr | {uur}
-                        if len(totaal_uren) > 4:
-                            kandidaten = [s for s in studenten_workend if s["naam"] != extra_student["naam"] and uur in s["uren_beschikbaar"] and attr in s["attracties"]]
-                            if kandidaten:
-                                continue  # Er is iemand anders, dus niet lakser plaatsen
-                            # Niemand anders kan, dus tóch plaatsen
-                        # Plaats direct
                         while len(assigned_map[(uur, attr)]) < pos_idx:
                             assigned_map[(uur, attr)].append("")
                         assigned_map[(uur, attr)].insert(pos_idx-1, extra_naam)
@@ -483,60 +447,14 @@ for _ in range(max_iterations):
                         extra_assignments[uur].remove(extra_naam)
                         changes_made = True
                         break  # stop met deze plek, ga naar volgende lege plek
-                    # Anders: probeer doorschuiven
-                    if attr in extra_student["attracties"]:
-                        # Kan direct geplaatst worden, dus hoort niet bij dit scenario
-                        continue
-                    if doorschuif_leegplek(uur, attr, pos_idx, extra_naam, 1, max_iterations):
-                        extra_assignments[uur].remove(extra_naam)
-                        changes_made = True
-                        break  # stop met deze plek, ga naar volgende lege plek
+                if changes_made:
+                    break
+            if changes_made:
+                break
+        if changes_made:
+            break
     if not changes_made:
         break
-
-# -----------------------------
-# Naloop: plaats overgebleven extra's alsnog als >4u mag
-# -----------------------------
-for uur in open_uren:
-    extras_op_uur = list(extra_assignments[uur])
-    for extra_naam in extras_op_uur:
-        extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
-        if not extra_student:
-            continue
-        for attr in extra_student["attracties"]:
-            if uur in extra_student["uren_beschikbaar"]:
-                # Check capaciteit
-                if attr not in per_hour_assigned_counts[uur]:
-                    continue  # deze attractie is niet gepland op dit uur
-                max_pos = aantallen[uur].get(attr, 1)
-                if attr in red_spots.get(uur, set()):
-                    max_pos = 1
-                for pos_idx in range(1, max_pos+1):
-                    namen = assigned_map.get((uur, attr), [])
-                    naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
-                    if naam:
-                        continue
-                    # Check 4-uursregel, maar lakser: tel alle uren op deze attractie, ongeacht positie
-                    uren_bij_attr = set()
-                    for h in extra_student["assigned_hours"]:
-                        if extra_student["naam"] in assigned_map.get((h, attr), []):
-                            uren_bij_attr.add(h)
-                    totaal_uren = uren_bij_attr | {uur}
-                    if len(totaal_uren) > 4:
-                        kandidaten = [s for s in studenten_workend if s["naam"] != extra_student["naam"] and uur in s["uren_beschikbaar"] and attr in s["attracties"]]
-                        if kandidaten:
-                            continue  # Er is iemand anders, dus niet lakser plaatsen
-                        # Niemand anders kan, dus tóch plaatsen
-                    # Plaats direct
-                    while len(assigned_map[(uur, attr)]) < pos_idx:
-                        assigned_map[(uur, attr)].append("")
-                    assigned_map[(uur, attr)].insert(pos_idx-1, extra_naam)
-                    assigned_map[(uur, attr)] = assigned_map[(uur, attr)][:aantallen[uur].get(attr, 1)]
-                    extra_student["assigned_hours"].append(uur)
-                    extra_student["assigned_attracties"].add(attr)
-                    per_hour_assigned_counts[uur][attr] += 1
-                    extra_assignments[uur].remove(extra_naam)
-                    break  # stop met deze extra op dit uur
 
 # -----------------------------
 # Excel output
