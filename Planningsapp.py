@@ -458,33 +458,39 @@ for _ in range(max_iterations):
     if not changes_made:
         break
 
+
 # -----------------------------
-# Laatste brute-force check: vul lege plekken met extra's die de attractie kunnen (enkel dat checken)
+# Verbeterde brute-force check: vul ALLE lege plekken met extra's die de attractie kunnen, blijf herhalen tot geen wijzigingen
 # -----------------------------
-for uur in open_uren:
-    extras_op_uur = list(extra_assignments[uur])
-    if not extras_op_uur:
-        continue
-    for attr in attracties_te_plannen:
-        if attr in red_spots.get(uur, set()):
-            continue
-        max_pos = aantallen[uur].get(attr, 1)
-        for pos_idx in range(1, max_pos+1):
-            namen = assigned_map.get((uur, attr), [])
-            naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
-            if naam:
+while True:
+    changes_made = False
+    for uur in open_uren:
+        # Maak een kopie want we gaan muteren
+        extras_op_uur = list(extra_assignments[uur])
+        for attr in attracties_te_plannen:
+            if attr in red_spots.get(uur, set()):
                 continue
-            for extra_naam in extras_op_uur:
-                extra_student = next((s for s in studenten if s["naam"] == extra_naam), None)
-                if not extra_student:
+            max_pos = aantallen[uur].get(attr, 1)
+            for pos_idx in range(1, max_pos+1):
+                namen = assigned_map.get((uur, attr), [])
+                naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
+                if naam:
                     continue
-                if attr in extra_student["attracties"]:
-                    while len(assigned_map[(uur, attr)]) < pos_idx:
-                        assigned_map[(uur, attr)].append("")
-                    assigned_map[(uur, attr)][pos_idx-1] = extra_naam
-                    if extra_naam in extra_assignments[uur]:
-                        extra_assignments[uur].remove(extra_naam)
-                    break  # Stop na eerste succesvolle plaatsing
+                # Probeer ALLE extra's op dit uur
+                for extra_naam in extras_op_uur:
+                    extra_student = next((s for s in studenten if s["naam"] == extra_naam), None)
+                    if not extra_student:
+                        continue
+                    if attr in extra_student["attracties"]:
+                        while len(assigned_map[(uur, attr)]) < pos_idx:
+                            assigned_map[(uur, attr)].append("")
+                        assigned_map[(uur, attr)][pos_idx-1] = extra_naam
+                        if extra_naam in extra_assignments[uur]:
+                            extra_assignments[uur].remove(extra_naam)
+                        changes_made = True
+                        break  # Stop na eerste succesvolle plaatsing voor deze plek, ga naar volgende lege plek
+    if not changes_made:
+        break
 
 # -----------------------------
 # Excel output
