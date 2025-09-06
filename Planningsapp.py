@@ -460,6 +460,18 @@ for _ in range(max_iterations):
 
 
 # -----------------------------
+# Vul extra_assignments[uur] aan met alle kandidaten die vergeten zijn door de max-4-uur-regel
+# -----------------------------
+for uur in open_uren:
+    for s in studenten:
+        if (
+            uur in s["uren_beschikbaar"]
+            and uur not in s["assigned_hours"]
+            and s["naam"] not in extra_assignments[uur]
+        ):
+            extra_assignments[uur].append(s["naam"])
+
+# -----------------------------
 # Verbeterde brute-force check: vul ALLE lege plekken met extra's die de attractie kunnen, blijf herhalen tot geen wijzigingen
 # -----------------------------
 while True:
@@ -472,7 +484,6 @@ while True:
             max_pos = aantallen[uur].get(attr, 1)
             for pos_idx in range(1, max_pos+1):
                 namen = assigned_map.get((uur, attr), [])
-                # Zoek de eerste lege plek: ofwel een lege string, ofwel een index die nog niet bestaat
                 plek_vrij = False
                 if pos_idx-1 < len(namen):
                     if not namen[pos_idx-1]:
@@ -485,7 +496,6 @@ while True:
                     extra_student = next((s for s in studenten if s["naam"] == extra_naam), None)
                     if not extra_student:
                         continue
-                    # Alleen plaatsen als student op dit uur nog NIET is ingeroosterd, en de attractie in de originele lijst staat
                     if attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
                         while len(assigned_map[(uur, attr)]) < pos_idx:
                             assigned_map[(uur, attr)].append("")
@@ -589,5 +599,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
