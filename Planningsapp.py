@@ -472,8 +472,14 @@ while True:
             max_pos = aantallen[uur].get(attr, 1)
             for pos_idx in range(1, max_pos+1):
                 namen = assigned_map.get((uur, attr), [])
-                naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
-                if naam:
+                # Zoek de eerste lege plek: ofwel een lege string, ofwel een index die nog niet bestaat
+                plek_vrij = False
+                if pos_idx-1 < len(namen):
+                    if not namen[pos_idx-1]:
+                        plek_vrij = True
+                else:
+                    plek_vrij = True
+                if not plek_vrij:
                     continue
                 for extra_naam in extras_op_uur:
                     extra_student = next((s for s in studenten if s["naam"] == extra_naam), None)
@@ -481,6 +487,7 @@ while True:
                         continue
                     # Alleen plaatsen als student op dit uur nog NIET is ingeroosterd
                     if attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+                        # Vul de assigned_map correct aan
                         while len(assigned_map[(uur, attr)]) < pos_idx:
                             assigned_map[(uur, attr)].append("")
                         assigned_map[(uur, attr)][pos_idx-1] = extra_naam
