@@ -459,8 +459,9 @@ for _ in range(max_iterations):
         break
 
 
+
 # -----------------------------
-# Vul extra_assignments[uur] aan met alle kandidaten die vergeten zijn door de max-4-uur-regel
+# Vul extra_assignments[uur] aan met alle kandidaten die vergeten zijn door de max-4-uur-regel, NA de doorschuif-loop
 # -----------------------------
 for uur in open_uren:
     for s in studenten:
@@ -599,6 +600,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
