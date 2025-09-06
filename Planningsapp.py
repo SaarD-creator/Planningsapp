@@ -459,7 +459,7 @@ for _ in range(max_iterations):
         break
 
 # -----------------------------
-# Laatste check: extra's direct invullen als er nog lege plekken zijn
+# Laatste brute-force check: vul lege plekken met extra's die de attractie kunnen (enkel dat checken)
 # -----------------------------
 for uur in open_uren:
     extras_op_uur = list(extra_assignments[uur])
@@ -475,17 +475,13 @@ for uur in open_uren:
             if naam:
                 continue
             for extra_naam in extras_op_uur:
-                extra_student = next((s for s in studenten_workend if s["naam"] == extra_naam), None)
+                extra_student = next((s for s in studenten if s["naam"] == extra_naam), None)
                 if not extra_student:
                     continue
                 if attr in extra_student["attracties"]:
                     while len(assigned_map[(uur, attr)]) < pos_idx:
                         assigned_map[(uur, attr)].append("")
                     assigned_map[(uur, attr)][pos_idx-1] = extra_naam
-                    if uur not in extra_student["assigned_hours"]:
-                        extra_student["assigned_hours"].append(uur)
-                    extra_student["assigned_attracties"].add(attr)
-                    per_hour_assigned_counts[uur][attr] += 1
                     if extra_naam in extra_assignments[uur]:
                         extra_assignments[uur].remove(extra_naam)
                     break  # Stop na eerste succesvolle plaatsing
