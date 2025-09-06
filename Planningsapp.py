@@ -504,7 +504,7 @@ for uur in open_uren:
         if not extra_student:
             continue
         for attr in extra_student["attracties"]:
-            if uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+            if uur in extra_student["uren_beschikbaar"]:
                 # Check capaciteit
                 if attr not in per_hour_assigned_counts[uur]:
                     continue  # deze attractie is niet gepland op dit uur
@@ -519,7 +519,6 @@ for uur in open_uren:
                     # Check 4-uursregel, maar lakser: tel alle uren op deze attractie, ongeacht positie
                     uren_bij_attr = set()
                     for h in extra_student["assigned_hours"]:
-                        # Check of student op deze attractie stond (positie 1 of 2)
                         if extra_student["naam"] in assigned_map.get((h, attr), []):
                             uren_bij_attr.add(h)
                     totaal_uren = uren_bij_attr | {uur}
