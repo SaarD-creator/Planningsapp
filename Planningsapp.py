@@ -1,7 +1,7 @@
 #red spots, geen (ithink) extra's, geen lange blokken, wel nog extra bij max van 4 uur
 
 #perfectttt, enkel nog probleempje als persoon met meeste attracties iets niet kan
-kak
+
 # we zien de red spots al, gwn nog teveel bij extra
 
 
@@ -527,8 +527,9 @@ while True:
         break
 
  # -----------------------------
-# Ultieme brute-force: vul alle lege plekken met elke student die op dat uur beschikbaar is, het uur nog niet heeft, en de attractie kan (volgens Excel)
-# -----------------------------
+
+# Ultieme brute-force: debug-versie
+import sys
 for uur in open_uren:
     for attr in attracties_te_plannen:
         if attr in red_spots.get(uur, set()):
@@ -544,12 +545,15 @@ for uur in open_uren:
                 plek_vrij = True
             if not plek_vrij:
                 continue
+            print(f"DEBUG: Lege plek bij {attr} uur {uur} pos {pos_idx}", file=sys.stderr)
             for s in studenten:
+                print(f"  Probeer student {s['naam']} - uren_beschikbaar: {s['uren_beschikbaar']} assigned_hours: {s['assigned_hours']} attracties: {s['attracties']}", file=sys.stderr)
                 if (
                     uur in s["uren_beschikbaar"]
                     and uur not in s["assigned_hours"]
                     and attr in s["attracties"]
                 ):
+                    print(f"    --> TOEGEVOEGD: {s['naam']} op {attr} {uur} pos {pos_idx}", file=sys.stderr)
                     while len(assigned_map[(uur, attr)]) < pos_idx:
                         assigned_map[(uur, attr)].append("")
                     assigned_map[(uur, attr)][pos_idx-1] = s["naam"]
