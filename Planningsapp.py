@@ -485,15 +485,13 @@ while True:
                     extra_student = next((s for s in studenten if s["naam"] == extra_naam), None)
                     if not extra_student:
                         continue
-                    # Alleen plaatsen als student op dit uur nog NIET is ingeroosterd
+                    # Alleen plaatsen als student op dit uur nog NIET is ingeroosterd, en de attractie in de originele lijst staat
                     if attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
-                        # Vul de assigned_map correct aan
                         while len(assigned_map[(uur, attr)]) < pos_idx:
                             assigned_map[(uur, attr)].append("")
                         assigned_map[(uur, attr)][pos_idx-1] = extra_naam
                         extra_student["assigned_hours"].append(uur)
                         extra_student["assigned_attracties"].add(attr)
-                        # Update per_hour_assigned_counts zodat de Excel-output klopt
                         if attr in per_hour_assigned_counts[uur]:
                             per_hour_assigned_counts[uur][attr] += 1
                         if extra_naam in extra_assignments[uur]:
@@ -591,6 +589,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
