@@ -3,7 +3,7 @@
 #perfectttt, enkel nog probleempje als persoon met meeste attracties iets niet kan
 
 # we zien de red spots al, gwn nog teveel bij extra
-
+kak
 
 import streamlit as st
 import random
