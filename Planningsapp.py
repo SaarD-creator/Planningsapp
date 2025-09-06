@@ -478,7 +478,6 @@ for uur in open_uren:
 while True:
     changes_made = False
     for uur in open_uren:
-        extras_op_uur = list(extra_assignments[uur])
         for attr in attracties_te_plannen:
             if attr in red_spots.get(uur, set()):
                 continue
@@ -493,20 +492,22 @@ while True:
                     plek_vrij = True
                 if not plek_vrij:
                     continue
-                for extra_naam in extras_op_uur:
-                    extra_student = next((s for s in studenten if s["naam"] == extra_naam), None)
-                    if not extra_student:
-                        continue
-                    if attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+                # Probeer ALLE studenten die op dit uur beschikbaar zijn, de attractie kunnen (volgens Excel), en dat uur nog niet hebben
+                for s in studenten:
+                    if (
+                        uur in s["uren_beschikbaar"]
+                        and uur not in s["assigned_hours"]
+                        and attr in s["attracties"]
+                    ):
                         while len(assigned_map[(uur, attr)]) < pos_idx:
                             assigned_map[(uur, attr)].append("")
-                        assigned_map[(uur, attr)][pos_idx-1] = extra_naam
-                        extra_student["assigned_hours"].append(uur)
-                        extra_student["assigned_attracties"].add(attr)
+                        assigned_map[(uur, attr)][pos_idx-1] = s["naam"]
+                        s["assigned_hours"].append(uur)
+                        s["assigned_attracties"].add(attr)
                         if attr in per_hour_assigned_counts[uur]:
                             per_hour_assigned_counts[uur][attr] += 1
-                        if extra_naam in extra_assignments[uur]:
-                            extra_assignments[uur].remove(extra_naam)
+                        if s["naam"] in extra_assignments[uur]:
+                            extra_assignments[uur].remove(s["naam"])
                         changes_made = True
                         break
     if not changes_made:
@@ -600,5 +601,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
