@@ -831,56 +831,106 @@ def get_student_work_hours(naam):
 
         naam = student["naam"]
         werk_uren = get_student_work_hours(naam)
-        if not werk_uren:
-            return False
         random.shuffle(werk_uren)
+        ################################################################################
+        # Pauzevlinder helpers en variabelen (enkel juiste versies, geen duplicaten)
+        ################################################################################
+        pv_rows = []  # lijst: (pv_dict, naam_rij_index)
+        pv_cap_set = {}  # pv-naam -> set genormaliseerde attracties
+        for pv in selected:
+            row_found = None
+            for r in range(2, ws_pauze.max_row + 1):
+                if str(ws_pauze.cell(r, 1).value).strip() == str(pv["naam"]).strip():
+                    row_found = r
+                    break
+            if row_found is not None:
+                pv_rows.append((pv, row_found))
+                pv_cap_set[pv["naam"]] = {normalize_attr(a) for a in pv.get("attracties", [])}
+
+        # Lange werkers: namen-set voor snelle checks
+        lange_werkers = [s for s in studenten if student_totalen.get(s["naam"], 0) > 6 and s["naam"] not in [pv["naam"] for pv in selected]]
+        lange_werkers_names = {s["naam"] for s in lange_werkers}
+
+        # Willekeurige volgorde van pauzeplekken (pv-rij x kolom) om lege cellen random te spreiden
+        slot_order = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
+        random.shuffle(slot_order)
+
         for uur in werk_uren:
+            """Check of student in Planning bij 'extra' staat (kolom kan 'Extra' zijn of specifieke marker)."""
+            for row in range(2, ws_planning.max_row + 1):
+                if ws_planning.cell(row, 1).value:
+                    for col in range(2, ws_planning.max_column + 1):
+                        if str(ws_planning.cell(row, col).value).strip().lower() == str(naam).strip().lower():
+                            header = str(ws_planning.cell(1, col).value).strip().lower()
+                            if "extra" in header:
+                                return True
+            return False
+
             attr = vind_attractie_op_uur(naam, uur)
-            for (pv, pv_row) in random.sample(pv_rows, len(pv_rows)):
-                if attr and attr.strip().lower() != "extra" and not pv_kan_attr(pv, attr):
+            uren = set()
+            for col in range(2, ws_planning.max_column + 1):
+                header = ws_planning.cell(1, col).value
+                uur = parse_header_uur(header)
+                if uur is None:
                     continue
-                for col in random.sample(pauze_cols, len(pauze_cols)):
+                for row in range(2, ws_planning.max_row + 1):
+                    if ws_planning.cell(row, col).value == naam:
+                        uren.add(uur)
+                        break
+            return sorted(uren)
+
+            for (pv, pv_row) in pv_rows:
+            for col in range(2, ws_planning.max_column + 1):
+                header = ws_planning.cell(1, col).value
+                col_uur = parse_header_uur(header)
+                if col_uur != uur:
+                    continue
+                for row in range(2, ws_planning.max_row + 1):
+                    if ws_planning.cell(row, col).value == naam:
+                        return ws_planning.cell(row, 1).value
+            return None
+
+                if attr and attr.strip().lower() != "extra" and not pv_kan_attr(pv, attr):
+            base = normalize_attr(attr)
+            return base in pv_cap_set.get(pv["naam"], set())
+
+                    continue
+            naam = student["naam"]
+            werk_uren = get_student_work_hours(naam)
+            for uur in random.sample(werk_uren, len(werk_uren)):
+                attr = vind_attractie_op_uur(naam, uur)
+                if not attr:
+                    continue
+                for (pv, pv_row, col) in slot_order:
                     col_header = ws_pauze.cell(1, col).value
                     col_uur = parse_header_uur(col_header)
                     if col_uur != uur:
                         continue
+                    if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                        continue
                     cel = ws_pauze.cell(pv_row, col)
+                    boven_cel = ws_pauze.cell(pv_row - 1, col)
                     current_val = cel.value
-                    boven_cel = ws_pauze.cell(pv_row-1, col)
                     if current_val in [None, ""]:
-                        if attr:
-                            boven_cel.value = attr
-                            boven_cel.alignment = center_align
-                            boven_cel.border = thin_border
+                        boven_cel.value = attr
+                        boven_cel.alignment = center_align
+                        boven_cel.border = thin_border
                         cel.value = naam
                         cel.alignment = center_align
                         cel.border = thin_border
-                        cel.fill = pauze_fill
                         return True
-                    elif harde_mode:
-                        occupant = str(current_val).strip()
-                        if occupant not in min_werkers_names:
-                            if attr:
+                    else:
+                        if harde_mode:
+                            occupant = str(current_val).strip()
+                            if occupant not in lange_werkers_names:
                                 boven_cel.value = attr
                                 boven_cel.alignment = center_align
                                 boven_cel.border = thin_border
-                            cel.value = naam
-                            cel.alignment = center_align
-                            cel.border = thin_border
-                            cel.fill = pauze_fill
-                            return True
-        return False
-
-output = BytesIO()
-        naam = student["naam"]
-        werk_uren = get_student_work_hours(naam)
-        if not werk_uren:
+                                cel.value = naam
+                                cel.alignment = center_align
+                                cel.border = thin_border
+                                return True
             return False
-        for uur in werk_uren:
-            attr = vind_attractie_op_uur(naam, uur)
-            for (pv, pv_row) in pv_rows:
-                if attr and attr.strip().lower() != "extra" and not pv_kan_attr(pv, attr):
-                    continue
                 for col in pauze_cols:
                     col_header = ws_pauze.cell(1, col).value
                     col_uur = parse_header_uur(col_header)
