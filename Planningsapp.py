@@ -491,7 +491,8 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
                         per_hour_assigned_counts[uur][b_attr] -= 1
                         cand_student["assigned_hours"].remove(uur)
                         extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
-                        if extra_student and b_attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+                        # LET OP: hier GEEN check meer of extra_student de attractie kan, alleen of beschikbaar!
+                        if extra_student and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
                             assigned_map[(uur, b_attr)][b_pos] = student_naam
                             extra_student["assigned_hours"].append(uur)
                             extra_student["assigned_attracties"].add(b_attr)
@@ -1225,5 +1226,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
