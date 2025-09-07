@@ -1,5 +1,5 @@
 #red spots, geen (ithink) extra's, geen lange blokken, wel nog extra bij max van 4 uur
-
+kak
 #perfectttt, enkel nog probleempje als persoon met meeste attracties iets niet kan
 
 # we zien de red spots al, gwn nog teveel bij extra
