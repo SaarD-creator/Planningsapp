@@ -1170,9 +1170,15 @@ for pv, pv_row in pv_rows:
 # Opslaan in hetzelfde unieke bestand als DEEL 3
 # -----------------------------
 
-# Maak in-memory bestand
+
 output = BytesIO()
 wb_out.save(output)
-output.seek(0)  # Zorg dat lezen vanaf begin kan
+output.seek(0)
+st.success("Planning gegenereerd!")
+st.download_button(
+    "Download planning",
+    data=output.getvalue(),
+    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+)
 
 
