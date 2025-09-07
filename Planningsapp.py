@@ -489,6 +489,8 @@ for _ in range(max_iterations):
     if not changes_made:
         break
 
+
+doorschuif_leegplek()
 # -----------------------------
 
 # Excel output
