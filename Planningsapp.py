@@ -521,31 +521,43 @@ thin_border = Border(
 
 # Felle, maar lichte pastelkleuren (gelijkmatige felheid, veel variatie)
 studenten_namen = sorted({s["naam"] for s in studenten})
-# Bron: https://www.color-hex.com/color-palettes/popular.php (lichte, felle pastels)
-light_colors = [
-    "FFB3BA", "FFDFBA", "FFFFBA", "BAFFC9", "BAE1FF", # roze, oranje, geel, groen, blauw
-    "E0BBE4", "957DAD", "D291BC", "FEC8D8", "FFDFD3", # paars/roze
-    "B5EAD7", "C7CEEA", "FFDAC1", "B5EAD7", "C7CEEA", # mint, lichtblauw
-    "FF9AA2", "FFB7B2", "FFDAC1", "E2F0CB", "B5EAD7", # pastelrood, mint
-    "B5EAD7", "C7CEEA", "FFB7B2", "FFDAC1", "E2F0CB", # extra
-    "F6DFEB", "F9E2AE", "B6E2D3", "B6D0E2", "F6E2B3", # zachtgeel, mint, blauw
-    "F7C5CC", "F7E6C5", "C5F7D6", "C5E6F7", "F7F6C5", # extra pastel
-    "F7C5F7", "C5C5F7", "C5F7F7", "F7C5C5", "C5F7C5", # paars, blauw, groen
-    "F7E2C5", "E2F7C5", "C5F7E2", "E2C5F7", "C5E2F7", # extra
-    "F7C5E2", "E2C5F7", "C5F7E2", "E2F7C5", "C5E2F7", # extra
-    "F7F7C5", "C5F7F7", "F7C5F7", "C5C5F7", "F7C5C5", # extra
-    "C5F7C5", "F7E2C5", "E2F7C5", "C5F7E2", "E2C5F7", # extra
-    "C5E2F7", "F7C5E2", "E2C5F7", "C5F7E2", "E2F7C5", # extra
-    "C5E2F7", "F7F7C5", "C5F7F7", "F7C5F7", "C5C5F7", # extra
-    "F7C5C5", "C5F7C5", "F7E2C5", "E2F7C5", "C5F7E2", # extra
-    "E2C5F7", "C5E2F7", "F7C5E2", "E2C5F7", "C5F7E2", # extra
-    "E2F7C5", "C5E2F7", "F7F7C5", "C5F7F7", "F7C5F7", # extra
-    "C5C5F7", "F7C5C5", "C5F7C5", "F7E2C5", "E2F7C5"  # extra
-]
-import itertools
 # Pauzevlinders krijgen ook een kleur uit het schema
 alle_namen = studenten_namen + [pv for pv in pauzevlinder_namen if pv not in studenten_namen]
-student_kleuren = dict(zip(alle_namen, itertools.cycle(light_colors)))
+# Unieke kleuren genereren: als er te weinig kleuren zijn, maak er meer met lichte variatie
+base_colors = [
+    "FFB3BA", "FFDFBA", "FFFFBA", "BAFFC9", "BAE1FF", "E0BBE4", "957DAD", "D291BC", "FEC8D8", "FFDFD3",
+    "B5EAD7", "C7CEEA", "FFDAC1", "E2F0CB", "F6DFEB", "F9E2AE", "B6E2D3", "B6D0E2", "F6E2B3", "F7C5CC",
+    "F7E6C5", "C5F7D6", "C5E6F7", "F7F6C5", "F7C5F7", "C5C5F7", "C5F7F7", "F7C5C5", "C5F7C5", "F7E2C5",
+    "E2F7C5", "C5F7E2", "E2C5F7", "C5E2F7", "F7C5E2", "F7F7C5", "C5F7F7", "F7C5F7", "C5C5F7", "F7C5C5",
+    "C5F7C5", "F7E2C5", "E2F7C5", "C5F7E2", "E2C5F7", "C5E2F7", "F7C5E2", "E2C5F7", "C5F7E2", "E2F7C5"
+]
+import colorsys
+def pastel_variant(hex_color, variant):
+    # hex_color: 'RRGGBB', variant: int
+    r = int(hex_color[0:2], 16) / 255.0
+    g = int(hex_color[2:4], 16) / 255.0
+    b = int(hex_color[4:6], 16) / 255.0
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    # kleine variatie in lichtheid en saturatie
+    l = min(1, l + 0.03 * (variant % 3))
+    s = max(0.3, s - 0.04 * (variant % 5))
+    r2, g2, b2 = colorsys.hls_to_rgb(h, l, s)
+    return f"{int(r2*255):02X}{int(g2*255):02X}{int(b2*255):02X}"
+
+unique_colors = []
+needed = len(alle_namen)
+variant = 0
+while len(unique_colors) < needed:
+    for base in base_colors:
+        if len(unique_colors) >= needed:
+            break
+        # voeg lichte variatie toe als nodig
+        color = pastel_variant(base, variant) if variant > 0 else base
+        if color not in unique_colors:
+            unique_colors.append(color)
+    variant += 1
+
+student_kleuren = dict(zip(alle_namen, unique_colors))
 
 # Header
 ws_out.cell(1, 1, vandaag).font = Font(bold=True)
