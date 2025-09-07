@@ -412,13 +412,19 @@ for s in studenten_sorted:
 def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     if stap > max_stappen:
         return False
-    # Zoek wie op uur U, attractie A, positie pos_idx hoort te staan
+    # Debuglog lijst op module-niveau
+    global doorschuif_debuglog
+    try:
+        doorschuif_debuglog
+    except NameError:
+        doorschuif_debuglog = []
+
     namen = assigned_map.get((uur, attr), [])
     naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
     if naam:
-        return False  # plek al gevuld
+        doorschuif_debuglog.append(f"[{stap}] STOP: plek ({uur}, {attr}, {pos_idx}) al gevuld")
+        return False
 
-    # Kandidaten: alle studenten die op dit uur op een attractie staan (behalve de extra zelf)
     kandidaten = []
     for b_attr in attracties_te_plannen:
         b_namen = assigned_map.get((uur, b_attr), [])
@@ -428,32 +434,28 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
             cand_student = next((s for s in studenten_workend if s["naam"] == b_naam), None)
             if not cand_student:
                 continue
-            # Mag deze student de huidige attractie doen?
             if attr not in cand_student["attracties"]:
                 continue
             uren = sorted(cand_student["assigned_hours"])
             if len(uren) == 1:
-                score = 0  # hoogste prioriteit: 1 uurtje
+                score = 0
             elif uur == min(uren) or uur == max(uren):
-                score = 1  # aan het begin of eind van blok
+                score = 1
             else:
-                score = 2  # midden in blok
+                score = 2
             kandidaten.append((score, b_attr, b_pos, b_naam, cand_student))
     kandidaten.sort()
 
     for score, b_attr, b_pos, b_naam, cand_student in kandidaten:
-        # Haal cand_student van zijn plek (b_attr, b_pos) en zet daar de extra neer
-        # Check: mag cand_student op attr? (al gedaan), mag extra op b_attr? (alleen beschikbaarheid)
         extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
         if not extra_student:
+            doorschuif_debuglog.append(f"[{stap}] SKIP: extra_student {student_naam} niet gevonden")
             continue
-        # Swap: zet cand_student op (uur, attr, pos_idx), extra op (uur, b_attr, b_pos)
-        # 1. Verwijder cand_student van oude plek
+        doorschuif_debuglog.append(f"[{stap}] SWAP: {student_naam} <-> {b_naam} ({uur}, {b_attr}->{attr})")
         assigned_map[(uur, b_attr)][b_pos] = ""
         per_hour_assigned_counts[uur][b_attr] -= 1
         cand_student["assigned_hours"].remove(uur)
         cand_student["assigned_attracties"].discard(b_attr)
-        # 2. Zet cand_student op nieuwe plek
         while len(assigned_map[(uur, attr)]) < pos_idx:
             assigned_map[(uur, attr)].append("")
         assigned_map[(uur, attr)].insert(pos_idx-1, b_naam)
@@ -461,24 +463,24 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
         cand_student["assigned_hours"].append(uur)
         cand_student["assigned_attracties"].add(attr)
         per_hour_assigned_counts[uur][attr] += 1
-        # 3. Zet extra op oude plek
         assigned_map[(uur, b_attr)][b_pos] = student_naam
         extra_student["assigned_hours"].append(uur)
         extra_student["assigned_attracties"].add(b_attr)
         per_hour_assigned_counts[uur][b_attr] += 1
-        # 4. Probeer nu de nieuwe lege plek (die ontstaat door het verwijderen van cand_student op attr)
-        # (let op: als cand_student al op attr stond, kan er een dubbele ontstaan, dus zoek lege plek)
-        # Zoek nu de eerste lege plek op attr op dit uur
         nieuwe_namen = assigned_map.get((uur, attr), [])
+        found_chain = False
         for new_pos, n in enumerate(nieuwe_namen):
             if not n:
-                # Probeer ketting verder
+                doorschuif_debuglog.append(f"[{stap}] KETTING: probeer {b_naam} op ({uur}, {attr}, {new_pos+1})")
                 if doorschuif_leegplek(uur, attr, new_pos+1, b_naam, stap+1, max_stappen):
-                    return True
-        # Als geen ketting lukt, undo swap
+                    found_chain = True
+                    break
+        if found_chain:
+            doorschuif_debuglog.append(f"[{stap}] SUCCES: ketting gelukt voor {student_naam}")
+            return True
         # Undo alles
+        doorschuif_debuglog.append(f"[{stap}] UNDO: swap {student_naam} <-> {b_naam} faalt")
         assigned_map[(uur, b_attr)][b_pos] = b_naam
-        per_hour_assigned_counts[uur][b_attr] += 0  # was -1, +1, dus netto 0
         cand_student["assigned_hours"].append(uur)
         cand_student["assigned_attracties"].add(b_attr)
         assigned_map[(uur, attr)].pop(pos_idx-1)
@@ -486,6 +488,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
         per_hour_assigned_counts[uur][attr] -= 1
         extra_student["assigned_hours"].remove(uur)
         extra_student["assigned_attracties"].discard(b_attr)
+    doorschuif_debuglog.append(f"[{stap}] FAIL: geen swaps mogelijk voor {student_naam} op ({uur}, {attr}, {pos_idx})")
     return False
 
 max_iterations = 5
@@ -772,6 +775,7 @@ for pv, pv_row in pv_rows:
         if ws_pauze.cell(pv_row, col).value in [None, ""]:
             ws_pauze.cell(pv_row, col).fill = naam_leeg_fill
 
+
 # -----------------------------
 # Opslaan in uniek bestand
 # -----------------------------
@@ -792,6 +796,13 @@ def log_feedback(msg):
 
 
 log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek (B–G) in {planning_bestand}")
+
+# --- doorschuif debuglog naar feedback sheet ---
+try:
+    for regel in doorschuif_debuglog:
+        log_feedback(regel)
+except Exception as e:
+    log_feedback(f"[DEBUGLOG ERROR] {e}")
 
 
 
