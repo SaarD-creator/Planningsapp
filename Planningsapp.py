@@ -252,22 +252,6 @@ for uur in open_uren:
             positions_per_hour[uur].append((attr, pos))
 
 # Mapping: welke student staat waar
-assigned_map = defaultdict(list)  # (uur, attr) -> [namen]
-occupied_positions = {uur: {} for uur in open_uren}  # (attr,pos) -> naam
-extra_assignments = defaultdict(list)
-
-
-# -----------------------------
-# Hulpfunctie: kan blok geplaatst worden?
-# -----------------------------
-def can_place_block(student, block_hours, attr):
-    for h in block_hours:
-        # check of attractie beschikbaar is in dit uur
-        if (attr, 1) not in positions_per_hour[h] and (attr, 2) not in positions_per_hour[h]:
-            return False
-        # alle posities bezet?
-        taken1 = (attr,1) in occupied_positions[h]
-        taken2 = (attr,2) in occupied_positions[h]
         if taken1 and taken2:
             return False
     return True
@@ -278,152 +262,6 @@ def can_place_block(student, block_hours, attr):
 def place_block(student, block_hours, attr):
     for h in block_hours:
         # kies positie: eerst pos1, anders pos2
-        if (attr,1) in positions_per_hour[h] and (attr,1) not in occupied_positions[h]:
-            pos = 1
-        else:
-            pos = 2
-        occupied_positions[h][(attr,pos)] = student["naam"]
-        assigned_map[(h, attr)].append(student["naam"])
-        student["assigned_hours"].append(h)
-    student["assigned_attracties"].add(attr)
-
-
-# =============================
-# FLEXIBELE BLOKKEN & PLAATSLOGICA
-# =============================
-
-def _max_spots_for(attr, uur):
-    """Houd rekening met red_spots: 2e plek dicht als het rood is."""
-    max_spots = aantallen[uur].get(attr, 1)
-    if attr in red_spots.get(uur, set()):
-        max_spots = 1
-    return max_spots
-
-def _has_capacity(attr, uur):
-    return per_hour_assigned_counts[uur][attr] < _max_spots_for(attr, uur)
-
-def _try_place_block_on_attr(student, block_hours, attr):
-    """Check capaciteit in alle uren en plaats dan in één keer, met max 4 uur per attractie per dag (positie 1 en 2 tellen samen)."""
-    # Capaciteit check
-    for h in block_hours:
-        if not _has_capacity(attr, h):
-            return False
-    # Check max 4 unieke uren per attractie per dag (positie 1 en 2 tellen samen)
-    # Verzamel alle uren waarop deze student al bij deze attractie staat
-    uren_bij_attr = set()
-    for h in student["assigned_hours"]:
-        namen = assigned_map.get((h, attr), [])
-        if student["naam"] in namen:
-            uren_bij_attr.add(h)
-    # Voeg de nieuwe uren toe
-    nieuwe_uren = set(block_hours)
-    totaal_uren = uren_bij_attr | nieuwe_uren
-    if len(totaal_uren) > 4:
-        return False
-    # Plaatsen
-    for h in block_hours:
-        assigned_map[(h, attr)].append(student["naam"])
-        per_hour_assigned_counts[h][attr] += 1
-        student["assigned_hours"].append(h)
-    student["assigned_attracties"].add(attr)
-    return True
-
-def _try_place_block_any_attr(student, block_hours):
-    """Probeer dit blok te plaatsen op eender welke attractie die student kan."""
-    # Eerst attracties die nu het minst keuze hebben (kritiek), zodat we schaarste slim benutten
-    candidate_attrs = [a for a in attracties_te_plannen if a in student["attracties"]]
-    candidate_attrs.sort(key=lambda a: sum(1 for s in studenten_workend if a in s["attracties"]))
-    for attr in candidate_attrs:
-        # vermijd dubbele toewijzing van hetzelfde attr als het niet per se moet
-        if attr in student["assigned_attracties"]:
-            continue
-        if _try_place_block_on_attr(student, block_hours, attr):
-            return True
-    # Als niets lukte zonder herhaling, laat herhaling van attractie toe als dat nodig is
-    for attr in candidate_attrs:
-        if _try_place_block_on_attr(student, block_hours, attr):
-            return True
-    return False
-
-def _place_block_with_fallback(student, hours_seq):
-    """
-    Probeer een reeks opeenvolgende uren te plaatsen.
-    - Eerst als blok van 3, anders 2, anders 1.
-    - Als niets lukt aan het begin van de reeks, schuif 1 uur op (dat uur gaat voorlopig naar extra),
-      en probeer verder; tweede pass zal het later alsnog proberen op te vullen.
-    Retourneert: lijst 'unplaced' uren die (voorlopig) niet geplaatst raakten.
-    """
-    if not hours_seq:
-        return []
-
-    # Probeer blok aan de voorkant, groot -> klein
-    for size in [3, 2, 1]:
-        if len(hours_seq) >= size:
-            first_block = hours_seq[:size]
-            if _try_place_block_any_attr(student, first_block):
-                # Rest recursief
-                return _place_block_with_fallback(student, hours_seq[size:])
-
-    # Helemaal niks paste aan de voorkant: markeer eerste uur tijdelijk als 'unplaced' en schuif door
-    return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:])
-
-
-
-# -----------------------------
-# Nieuwe assign_student
-# -----------------------------
-def assign_student(s):
-    """
-    Plaats één student in de planning volgens alle regels:
-    - Alleen uren waar de student beschikbaar is én open_uren zijn.
-    - Geen overlap met pauzevlinder-uren.
-    - Alleen attracties die de student kan.
-    - Eerst lange blokken proberen (3 uur), dan korter (2 of 1).
-    - Blokken die niet passen, gaan voorlopig naar extra_assignments.
-    """
-    # Filter op effectieve inzetbare uren
-    uren = sorted(u for u in s["uren_beschikbaar"] if u in open_uren)
-    if s["is_pauzevlinder"]:
-        # Verwijder uren waarin pauzevlinder moet werken
-        uren = [u for u in uren if u not in required_pauze_hours]
-
-    if not uren:
-        return  # geen beschikbare uren
-
-    # Vind aaneengesloten runs van uren
-    runs = contiguous_runs(uren)
-
-    for run in runs:
-        # Plaats run met fallback (3->2->1), en schuif als het echt niet kan
-        unplaced = _place_block_with_fallback(s, run)
-        # Wat niet lukte, gaat voorlopig naar extra
-        for h in unplaced:
-            extra_assignments[h].append(s["naam"])
-
-
-
-for s in studenten_sorted:
-    assign_student(s)
-
-# -----------------------------
-# Post-processing: lege plekken opvullen door doorschuiven
-# -----------------------------
-
-def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
-    if stap > max_stappen:
-        return False
-    # Debuglog lijst op module-niveau
-    global doorschuif_debuglog
-    try:
-        doorschuif_debuglog
-    except NameError:
-        doorschuif_debuglog = []
-
-    namen = assigned_map.get((uur, attr), [])
-    naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
-    if naam:
-        doorschuif_debuglog.append(f"[{stap}] STOP: plek ({uur}, {attr}, {pos_idx}) al gevuld")
-        return False
 
     kandidaten = []
     for b_attr in attracties_te_plannen:
@@ -434,16 +272,13 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
             cand_student = next((s for s in studenten_workend if s["naam"] == b_naam), None)
             if not cand_student:
                 continue
-            # Mag deze student de lege attractie doen?
             if attr not in cand_student["attracties"]:
                 continue
-            # Mag de extra de vrijgekomen plek doen?
             extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
             if not extra_student:
                 continue
             if b_attr not in extra_student["attracties"]:
                 continue
-            # Score: zo min mogelijk 1-uursblokken creëren
             uren_cand = sorted([u for u in cand_student["assigned_hours"] if u != uur] + [uur])
             uren_extra = sorted(extra_student["assigned_hours"] + [uur])
             def count_1u_blokken(uren):
@@ -458,26 +293,18 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     for score, b_attr, b_pos, b_naam, cand_student in kandidaten:
         extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
         if not extra_student:
-            doorschuif_debuglog.append(f"[{stap}] SKIP: extra_student {student_naam} niet gevonden")
             continue
-        doorschuif_debuglog.append(f"[{stap}] SWAP: {student_naam} <-> {b_naam} ({uur}, {b_attr}->{attr})")
         # Voer de swap uit
         assigned_map[(uur, b_attr)][b_pos] = student_naam
         extra_student["assigned_hours"].append(uur)
         extra_student["assigned_attracties"].add(b_attr)
-        per_hour_assigned_counts[uur][b_attr] += 0  # netto gelijk
         assigned_map[(uur, attr)].insert(pos_idx-1, b_naam)
         assigned_map[(uur, attr)] = assigned_map[(uur, attr)][:aantallen[uur].get(attr, 1)]
         cand_student["assigned_hours"].remove(uur)
         cand_student["assigned_attracties"].discard(b_attr)
         cand_student["assigned_hours"].append(uur)
         cand_student["assigned_attracties"].add(attr)
-        per_hour_assigned_counts[uur][attr] += 0  # netto gelijk
-        # Check of alles klopt (geen dubbele, geen restricties overtreden)
-        # (optioneel: extra checks toevoegen)
-        doorschuif_debuglog.append(f"[{stap}] SUCCES: {student_naam} op {b_attr}, {b_naam} op {attr}")
         return True
-    doorschuif_debuglog.append(f"[{stap}] FAIL: geen geldige swaps voor {student_naam} op ({uur}, {attr}, {pos_idx})")
     return False
 
 max_iterations = 5
@@ -702,7 +529,6 @@ output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 import random
 from collections import defaultdict
-from openpyxl.styles import Alignment, Border, Side, PatternFill
 import datetime
 
 # -----------------------------
@@ -786,12 +612,7 @@ def log_feedback(msg):
 
 log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek (B–G) in {planning_bestand}")
 
-# --- doorschuif debuglog naar feedback sheet ---
-try:
-    for regel in doorschuif_debuglog:
-        log_feedback(regel)
-except Exception as e:
-    log_feedback(f"[DEBUGLOG ERROR] {e}")
+
 
 
 
@@ -801,7 +622,6 @@ except Exception as e:
 # DEEL 4: Lange werkers (>6 uur) pauze inplannen – gegarandeerd
 # -----------------------------
 
-from openpyxl.styles import Alignment, Border, Side, PatternFill
 import random  # <— toegevoegd voor willekeurige verdeling
 
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
@@ -854,115 +674,9 @@ def normalize_attr(name):
         s = parts[0]
     return s.strip().lower()
 
-# Build: pauzevlinder-rijen en capability-sets
-pv_rows = []  # lijst: (pv_dict, naam_rij_index)
-pv_cap_set = {}  # pv-naam -> set genormaliseerde attracties
-for pv in selected:
-    # zoek de rij waar de pv-naam in kolom A staat
-    row_found = None
-    for r in range(2, ws_pauze.max_row + 1):
-        if str(ws_pauze.cell(r, 1).value).strip() == str(pv["naam"]).strip():
-            row_found = r
-            break
-    if row_found is not None:
-        pv_rows.append((pv, row_found))
-        pv_cap_set[pv["naam"]] = {normalize_attr(a) for a in pv.get("attracties", [])}
-
-# Lange werkers: namen-set voor snelle checks
-lange_werkers = [s for s in studenten
-                 if student_totalen.get(s["naam"], 0) > 6
-                 and s["naam"] not in [pv["naam"] for pv in selected]]
-lange_werkers_names = {s["naam"] for s in lange_werkers}
-
-def get_student_work_hours(naam):
-    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
-    uren = set()
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
-        uur = parse_header_uur(header)
-        if uur is None:
-            continue
-        # check of student in deze kolom ergens staat
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                uren.add(uur)
-                break
-    return sorted(uren)
-
 def vind_attractie_op_uur(naam, uur):
-    """Geef attractienaam (exact zoals in Planning-kolom A) waar student staat op dit uur; None als niet gevonden."""
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
-        col_uur = parse_header_uur(header)
-        if col_uur != uur:
-            continue
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                return ws_planning.cell(row, 1).value
-    return None
-
 def pv_kan_attr(pv, attr):
-    """Check of pv attr kan (met normalisatie, zodat 'X 2' telt als 'X')."""
-    base = normalize_attr(attr)
-    return base in pv_cap_set.get(pv["naam"], set())
-
-# Willekeurige volgorde van pauzeplekken (pv-rij x kolom) om lege cellen random te spreiden
-slot_order = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
-random.shuffle(slot_order)  # <— kern om lege plekken later willekeurig verspreid te krijgen
-
 def plaats_student(student, harde_mode=False):
-    """
-    Plaats student bij een geschikte pauzevlinder in B..G op een uur waar student effectief werkt.
-    - Overschrijven alleen in harde_mode én alleen als de huidige inhoud géén lange werker is.
-    - Volgorde van slots is willekeurig (slot_order) zodat lege plekken random verdeeld blijven.
-    """
-    naam = student["naam"]
-    werk_uren = get_student_work_hours(naam)  # echte uren waarop student in 'Planning' staat
-
-    # uren ook willekeurig proberen, voor extra spreiding
-    for uur in random.sample(werk_uren, len(werk_uren)):
-        attr = vind_attractie_op_uur(naam, uur)
-        if not attr:
-            continue
-
-        # Probeer alle slots in random volgorde; filter op uur en pv-capability
-        for (pv, pv_row, col) in slot_order:
-            col_header = ws_pauze.cell(1, col).value
-            col_uur = parse_header_uur(col_header)
-            if col_uur != uur:
-                continue
-            if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
-                continue
-
-            cel = ws_pauze.cell(pv_row, col)            # naamcel (rij met pv-naam)
-            boven_cel = ws_pauze.cell(pv_row - 1, col)  # attractiecel (rij erboven)
-            current_val = cel.value
-
-            if current_val in [None, ""]:
-                # Vrij: direct plaatsen
-                boven_cel.value = attr
-                boven_cel.alignment = center_align
-                boven_cel.border = thin_border
-
-                cel.value = naam
-                cel.alignment = center_align
-                cel.border = thin_border
-                return True
-            else:
-                # Bezet: in harde modus enkel overschrijven als de huidige naam GEEN lange werker is
-                if harde_mode:
-                    occupant = str(current_val).strip()
-                    if occupant not in lange_werkers_names:
-                        boven_cel.value = attr
-                        boven_cel.alignment = center_align
-                        boven_cel.border = thin_border
-
-                        cel.value = naam
-                        cel.alignment = center_align
-                        cel.border = thin_border
-                        return True
-        # volgende werk-uur proberen
-    return False
 
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
 niet_geplaatst = []
@@ -1014,7 +728,6 @@ else:
 # -----------------------------
 # DEEL 5: Kwartierpauzes namiddag (15:30-17:30)
 # -----------------------------
-from openpyxl.styles import Alignment, Border, Side, PatternFill
 import random
 
 # Styles
@@ -1061,65 +774,80 @@ min_werkers_names = {s["naam"] for s in min_werkers}
 # Werkuren per student
 def get_student_work_hours(naam):
     uren = set()
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
-        uur = parse_header_uur(header)
-        if uur is None:
-            continue
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                uren.add(uur)
-                break
-    return sorted(uren)
+    if cel.value in [None, ""]:
 
-def vind_attractie_op_uur(naam, uur):
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
-        col_uur = parse_header_uur(header)
-        if col_uur != uur:
-            continue
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                return ws_planning.cell(row,1).value
-    return None
+    # Helpers voor DEEL 5
+    def parse_header_uur(header):
+        if not header:
+            return None
+        s = str(header).strip()
+        try:
+            if "u" in s:
+                return int(s.split("u")[0])
+            if ":" in s:
+                uur, _ = s.split(":")
+                return int(uur)
+            return int(s)
+        except:
+            return None
 
-def pv_kan_attr(pv, attr):
-    base = normalize_attr(attr)
-    return base in pv_cap_set.get(pv["naam"], set())
+# -----------------------------
+        if not name:
+            return ""
+        s = str(name).strip()
+        parts = s.rsplit(" ", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            s = parts[0]
+        return s.strip().lower()
 
-def plaats_student(student, harde_mode=False):
-    naam = student["naam"]
-    werk_uren = get_student_work_hours(naam)
-    if not werk_uren:
-        return False
-    random.shuffle(werk_uren)
-    for uur in werk_uren:
-        attr = vind_attractie_op_uur(naam, uur)
-        for (pv, pv_row) in random.sample(pv_rows, len(pv_rows)):
-            # 🚩 uitzondering: "extra" mag altijd
-            if attr and attr.strip().lower() != "extra" and not pv_kan_attr(pv, attr):
+# Opslaan in hetzelfde unieke bestand als DEEL 3
+        uren = set()
+        for col in range(2, ws_planning.max_column + 1):
+            header = ws_planning.cell(1, col).value
+            uur = parse_header_uur(header)
+            if uur is None:
                 continue
-            for col in random.sample(pauze_cols, len(pauze_cols)):
-                col_header = ws_pauze.cell(1, col).value
-                col_uur = parse_header_uur(col_header)
-                if col_uur != uur:
+            for row in range(2, ws_planning.max_row + 1):
+                if ws_planning.cell(row, col).value == naam:
+                    uren.add(uur)
+                    break
+        return sorted(uren)
+
+# -----------------------------
+        for col in range(2, ws_planning.max_column + 1):
+            header = ws_planning.cell(1, col).value
+            col_uur = parse_header_uur(header)
+            if col_uur != uur:
+                continue
+            for row in range(2, ws_planning.max_row + 1):
+                if ws_planning.cell(row, col).value == naam:
+                    return ws_planning.cell(row,1).value
+        return None
+
+
+        base = normalize_attr(attr)
+        return base in pv_cap_set.get(pv["naam"], set())
+
+
+        naam = student["naam"]
+        werk_uren = get_student_work_hours(naam)
+        if not werk_uren:
+            return False
+        random.shuffle(werk_uren)
+        for uur in werk_uren:
+            attr = vind_attractie_op_uur(naam, uur)
+            for (pv, pv_row) in random.sample(pv_rows, len(pv_rows)):
+                if attr and attr.strip().lower() != "extra" and not pv_kan_attr(pv, attr):
                     continue
-                cel = ws_pauze.cell(pv_row, col)
-                current_val = cel.value
-                boven_cel = ws_pauze.cell(pv_row-1, col)
-                if current_val in [None, ""]:
-                    if attr:
-                        boven_cel.value = attr
-                        boven_cel.alignment = center_align
-                        boven_cel.border = thin_border
-                    cel.value = naam
-                    cel.alignment = center_align
-                    cel.border = thin_border
-                    cel.fill = pauze_fill
-                    return True
-                elif harde_mode:
-                    occupant = str(current_val).strip()
-                    if occupant not in min_werkers_names:
+                for col in random.sample(pauze_cols, len(pauze_cols)):
+                    col_header = ws_pauze.cell(1, col).value
+                    col_uur = parse_header_uur(col_header)
+                    if col_uur != uur:
+                        continue
+                    cel = ws_pauze.cell(pv_row, col)
+                    current_val = cel.value
+                    boven_cel = ws_pauze.cell(pv_row-1, col)
+                    if current_val in [None, ""]:
                         if attr:
                             boven_cel.value = attr
                             boven_cel.alignment = center_align
@@ -1129,80 +857,48 @@ def plaats_student(student, harde_mode=False):
                         cel.border = thin_border
                         cel.fill = pauze_fill
                         return True
-    return False
-
-
-def plaats_student_links_eerst(student):
-    naam = student["naam"]
-    werk_uren = get_student_work_hours(naam)
-    if not werk_uren:
+                    elif harde_mode:
+                        occupant = str(current_val).strip()
+                        if occupant not in min_werkers_names:
+                            if attr:
+                                boven_cel.value = attr
+                                boven_cel.alignment = center_align
+                                boven_cel.border = thin_border
+                            cel.value = naam
+                            cel.alignment = center_align
+                            cel.border = thin_border
+                            cel.fill = pauze_fill
+                            return True
         return False
-    for uur in werk_uren:
-        attr = vind_attractie_op_uur(naam, uur)
-        for (pv, pv_row) in pv_rows:
-            # 🚩 uitzondering: "extra" mag altijd
-            if attr and attr.strip().lower() != "extra" and not pv_kan_attr(pv, attr):
-                continue
-            for col in pauze_cols:  # van links naar rechts
-                col_header = ws_pauze.cell(1, col).value
-                col_uur = parse_header_uur(col_header)
-                if col_uur != uur:
-                    continue
-                cel = ws_pauze.cell(pv_row, col)
-                if cel.value in [None, ""]:
-                    if attr:
-                        boven_cel = ws_pauze.cell(pv_row-1, col)
-                        boven_cel.value = attr
-                        boven_cel.alignment = center_align
-                        boven_cel.border = thin_border
-                    cel.value = naam
-                    cel.alignment = center_align
-                    cel.border = thin_border
-                    cel.fill = pauze_fill
-                    return True
-    return False
-
-
-# -----------------------------
-# Fase 1: pauzevlinders eerst in hun eigen rijen
-for pv, pv_row in pv_rows:
-    col = random.choice(pauze_cols)
-    cel = ws_pauze.cell(pv_row, col)
-    if cel.value in [None, ""]:
-        cel.value = pv["naam"]
-        cel.alignment = center_align
-        cel.border = thin_border
-        cel.fill = pauze_fill
-
-# -----------------------------
-# Fase 2: studenten die max 6 uur werken, links → rechts proberen
-kortere_werkers = [s for s in min_werkers if student_totalen.get(s["naam"],0) <= 6 and s["naam"] not in [pv["naam"] for pv in selected]]
-niet_geplaatst = []
-for s in kortere_werkers:  # vaste volgorde
-    if not plaats_student_links_eerst(s):
-        niet_geplaatst.append(s)
-
-# -----------------------------
-# Fase 3: overige studenten (>6u of nog niet geplaatst) → random
-overige = [s for s in min_werkers if s["naam"] not in [pv["naam"] for pv in selected] and s["naam"] not in [w["naam"] for w in kortere_werkers]]
-niet_geplaatst_extra = []
-for s in random.sample(overige, len(overige)):
-    if not plaats_student(s, harde_mode=True):
-        niet_geplaatst_extra.append(s)
-
-# -----------------------------
-# Lege naamcellen inkleuren
-for pv, pv_row in pv_rows:
-    for col in pauze_cols:
-        if ws_pauze.cell(pv_row, col).value in [None, ""]:
-            ws_pauze.cell(pv_row, col).fill = pauze_fill
-
-# -----------------------------
-# Opslaan in hetzelfde unieke bestand als DEEL 3
-# -----------------------------
-
 
 output = BytesIO()
+        naam = student["naam"]
+        werk_uren = get_student_work_hours(naam)
+        if not werk_uren:
+            return False
+        for uur in werk_uren:
+            attr = vind_attractie_op_uur(naam, uur)
+            for (pv, pv_row) in pv_rows:
+                if attr and attr.strip().lower() != "extra" and not pv_kan_attr(pv, attr):
+                    continue
+                for col in pauze_cols:
+                    col_header = ws_pauze.cell(1, col).value
+                    col_uur = parse_header_uur(col_header)
+                    if col_uur != uur:
+                        continue
+                    cel = ws_pauze.cell(pv_row, col)
+                    if cel.value in [None, ""]:
+                        if attr:
+                            boven_cel = ws_pauze.cell(pv_row-1, col)
+                            boven_cel.value = attr
+                            boven_cel.alignment = center_align
+                            boven_cel.border = thin_border
+                        cel.value = naam
+                        cel.alignment = center_align
+                        cel.border = thin_border
+                        cel.fill = pauze_fill
+                        return True
+        return False
 wb_out.save(output)
 output.seek(0)
 st.success("Planning gegenereerd!")
