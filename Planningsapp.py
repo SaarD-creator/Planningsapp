@@ -434,15 +434,24 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
             cand_student = next((s for s in studenten_workend if s["naam"] == b_naam), None)
             if not cand_student:
                 continue
+            # Mag deze student de lege attractie doen?
             if attr not in cand_student["attracties"]:
                 continue
-            uren = sorted(cand_student["assigned_hours"])
-            if len(uren) == 1:
-                score = 0
-            elif uur == min(uren) or uur == max(uren):
-                score = 1
-            else:
-                score = 2
+            # Mag de extra de vrijgekomen plek doen?
+            extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
+            if not extra_student:
+                continue
+            if b_attr not in extra_student["attracties"]:
+                continue
+            # Score: zo min mogelijk 1-uursblokken creëren
+            uren_cand = sorted([u for u in cand_student["assigned_hours"] if u != uur] + [uur])
+            uren_extra = sorted(extra_student["assigned_hours"] + [uur])
+            def count_1u_blokken(uren):
+                if not uren:
+                    return 0
+                runs = contiguous_runs(uren)
+                return sum(1 for r in runs if len(r) == 1)
+            score = count_1u_blokken(uren_cand) + count_1u_blokken(uren_extra)
             kandidaten.append((score, b_attr, b_pos, b_naam, cand_student))
     kandidaten.sort()
 
@@ -452,46 +461,26 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
             doorschuif_debuglog.append(f"[{stap}] SKIP: extra_student {student_naam} niet gevonden")
             continue
         doorschuif_debuglog.append(f"[{stap}] SWAP: {student_naam} <-> {b_naam} ({uur}, {b_attr}->{attr})")
-        assigned_map[(uur, b_attr)][b_pos] = ""
-        per_hour_assigned_counts[uur][b_attr] -= 1
-        cand_student["assigned_hours"].remove(uur)
-        cand_student["assigned_attracties"].discard(b_attr)
-        while len(assigned_map[(uur, attr)]) < pos_idx:
-            assigned_map[(uur, attr)].append("")
-        assigned_map[(uur, attr)].insert(pos_idx-1, b_naam)
-        assigned_map[(uur, attr)] = assigned_map[(uur, attr)][:aantallen[uur].get(attr, 1)]
-        cand_student["assigned_hours"].append(uur)
-        cand_student["assigned_attracties"].add(attr)
-        per_hour_assigned_counts[uur][attr] += 1
+        # Voer de swap uit
         assigned_map[(uur, b_attr)][b_pos] = student_naam
         extra_student["assigned_hours"].append(uur)
         extra_student["assigned_attracties"].add(b_attr)
-        per_hour_assigned_counts[uur][b_attr] += 1
-        nieuwe_namen = assigned_map.get((uur, attr), [])
-        found_chain = False
-        for new_pos, n in enumerate(nieuwe_namen):
-            if not n:
-                doorschuif_debuglog.append(f"[{stap}] KETTING: probeer {b_naam} op ({uur}, {attr}, {new_pos+1})")
-                if doorschuif_leegplek(uur, attr, new_pos+1, b_naam, stap+1, max_stappen):
-                    found_chain = True
-                    break
-        if found_chain:
-            doorschuif_debuglog.append(f"[{stap}] SUCCES: ketting gelukt voor {student_naam}")
-            return True
-        # Undo alles
-        doorschuif_debuglog.append(f"[{stap}] UNDO: swap {student_naam} <-> {b_naam} faalt")
-        assigned_map[(uur, b_attr)][b_pos] = b_naam
+        per_hour_assigned_counts[uur][b_attr] += 0  # netto gelijk
+        assigned_map[(uur, attr)].insert(pos_idx-1, b_naam)
+        assigned_map[(uur, attr)] = assigned_map[(uur, attr)][:aantallen[uur].get(attr, 1)]
+        cand_student["assigned_hours"].remove(uur)
+        cand_student["assigned_attracties"].discard(b_attr)
         cand_student["assigned_hours"].append(uur)
-        cand_student["assigned_attracties"].add(b_attr)
-        assigned_map[(uur, attr)].pop(pos_idx-1)
-        assigned_map[(uur, attr)] = [x for x in assigned_map[(uur, attr)] if x != b_naam]
-        per_hour_assigned_counts[uur][attr] -= 1
-        extra_student["assigned_hours"].remove(uur)
-        extra_student["assigned_attracties"].discard(b_attr)
-    doorschuif_debuglog.append(f"[{stap}] FAIL: geen swaps mogelijk voor {student_naam} op ({uur}, {attr}, {pos_idx})")
+        cand_student["assigned_attracties"].add(attr)
+        per_hour_assigned_counts[uur][attr] += 0  # netto gelijk
+        # Check of alles klopt (geen dubbele, geen restricties overtreden)
+        # (optioneel: extra checks toevoegen)
+        doorschuif_debuglog.append(f"[{stap}] SUCCES: {student_naam} op {b_attr}, {b_naam} op {attr}")
+        return True
+    doorschuif_debuglog.append(f"[{stap}] FAIL: geen geldige swaps voor {student_naam} op ({uur}, {attr}, {pos_idx})")
     return False
 
-max_iterations = 10
+max_iterations = 5
 for _ in range(max_iterations):
     changes_made = False
     for uur in open_uren:
@@ -1222,5 +1211,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
