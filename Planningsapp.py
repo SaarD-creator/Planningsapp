@@ -589,25 +589,28 @@ for attr in attracties_te_plannen:
 # Pauzevlinders
 rij_out += 1
 for pv_idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
-    ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True, color="FFFFFF")
-    # Kleur pauzevlinder volgens naamkleur als beschikbaar, anders standaard pv_fill
-    kleur = student_kleuren.get(pvnaam, "FFF2CC")
-    ws_out.cell(rij_out, 1).fill = PatternFill(start_color=kleur, fill_type="solid")
+    ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True)  # tekst blijft zwart
+    ws_out.cell(rij_out, 1).fill = white_fill  # cel wit
     ws_out.cell(rij_out, 1).border = thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
-        ws_out.cell(rij_out, col_idx, pvnaam if uur in required_pauze_hours else "").alignment = center_align
+        naam = pvnaam if uur in required_pauze_hours else ""
+        ws_out.cell(rij_out, col_idx, naam).alignment = center_align
         ws_out.cell(rij_out, col_idx).border = thin_border
+        if naam and naam in student_kleuren:
+            ws_out.cell(rij_out, col_idx).fill = PatternFill(start_color=student_kleuren[naam], fill_type="solid")
     rij_out += 1
 
 # Extra
 rij_out += 1
-ws_out.cell(rij_out, 1, "Extra").font = Font(bold=True, color="FFFFFF")
-ws_out.cell(rij_out, 1).fill = PatternFill(start_color="FCE4D6", fill_type="solid")
+ws_out.cell(rij_out, 1, "Extra").font = Font(bold=True)  # tekst blijft zwart
+ws_out.cell(rij_out, 1).fill = white_fill  # cel wit
 ws_out.cell(rij_out, 1).border = thin_border
 
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
     for r_offset, naam in enumerate(extra_assignments[uur]):
         ws_out.cell(rij_out + 1 + r_offset, col_idx, naam).alignment = center_align
+        if naam and naam in student_kleuren:
+            ws_out.cell(rij_out + 1 + r_offset, col_idx).fill = PatternFill(start_color=student_kleuren[naam], fill_type="solid")
 
 # Kolombreedte
 for col in range(1, len(open_uren) + 2):
