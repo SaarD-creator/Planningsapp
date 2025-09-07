@@ -491,7 +491,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     doorschuif_debuglog.append(f"[{stap}] FAIL: geen swaps mogelijk voor {student_naam} op ({uur}, {attr}, {pos_idx})")
     return False
 
-max_iterations = 5
+max_iterations = 10
 for _ in range(max_iterations):
     changes_made = False
     for uur in open_uren:
