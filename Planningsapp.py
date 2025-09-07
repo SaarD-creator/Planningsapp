@@ -417,7 +417,8 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
     if naam:
         return False  # plek al gevuld
-    # Zoek wie vóór of na U op deze attractie stond
+
+    # 1. Eerst: naburige studenten (zoals origineel)
     prev_uur = uur - 1 if uur - 1 in open_uren else None
     next_uur = uur + 1 if uur + 1 in open_uren else None
     candidate_uren = [u for u in [prev_uur, next_uur] if u is not None]
@@ -427,9 +428,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
             cand_student = next((s for s in studenten_workend if s["naam"] == cand_naam), None)
             if not cand_student:
                 continue
-            # ENKEL checken of deze student dat uur mag werken (uren_beschikbaar)
             if uur in cand_student["uren_beschikbaar"]:
-                # Zet cand_student ook op uur, attr, pos_idx
                 while len(assigned_map[(uur, attr)]) < pos_idx:
                     assigned_map[(uur, attr)].append("")
                 assigned_map[(uur, attr)].insert(pos_idx-1, cand_naam)
@@ -437,16 +436,13 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
                 cand_student["assigned_hours"].append(uur)
                 cand_student["assigned_attracties"].add(attr)
                 per_hour_assigned_counts[uur][attr] += 1
-                # Zoek waar cand_student op uur stond (welke attractie)
                 for b_attr in attracties_te_plannen:
                     b_namen = assigned_map.get((uur, b_attr), [])
                     for b_pos, b_naam in enumerate(b_namen):
                         if b_naam == cand_naam and (b_attr != attr or b_pos != pos_idx-1):
-                            # Maak plek vrij op uur, b_attr, b_pos
                             assigned_map[(uur, b_attr)][b_pos] = ""
                             per_hour_assigned_counts[uur][b_attr] -= 1
                             cand_student["assigned_hours"].remove(uur)
-                            # Probeer student_naam (de extra) daar te plaatsen
                             extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
                             if extra_student and b_attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
                                 assigned_map[(uur, b_attr)][b_pos] = student_naam
@@ -455,11 +451,58 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
                                 per_hour_assigned_counts[uur][b_attr] += 1
                                 return True
                             else:
-                                # Schuif verder
                                 return doorschuif_leegplek(uur, b_attr, b_pos+1, student_naam, stap+1, max_stappen)
+
+    # 2. Daarna: andere studenten die op dit uur op deze attractie staan
+    # Sorteer: eerst studenten met maar 1 assigned_hour, dan studenten die aan het begin/einde van hun blok staan
+    kandidaten = []
+    for cand_pos, cand_naam in enumerate(namen):
+        if not cand_naam:
+            continue
+        cand_student = next((s for s in studenten_workend if s["naam"] == cand_naam), None)
+        if not cand_student:
+            continue
+        # Extra check: mag deze student deze attractie doen?
+        if attr not in cand_student["attracties"]:
+            continue
+        uren = sorted(cand_student["assigned_hours"])
+        if len(uren) == 1:
+            score = 0  # hoogste prioriteit: 1 uurtje
+        elif uur == min(uren) or uur == max(uren):
+            score = 1  # aan het begin of eind van blok
+        else:
+            score = 2  # midden in blok
+        kandidaten.append((score, cand_pos, cand_naam, cand_student))
+    kandidaten.sort()
+    for score, cand_pos, cand_naam, cand_student in kandidaten:
+        if uur in cand_student["uren_beschikbaar"]:
+            while len(assigned_map[(uur, attr)]) < pos_idx:
+                assigned_map[(uur, attr)].append("")
+            assigned_map[(uur, attr)].insert(pos_idx-1, cand_naam)
+            assigned_map[(uur, attr)] = assigned_map[(uur, attr)][:aantallen[uur].get(attr, 1)]
+            cand_student["assigned_hours"].append(uur)
+            cand_student["assigned_attracties"].add(attr)
+            per_hour_assigned_counts[uur][attr] += 1
+            for b_attr in attracties_te_plannen:
+                b_namen = assigned_map.get((uur, b_attr), [])
+                for b_pos, b_naam in enumerate(b_namen):
+                    if b_naam == cand_naam and (b_attr != attr or b_pos != pos_idx-1):
+                        assigned_map[(uur, b_attr)][b_pos] = ""
+                        per_hour_assigned_counts[uur][b_attr] -= 1
+                        cand_student["assigned_hours"].remove(uur)
+                        extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
+                        if extra_student and b_attr in extra_student["attracties"] and uur in extra_student["uren_beschikbaar"] and uur not in extra_student["assigned_hours"]:
+                            assigned_map[(uur, b_attr)][b_pos] = student_naam
+                            extra_student["assigned_hours"].append(uur)
+                            extra_student["assigned_attracties"].add(b_attr)
+                            per_hour_assigned_counts[uur][b_attr] += 1
+                            return True
+                        else:
+                            return doorschuif_leegplek(uur, b_attr, b_pos+1, student_naam, stap+1, max_stappen)
+
     return False
 
-max_iterations = 10
+max_iterations = 5
 for _ in range(max_iterations):
     changes_made = False
     for uur in open_uren:
