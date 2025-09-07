@@ -26,8 +26,8 @@ vandaag = datetime.date.today().strftime("%d-%m-%Y")
 # -----------------------------
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
 if not uploaded_file:
-    st.warning("Upload eerst een Excel-bestand om verder te gaan.")
-    st.stop()
+    # st.warning("Upload eerst een Excel-bestand om verder te gaan.")
+    # st.stop()
 
 wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
@@ -414,17 +414,9 @@ for s in studenten_sorted:
 def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     if stap > max_stappen:
         return False
-    # Debuglog lijst op module-niveau
-    global doorschuif_debuglog
-    try:
-        doorschuif_debuglog
-    except NameError:
-        doorschuif_debuglog = []
-
     namen = assigned_map.get((uur, attr), [])
     naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
     if naam:
-        doorschuif_debuglog.append(f"[{stap}] STOP: plek ({uur}, {attr}, {pos_idx}) al gevuld")
         return False
 
     kandidaten = []
@@ -460,9 +452,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     for score, b_attr, b_pos, b_naam, cand_student in kandidaten:
         extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
         if not extra_student:
-            doorschuif_debuglog.append(f"[{stap}] SKIP: extra_student {student_naam} niet gevonden")
             continue
-        doorschuif_debuglog.append(f"[{stap}] SWAP: {student_naam} <-> {b_naam} ({uur}, {b_attr}->{attr})")
         # Voer de swap uit
         assigned_map[(uur, b_attr)][b_pos] = student_naam
         extra_student["assigned_hours"].append(uur)
@@ -477,9 +467,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
         per_hour_assigned_counts[uur][attr] += 0  # netto gelijk
         # Check of alles klopt (geen dubbele, geen restricties overtreden)
         # (optioneel: extra checks toevoegen)
-        doorschuif_debuglog.append(f"[{stap}] SUCCES: {student_naam} op {b_attr}, {b_naam} op {attr}")
         return True
-    doorschuif_debuglog.append(f"[{stap}] FAIL: geen geldige swaps voor {student_naam} op ({uur}, {attr}, {pos_idx})")
     return False
 
 max_iterations = 5
@@ -522,8 +510,8 @@ wb_out = Workbook()
 ws_out = wb_out.active
 ws_out.title = "Planning"
 
-header_fill = PatternFill(start_color="BDD7EE", fill_type="solid")
-attr_fill = PatternFill(start_color="E2EFDA", fill_type="solid")
+# Witte fill voor headers en attracties
+white_fill = PatternFill(start_color="FFFFFF", fill_type="solid")
 pv_fill = PatternFill(start_color="FFF2CC", fill_type="solid")
 extra_fill = PatternFill(start_color="FCE4D6", fill_type="solid")
 center_align = Alignment(horizontal="center", vertical="center")
@@ -532,11 +520,21 @@ thin_border = Border(
     top=Side(style="thin"), bottom=Side(style="thin")
 )
 
+# Unieke lichte kleuren voor studenten
+studenten_namen = sorted({s["naam"] for s in studenten})
+light_colors = [
+    "FFEBEE", "FFF3E0", "FFFDE7", "E8F5E9", "E3F2FD", "E1F5FE", "F3E5F5", "FCE4EC", "F9FBE7", "E0F2F1",
+    "F8BBD0", "B2EBF2", "B3E5FC", "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "F5F5F5", "CFD8DC"
+]
+import itertools
+student_kleuren = dict(zip(studenten_namen, itertools.cycle(light_colors)))
+
 # Header
 ws_out.cell(1, 1, vandaag).font = Font(bold=True)
+ws_out.cell(1, 1).fill = white_fill
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
     ws_out.cell(1, col_idx, f"{uur}:00").font = Font(bold=True)
-    ws_out.cell(1, col_idx).fill = header_fill
+    ws_out.cell(1, col_idx).fill = white_fill
     ws_out.cell(1, col_idx).alignment = center_align
     ws_out.cell(1, col_idx).border = thin_border
 
@@ -551,7 +549,7 @@ for attr in attracties_te_plannen:
     for pos_idx in range(1, max_pos + 1):
         naam_attr = attr if max_pos == 1 else f"{attr} {pos_idx}"
         ws_out.cell(rij_out, 1, naam_attr).font = Font(bold=True)
-        ws_out.cell(rij_out, 1).fill = attr_fill
+        ws_out.cell(rij_out, 1).fill = white_fill
         ws_out.cell(rij_out, 1).border = thin_border
 
         for col_idx, uur in enumerate(sorted(open_uren), start=2):
@@ -566,6 +564,8 @@ for attr in attracties_te_plannen:
                 naam = namen[pos_idx - 1] if pos_idx - 1 < len(namen) else ""
                 ws_out.cell(rij_out, col_idx, naam).alignment = center_align
                 ws_out.cell(rij_out, col_idx).border = thin_border
+                if naam and naam in student_kleuren:
+                    ws_out.cell(rij_out, col_idx).fill = PatternFill(start_color=student_kleuren[naam], fill_type="solid")
 
         rij_out += 1
 
@@ -1207,7 +1207,7 @@ for pv, pv_row in pv_rows:
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
-st.success("Planning gegenereerd!")
+# st.success("Planning gegenereerd!")
 st.download_button(
     "Download planning",
     data=output.getvalue(),
