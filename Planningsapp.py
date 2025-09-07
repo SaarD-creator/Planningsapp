@@ -519,21 +519,33 @@ thin_border = Border(
     top=Side(style="thin"), bottom=Side(style="thin")
 )
 
-# Unieke lichte kleuren voor studenten (uitgebreide lijst, veel variatie)
+# Felle, maar lichte pastelkleuren (gelijkmatige felheid, veel variatie)
 studenten_namen = sorted({s["naam"] for s in studenten})
+# Bron: https://www.color-hex.com/color-palettes/popular.php (lichte, felle pastels)
 light_colors = [
-    "FFEBEE", "FFF3E0", "FFFDE7", "E8F5E9", "E3F2FD", "E1F5FE", "F3E5F5", "FCE4EC", "F9FBE7", "E0F2F1",
-    "F8BBD0", "B2EBF2", "B3E5FC", "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "F5F5F5", "CFD8DC",
-    "E0F7FA", "FFF8E1", "F1F8E9", "F9FBE7", "E3F2FD", "EDE7F6", "F3E5F5", "F8BBD0", "D1C4E9", "C8E6C9",
-    "B2DFDB", "B3E5FC", "B2EBF2", "B2DFDB", "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "F5F5F5",
-    "FCE4EC", "F3E5F5", "E1F5FE", "E3F2FD", "FFFDE7", "FFF3E0", "FFEBEE", "E8F5E9", "E0F2F1", "F8BBD0",
-    "F5F5F5", "F9FBE7", "FFFDE7", "FFF3E0", "FFEBEE", "E8F5E9", "E0F2F1", "F8BBD0", "B2EBF2", "B3E5FC",
-    "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "CFD8DC", "E0F7FA", "FFF8E1", "F1F8E9", "F9FBE7",
-    "E3F2FD", "EDE7F6", "F3E5F5", "F8BBD0", "D1C4E9", "C8E6C9", "B2DFDB", "B3E5FC", "B2EBF2", "B2DFDB",
-    "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "F5F5F5", "FCE4EC", "F3E5F5", "E1F5FE", "E3F2FD"
+    "FFB3BA", "FFDFBA", "FFFFBA", "BAFFC9", "BAE1FF", # roze, oranje, geel, groen, blauw
+    "E0BBE4", "957DAD", "D291BC", "FEC8D8", "FFDFD3", # paars/roze
+    "B5EAD7", "C7CEEA", "FFDAC1", "B5EAD7", "C7CEEA", # mint, lichtblauw
+    "FF9AA2", "FFB7B2", "FFDAC1", "E2F0CB", "B5EAD7", # pastelrood, mint
+    "B5EAD7", "C7CEEA", "FFB7B2", "FFDAC1", "E2F0CB", # extra
+    "F6DFEB", "F9E2AE", "B6E2D3", "B6D0E2", "F6E2B3", # zachtgeel, mint, blauw
+    "F7C5CC", "F7E6C5", "C5F7D6", "C5E6F7", "F7F6C5", # extra pastel
+    "F7C5F7", "C5C5F7", "C5F7F7", "F7C5C5", "C5F7C5", # paars, blauw, groen
+    "F7E2C5", "E2F7C5", "C5F7E2", "E2C5F7", "C5E2F7", # extra
+    "F7C5E2", "E2C5F7", "C5F7E2", "E2F7C5", "C5E2F7", # extra
+    "F7F7C5", "C5F7F7", "F7C5F7", "C5C5F7", "F7C5C5", # extra
+    "C5F7C5", "F7E2C5", "E2F7C5", "C5F7E2", "E2C5F7", # extra
+    "C5E2F7", "F7C5E2", "E2C5F7", "C5F7E2", "E2F7C5", # extra
+    "C5E2F7", "F7F7C5", "C5F7F7", "F7C5F7", "C5C5F7", # extra
+    "F7C5C5", "C5F7C5", "F7E2C5", "E2F7C5", "C5F7E2", # extra
+    "E2C5F7", "C5E2F7", "F7C5E2", "E2C5F7", "C5F7E2", # extra
+    "E2F7C5", "C5E2F7", "F7F7C5", "C5F7F7", "F7C5F7", # extra
+    "C5C5F7", "F7C5C5", "C5F7C5", "F7E2C5", "E2F7C5"  # extra
 ]
 import itertools
-student_kleuren = dict(zip(studenten_namen, itertools.cycle(light_colors)))
+# Pauzevlinders krijgen ook een kleur uit het schema
+alle_namen = studenten_namen + [pv for pv in pauzevlinder_namen if pv not in studenten_namen]
+student_kleuren = dict(zip(alle_namen, itertools.cycle(light_colors)))
 
 # Header
 ws_out.cell(1, 1, vandaag).font = Font(bold=True)
@@ -1218,4 +1230,3 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
