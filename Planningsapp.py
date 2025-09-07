@@ -24,12 +24,14 @@ vandaag = datetime.date.today().strftime("%d-%m-%Y")
 # -----------------------------
 # Excelbestand uploaden
 # -----------------------------
-uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
-if not uploaded_file:
-    pass  # Zorgt dat er geen IndentationError ontstaat als er geen bestand is
 
-wb = load_workbook(BytesIO(uploaded_file.read()))
-ws = wb["Blad1"]
+uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
+if uploaded_file is not None:
+    wb = load_workbook(BytesIO(uploaded_file.read()))
+    ws = wb["Blad1"]
+else:
+    st.stop()
+
 
 # -----------------------------
 
