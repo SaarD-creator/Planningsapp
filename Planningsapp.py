@@ -459,7 +459,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
                                 return doorschuif_leegplek(uur, b_attr, b_pos+1, student_naam, stap+1, max_stappen)
     return False
 
-max_iterations = 5
+max_iterations = 10
 for _ in range(max_iterations):
     changes_made = False
     for uur in open_uren:
@@ -490,7 +490,7 @@ for _ in range(max_iterations):
         break
 
 
-doorschuif_leegplek()
+
 # -----------------------------
 
 # Excel output
