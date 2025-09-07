@@ -589,8 +589,10 @@ for attr in attracties_te_plannen:
 # Pauzevlinders
 rij_out += 1
 for pv_idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
-    ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True)
-    ws_out.cell(rij_out, 1).fill = pv_fill
+    ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True, color="FFFFFF")
+    # Kleur pauzevlinder volgens naamkleur als beschikbaar, anders standaard pv_fill
+    kleur = student_kleuren.get(pvnaam, "FFF2CC")
+    ws_out.cell(rij_out, 1).fill = PatternFill(start_color=kleur, fill_type="solid")
     ws_out.cell(rij_out, 1).border = thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
         ws_out.cell(rij_out, col_idx, pvnaam if uur in required_pauze_hours else "").alignment = center_align
@@ -599,8 +601,8 @@ for pv_idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
 
 # Extra
 rij_out += 1
-ws_out.cell(rij_out, 1, "Extra").font = Font(bold=True)
-ws_out.cell(rij_out, 1).fill = extra_fill
+ws_out.cell(rij_out, 1, "Extra").font = Font(bold=True, color="FFFFFF")
+ws_out.cell(rij_out, 1).fill = PatternFill(start_color="FCE4D6", fill_type="solid")
 ws_out.cell(rij_out, 1).border = thin_border
 
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
