@@ -26,8 +26,8 @@ vandaag = datetime.date.today().strftime("%d-%m-%Y")
 # -----------------------------
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
 if not uploaded_file:
-    # st.warning("Upload eerst een Excel-bestand om verder te gaan.")
-    # st.stop()
+    st.warning("Upload eerst een Excel-bestand om verder te gaan.")
+    st.stop()
 
 wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
@@ -414,9 +414,17 @@ for s in studenten_sorted:
 def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     if stap > max_stappen:
         return False
+    # Debuglog lijst op module-niveau
+    global doorschuif_debuglog
+    try:
+        doorschuif_debuglog
+    except NameError:
+        doorschuif_debuglog = []
+
     namen = assigned_map.get((uur, attr), [])
     naam = namen[pos_idx-1] if pos_idx-1 < len(namen) else ""
     if naam:
+        doorschuif_debuglog.append(f"[{stap}] STOP: plek ({uur}, {attr}, {pos_idx}) al gevuld")
         return False
 
     kandidaten = []
@@ -452,7 +460,9 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
     for score, b_attr, b_pos, b_naam, cand_student in kandidaten:
         extra_student = next((s for s in studenten_workend if s["naam"] == student_naam), None)
         if not extra_student:
+            doorschuif_debuglog.append(f"[{stap}] SKIP: extra_student {student_naam} niet gevonden")
             continue
+        doorschuif_debuglog.append(f"[{stap}] SWAP: {student_naam} <-> {b_naam} ({uur}, {b_attr}->{attr})")
         # Voer de swap uit
         assigned_map[(uur, b_attr)][b_pos] = student_naam
         extra_student["assigned_hours"].append(uur)
@@ -467,7 +477,9 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
         per_hour_assigned_counts[uur][attr] += 0  # netto gelijk
         # Check of alles klopt (geen dubbele, geen restricties overtreden)
         # (optioneel: extra checks toevoegen)
+        doorschuif_debuglog.append(f"[{stap}] SUCCES: {student_naam} op {b_attr}, {b_naam} op {attr}")
         return True
+    doorschuif_debuglog.append(f"[{stap}] FAIL: geen geldige swaps voor {student_naam} op ({uur}, {attr}, {pos_idx})")
     return False
 
 max_iterations = 5
@@ -1195,11 +1207,10 @@ for pv, pv_row in pv_rows:
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
-# st.success("Planning gegenereerd!")
+st.success("Planning gegenereerd!")
 st.download_button(
     "Download planning",
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
