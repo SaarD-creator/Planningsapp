@@ -111,6 +111,11 @@ for rij in range(2,500):
     naam = ws.cell(rij,12).value
     if not naam:
         continue
+    # Read work hours directly from column B
+    try:
+        werkuren = int(ws.cell(rij,2).value)
+    except:
+        werkuren = 0
     uren_beschikbaar=[10+(kol-3) for kol in range(3,12) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
     attracties=[ws.cell(1,kol).value for kol in range(14,32) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
     try:
@@ -125,7 +130,8 @@ for rij in range(2,500):
         "is_pauzevlinder":False,
         "pv_number":None,
         "assigned_attracties":set(),
-        "assigned_hours":[]
+        "assigned_hours":[],
+        "werkuren": werkuren
     })
 
 # -----------------------------
@@ -654,27 +660,23 @@ center_align = Alignment(horizontal="center", vertical="center")
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
 
+
 # -----------------------------
-# Rij 1: Uren
+# Rij 1: Uren (half-uur tot 15:30, daarna kwartierblokken)
 # -----------------------------
 uren_rij1 = []
-
-# Halve uren 12:00 tot 14:30
+# Half-uur blokken 12:00 tot 15:00
 u = 12
 m = 0
-while u < 15 or (u == 14 and m <= 30):
+while u < 15 or (u == 15 and m == 0):
     uren_rij1.append(f"{u:02d}:{m:02d}")
     m += 30
     if m >= 60:
         u += 1
         m = 0
-
-# Lege kolom tussen 14:30 en 15:30
-uren_rij1.append("")  # lege kolom
-
-# Start vanaf 15:30 met kwartier tot 17:15
+# Vanaf 15:00 tot 17:15 in kwartierblokken
 u = 15
-m = 30
+m = 15
 while u < 17 or (u == 17 and m <= 15):
     uren_rij1.append(f"{u:02d}:{m:02d}")
     m += 15
@@ -682,10 +684,18 @@ while u < 17 or (u == 17 and m <= 15):
         u += 1
         m = 0
 
+
 # Schrijf uren in rij 1, start in kolom B
+# Gebruik verschillende kleuren voor half-uur en kwartierblokken
+half_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # lichtgeel
+quarter_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen
 for col_idx, uur in enumerate(uren_rij1, start=2):
     c = ws_pauze.cell(1, col_idx, uur)
-    c.fill = light_fill
+    # Detect half-uur of kwartier
+    if ":30" in uur or ":00" in uur:
+        c.fill = half_fill
+    else:
+        c.fill = quarter_fill
     c.alignment = center_align
     c.border = thin_border
 
