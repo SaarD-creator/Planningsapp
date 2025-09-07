@@ -31,6 +31,7 @@ wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
 
 # -----------------------------
+
 # Hulpfuncties
 # -----------------------------
 def max_consecutive_hours(urenlijst):
@@ -75,6 +76,32 @@ def contiguous_runs(sorted_hours):
     runs.append(run)
     return runs
 
+# Helpers die in meerdere delen gebruikt worden
+def normalize_attr(name):
+    """Normaliseer attractienaam zodat 'X 2' telt als 'X'; trim & lower-case voor vergelijking."""
+    if not name:
+        return ""
+    s = str(name).strip()
+    parts = s.rsplit(" ", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        s = parts[0]
+    return s.strip().lower()
+
+def parse_header_uur(header):
+    """Map headertekst (bv. '14u', '14:00', '14:30') naar het hele uur (14)."""
+    if not header:
+        return None
+    s = str(header).strip()
+    try:
+        if "u" in s:
+            return int(s.split("u")[0])
+        if ":" in s:
+            uur, _min = s.split(":")
+            return int(uur)
+        return int(s)
+    except:
+        return None
+
 # -----------------------------
 # Studenten inlezen
 # -----------------------------
@@ -109,6 +136,7 @@ if not open_uren:
 open_uren=sorted(set(open_uren))
 
 # -----------------------------
+
 # Pauzevlinders
 # -----------------------------
 pauzevlinder_namen=[ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
@@ -132,6 +160,9 @@ for idx,pvnaam in enumerate(pauzevlinder_namen,start=1):
             s["pv_number"]=idx
             s["uren_beschikbaar"]=[u for u in s["uren_beschikbaar"] if u not in required_pauze_hours]
             break
+
+# Maak 'selected' lijst van pauzevlinders (dicts met naam en attracties)
+selected = [s for s in studenten if s.get("is_pauzevlinder")]
 
 # -----------------------------
 # Attracties & aantallen (raw)
@@ -459,6 +490,7 @@ for _ in range(max_iterations):
         break
 
 # -----------------------------
+
 # Excel output
 # -----------------------------
 wb_out = Workbook()
@@ -537,15 +569,13 @@ for col_idx, uur in enumerate(sorted(open_uren), start=2):
 for col in range(1, len(open_uren) + 2):
     ws_out.column_dimensions[get_column_letter(col)].width = 18
 
-output = BytesIO()
-wb_out.save(output)
-output.seek(0)
-st.success("Planning gegenereerd!")
-st.download_button(
-    "Download planning",
-    data=output.getvalue(),
-    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-)
+# ---- student_totalen beschikbaar maken voor volgende delen ----
+from collections import defaultdict
+student_totalen = defaultdict(int)
+for row in ws_out.iter_rows(min_row=2, values_only=True):
+    for naam in row[1:]:
+        if naam and str(naam).strip() != "":
+            student_totalen[naam] += 1
 
 
 
