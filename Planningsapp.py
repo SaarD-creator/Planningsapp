@@ -31,7 +31,6 @@ if not uploaded_file:
 wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
 
-
 # -----------------------------
 
 # Hulpfuncties
@@ -520,11 +519,18 @@ thin_border = Border(
     top=Side(style="thin"), bottom=Side(style="thin")
 )
 
-# Unieke lichte kleuren voor studenten
+# Unieke lichte kleuren voor studenten (uitgebreide lijst, veel variatie)
 studenten_namen = sorted({s["naam"] for s in studenten})
 light_colors = [
     "FFEBEE", "FFF3E0", "FFFDE7", "E8F5E9", "E3F2FD", "E1F5FE", "F3E5F5", "FCE4EC", "F9FBE7", "E0F2F1",
-    "F8BBD0", "B2EBF2", "B3E5FC", "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "F5F5F5", "CFD8DC"
+    "F8BBD0", "B2EBF2", "B3E5FC", "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "F5F5F5", "CFD8DC",
+    "E0F7FA", "FFF8E1", "F1F8E9", "F9FBE7", "E3F2FD", "EDE7F6", "F3E5F5", "F8BBD0", "D1C4E9", "C8E6C9",
+    "B2DFDB", "B3E5FC", "B2EBF2", "B2DFDB", "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "F5F5F5",
+    "FCE4EC", "F3E5F5", "E1F5FE", "E3F2FD", "FFFDE7", "FFF3E0", "FFEBEE", "E8F5E9", "E0F2F1", "F8BBD0",
+    "F5F5F5", "F9FBE7", "FFFDE7", "FFF3E0", "FFEBEE", "E8F5E9", "E0F2F1", "F8BBD0", "B2EBF2", "B3E5FC",
+    "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "CFD8DC", "E0F7FA", "FFF8E1", "F1F8E9", "F9FBE7",
+    "E3F2FD", "EDE7F6", "F3E5F5", "F8BBD0", "D1C4E9", "C8E6C9", "B2DFDB", "B3E5FC", "B2EBF2", "B2DFDB",
+    "DCEDC8", "F0F4C3", "FFECB3", "FFE0B2", "D7CCC8", "F5F5F5", "FCE4EC", "F3E5F5", "E1F5FE", "E3F2FD"
 ]
 import itertools
 student_kleuren = dict(zip(studenten_namen, itertools.cycle(light_colors)))
@@ -552,12 +558,11 @@ for attr in attracties_te_plannen:
         ws_out.cell(rij_out, 1).fill = white_fill
         ws_out.cell(rij_out, 1).border = thin_border
 
-        for col_idx, uur in enumerate(sorted(open_uren), start=2):
-            # Red fill voor ongebruikte 2e plekken
-            red_fill = PatternFill(start_color="D9D9D9", fill_type="solid")
 
+        for col_idx, uur in enumerate(sorted(open_uren), start=2):
+            # Red spots nu wit maken
             if attr in red_spots.get(uur, set()) and pos_idx == 2:
-                ws_out.cell(rij_out, col_idx, "").fill = red_fill
+                ws_out.cell(rij_out, col_idx, "").fill = white_fill
                 ws_out.cell(rij_out, col_idx).border = thin_border
             else:
                 namen = assigned_map.get((uur, attr), [])
