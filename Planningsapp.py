@@ -716,56 +716,98 @@ for pv_idx, pv in enumerate(selected, start=1):
     naam_cel.border = thin_border
 
 
-    # Automatische pauzeplanning: eerst lange pauzes, dan korte, verspreid over de kwartieren
-    # Stel: elke pauzevlinder krijgt x lange pauzes en y korte pauzes, verspreid
-    # Je kunt dit aanpassen naar je eigen logica!
+
+    # --- Pauzeplanning volgens jouw regels ---
     totaal_kwartieren = len(uren_rij1)
-    lange_pauzes = 2  # aantal lange pauzes per pauzevlinder (voorbeeld)
-    korte_pauzes = 2  # aantal korte pauzes per pauzevlinder (voorbeeld)
+    werkuren = pv.get("werkuren", 0)
+    # Pauze alleen mogelijk als er minstens 3 kwartieren zijn (geen pauze in eerste/laatste kwartier)
+    if totaal_kwartieren < 3:
+        rij_out += 3
+        continue
+    # Pauze mag niet in eerste of laatste kwartier
+    geldige_indices = list(range(1, totaal_kwartieren-1))
     bezet = [False] * totaal_kwartieren
     pauze_blokken = []
-    # Verspreid lange pauzes
-    if lange_pauzes > 0:
-        stap = (totaal_kwartieren - 2) // lange_pauzes if lange_pauzes > 0 else 0
-        idx = 0
-        for _ in range(lange_pauzes):
-            # Zoek eerste vrije plek voor 2 cellen
-            while idx < totaal_kwartieren - 1 and (bezet[idx] or bezet[idx+1]):
-                idx += 1
-            if idx >= totaal_kwartieren - 1:
-                break
+    # Bepaal aantal pauzes
+    if werkuren > 6:
+        lange_pauzes = 1
+        korte_pauzes = 1
+    else:
+        lange_pauzes = 0
+        korte_pauzes = 1
+    # Eerst lange pauzes random verspreid
+    if lange_pauzes:
+        mogelijke_lange = [i for i in geldige_indices if i+1 in geldige_indices]
+        if mogelijke_lange:
+            idx = random.choice(mogelijke_lange)
             pauze_blokken.append(("lang", idx))
             bezet[idx] = bezet[idx+1] = True
-            idx += max(2, stap)
-    # Verspreid korte pauzes
-    if korte_pauzes > 0:
-        stap = (totaal_kwartieren) // korte_pauzes if korte_pauzes > 0 else 0
-        idx = 0
-        for _ in range(korte_pauzes):
-            # Zoek eerste vrije plek voor 1 cel
-            while idx < totaal_kwartieren and bezet[idx]:
-                idx += 1
-            if idx >= totaal_kwartieren:
-                break
+    # Dan korte pauzes random verspreid (niet overlappen met lange)
+    if korte_pauzes:
+        mogelijke_korte = [i for i in geldige_indices if not bezet[i]]
+        if mogelijke_korte:
+            idx = random.choice(mogelijke_korte)
             pauze_blokken.append(("kort", idx))
             bezet[idx] = True
-            idx += max(1, stap)
     # Sorteer op index zodat alles netjes op tijd staat
     pauze_blokken.sort(key=lambda x: x[1])
-    # Vul de cellen
+    # Vul de cellen met juiste kleur
     for soort, idx in pauze_blokken:
         if soort == "lang":
             for offset in [0, 1]:
                 if idx + offset < totaal_kwartieren:
                     c = ws_pauze.cell(rij_out + 1, idx + 2 + offset, pv["naam"])
-                    c.fill = half_fill
+                    c.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+                    c.font = Font(bold=True, color="000000")
                     c.alignment = center_align
                     c.border = thin_border
         else:
             c = ws_pauze.cell(rij_out + 1, idx + 2, pv["naam"])
-            c.fill = quarter_fill
+            c.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+            c.font = Font(bold=True, color="000000")
             c.alignment = center_align
             c.border = thin_border
+
+    # --- Tabelsplitsing als te lang ---
+    max_kolommen = 16  # bv. max 16 kwartieren per rij, rest op nieuwe rij
+    if totaal_kwartieren > max_kolommen:
+        # Kopieer header voor tweede deel
+        rij_out += 3
+        for col_idx, tijd in enumerate(uren_rij1[max_kolommen:], start=2):
+            c = ws_pauze.cell(rij_out, col_idx, tijd)
+            c.fill = PatternFill(start_color="FFFFFF", fill_type="solid")
+            c.alignment = center_align
+            c.border = thin_border
+        # Zet naam opnieuw
+        title_cell2 = ws_pauze.cell(rij_out + 1, 1, f"Pauzevlinder {pv_idx} (vervolg)")
+        title_cell2.font = Font(bold=True)
+        title_cell2.fill = light_fill
+        title_cell2.alignment = center_align
+        title_cell2.border = thin_border
+        naam_cel2 = ws_pauze.cell(rij_out + 2, 1, pv["naam"])
+        naam_cel2.fill = light_fill
+        naam_cel2.alignment = center_align
+        naam_cel2.border = thin_border
+        # Vul pauzes in tweede deel
+        for soort, idx in pauze_blokken:
+            if idx >= max_kolommen:
+                rel_idx = idx - max_kolommen
+                if soort == "lang":
+                    for offset in [0, 1]:
+                        if rel_idx + offset < (totaal_kwartieren - max_kolommen):
+                            c = ws_pauze.cell(rij_out + 2, rel_idx + 2 + offset, pv["naam"])
+                            c.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+                            c.font = Font(bold=True, color="000000")
+                            c.alignment = center_align
+                            c.border = thin_border
+                else:
+                    c = ws_pauze.cell(rij_out + 2, rel_idx + 2, pv["naam"])
+                    c.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+                    c.font = Font(bold=True, color="000000")
+                    c.alignment = center_align
+                    c.border = thin_border
+        rij_out += 3
+    rij_out += 3
 
     rij_out += 3  # lege rij ertussen
 
