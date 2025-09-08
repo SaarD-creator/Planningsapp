@@ -715,25 +715,54 @@ for pv_idx, pv in enumerate(selected, start=1):
     naam_cel.alignment = center_align
     naam_cel.border = thin_border
 
-    # Pauzeplanning: voorbeeldlogica (pas aan naar jouw regels)
-    # Stel: pv["pauzes"] = lijst van dicts: {"type": "lang"/"kort", "start": "12:00"}
-    pauzes = pv.get("pauzes", [])  # Vul deze lijst in met jouw logica!
-    for pauze in pauzes:
-        start = pauze["start"]
-        soort = pauze["type"]
-        try:
-            col = uren_rij1.index(start) + 2
-        except ValueError:
-            continue
+
+    # Automatische pauzeplanning: eerst lange pauzes, dan korte, verspreid over de kwartieren
+    # Stel: elke pauzevlinder krijgt x lange pauzes en y korte pauzes, verspreid
+    # Je kunt dit aanpassen naar je eigen logica!
+    totaal_kwartieren = len(uren_rij1)
+    lange_pauzes = 2  # aantal lange pauzes per pauzevlinder (voorbeeld)
+    korte_pauzes = 2  # aantal korte pauzes per pauzevlinder (voorbeeld)
+    bezet = [False] * totaal_kwartieren
+    pauze_blokken = []
+    # Verspreid lange pauzes
+    if lange_pauzes > 0:
+        stap = (totaal_kwartieren - 2) // lange_pauzes if lange_pauzes > 0 else 0
+        idx = 0
+        for _ in range(lange_pauzes):
+            # Zoek eerste vrije plek voor 2 cellen
+            while idx < totaal_kwartieren - 1 and (bezet[idx] or bezet[idx+1]):
+                idx += 1
+            if idx >= totaal_kwartieren - 1:
+                break
+            pauze_blokken.append(("lang", idx))
+            bezet[idx] = bezet[idx+1] = True
+            idx += max(2, stap)
+    # Verspreid korte pauzes
+    if korte_pauzes > 0:
+        stap = (totaal_kwartieren) // korte_pauzes if korte_pauzes > 0 else 0
+        idx = 0
+        for _ in range(korte_pauzes):
+            # Zoek eerste vrije plek voor 1 cel
+            while idx < totaal_kwartieren and bezet[idx]:
+                idx += 1
+            if idx >= totaal_kwartieren:
+                break
+            pauze_blokken.append(("kort", idx))
+            bezet[idx] = True
+            idx += max(1, stap)
+    # Sorteer op index zodat alles netjes op tijd staat
+    pauze_blokken.sort(key=lambda x: x[1])
+    # Vul de cellen
+    for soort, idx in pauze_blokken:
         if soort == "lang":
-            # Vul 2 kwartieren
             for offset in [0, 1]:
-                c = ws_pauze.cell(rij_out + 1, col + offset, pv["naam"])
-                c.fill = half_fill
-                c.alignment = center_align
-                c.border = thin_border
+                if idx + offset < totaal_kwartieren:
+                    c = ws_pauze.cell(rij_out + 1, idx + 2 + offset, pv["naam"])
+                    c.fill = half_fill
+                    c.alignment = center_align
+                    c.border = thin_border
         else:
-            c = ws_pauze.cell(rij_out + 1, col, pv["naam"])
+            c = ws_pauze.cell(rij_out + 1, idx + 2, pv["naam"])
             c.fill = quarter_fill
             c.alignment = center_align
             c.border = thin_border
