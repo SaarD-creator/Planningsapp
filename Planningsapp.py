@@ -32,7 +32,6 @@ if uploaded_file is not None:
 else:
     st.stop()
 
-
 # -----------------------------
 
 # Hulpfuncties
@@ -663,23 +662,19 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
 
 
+
 # -----------------------------
-# Rij 1: Uren (half-uur tot 15:30, daarna kwartierblokken)
+# Rij 1: Kwartieren van pauze-start tot pauze-eind
 # -----------------------------
+# Bepaal begin- en eindtijd van de pauzevlinder-periode
+pauze_start = min(required_pauze_hours) if required_pauze_hours else 12
+pauze_eind = max(required_pauze_hours) + 1 if required_pauze_hours else 17
+
+# Bouw lijst met kwartieren (bv. 12:00, 12:15, ..., 17:00)
 uren_rij1 = []
-# Half-uur blokken 12:00 tot 15:00
-u = 12
+u = pauze_start
 m = 0
-while u < 15 or (u == 15 and m == 0):
-    uren_rij1.append(f"{u:02d}:{m:02d}")
-    m += 30
-    if m >= 60:
-        u += 1
-        m = 0
-# Vanaf 15:00 tot 17:15 in kwartierblokken
-u = 15
-m = 15
-while u < 17 or (u == 17 and m <= 15):
+while u < pauze_eind or (u == pauze_eind and m == 0):
     uren_rij1.append(f"{u:02d}:{m:02d}")
     m += 15
     if m >= 60:
@@ -687,17 +682,12 @@ while u < 17 or (u == 17 and m <= 15):
         m = 0
 
 
-# Schrijf uren in rij 1, start in kolom B
-# Gebruik verschillende kleuren voor half-uur en kwartierblokken
-half_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # lichtgeel
-quarter_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen
-for col_idx, uur in enumerate(uren_rij1, start=2):
-    c = ws_pauze.cell(1, col_idx, uur)
-    # Detect half-uur of kwartier
-    if ":30" in uur or ":00" in uur:
-        c.fill = half_fill
-    else:
-        c.fill = quarter_fill
+# Schrijf kwartieren in rij 1, start in kolom B
+half_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # halfuurkleur
+quarter_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # kwartierkleur
+for col_idx, tijd in enumerate(uren_rij1, start=2):
+    c = ws_pauze.cell(1, col_idx, tijd)
+    c.fill = PatternFill(start_color="FFFFFF", fill_type="solid")
     c.alignment = center_align
     c.border = thin_border
 
@@ -706,8 +696,9 @@ a1 = ws_pauze.cell(1, 1, "")
 a1.fill = light_fill
 a1.border = thin_border
 
+
 # -----------------------------
-# Pauzevlinders en namen
+# Pauzevlinders en pauze-invulling
 # -----------------------------
 rij_out = 2
 for pv_idx, pv in enumerate(selected, start=1):
@@ -723,6 +714,29 @@ for pv_idx, pv in enumerate(selected, start=1):
     naam_cel.fill = light_fill
     naam_cel.alignment = center_align
     naam_cel.border = thin_border
+
+    # Pauzeplanning: voorbeeldlogica (pas aan naar jouw regels)
+    # Stel: pv["pauzes"] = lijst van dicts: {"type": "lang"/"kort", "start": "12:00"}
+    pauzes = pv.get("pauzes", [])  # Vul deze lijst in met jouw logica!
+    for pauze in pauzes:
+        start = pauze["start"]
+        soort = pauze["type"]
+        try:
+            col = uren_rij1.index(start) + 2
+        except ValueError:
+            continue
+        if soort == "lang":
+            # Vul 2 kwartieren
+            for offset in [0, 1]:
+                c = ws_pauze.cell(rij_out + 1, col + offset, pv["naam"])
+                c.fill = half_fill
+                c.alignment = center_align
+                c.border = thin_border
+        else:
+            c = ws_pauze.cell(rij_out + 1, col, pv["naam"])
+            c.fill = quarter_fill
+            c.alignment = center_align
+            c.border = thin_border
 
     rij_out += 3  # lege rij ertussen
 
