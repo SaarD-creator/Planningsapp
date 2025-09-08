@@ -1,10 +1,4 @@
-#looking perfect
-
-#red spots, geen (ithink) extra's, geen lange blokken, wel nog extra bij max van 4 uur
-
-#perfectttt, enkel nog probleempje als persoon met meeste attracties iets niet kan
-
-# we zien de red spots al, gwn nog teveel bij extra
+#niet random, geen extra's, kleurtjes!
 
 
 import streamlit as st
@@ -24,61 +18,122 @@ vandaag = datetime.date.today().strftime("%d-%m-%Y")
 # -----------------------------
 # Excelbestand uploaden
 # -----------------------------
-
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
-if uploaded_file is not None:
-    wb = load_workbook(BytesIO(uploaded_file.read()))
-    ws = wb["Blad1"]
-else:
-    st.stop()
+if not uploaded_file:
+    pass  # Zorgt dat er geen IndentationError ontstaat als er geen bestand is
 
+wb = load_workbook(BytesIO(uploaded_file.read()))
+ws = wb["Blad1"]
 
 # -----------------------------
-# Data uit Excelbestand reconstrueren (studenten, open_uren, pauzevlinders, etc.)
+
+# Hulpfuncties
 # -----------------------------
+def max_consecutive_hours(urenlijst):
+    if not urenlijst:
+        return 0
+    urenlijst = sorted(set(urenlijst))
+    maxr = huidig = 1
+    for i in range(1, len(urenlijst)):
+        huidig = huidig + 1 if urenlijst[i] == urenlijst[i-1] + 1 else 1
+        maxr = max(maxr, huidig)
+    return maxr
 
-# Urenrij ophalen (open_uren): alle kolommen met een tijd in rij 1, vanaf kolom 2
-uren_rij1 = []
-open_uren = []
-for col in range(2, ws.max_column + 1):
-    val = ws.cell(1, col).value
-    if val and (":" in str(val) or str(val).isdigit()):
-        try:
-            uur = int(str(val).split(":")[0])
-            uren_rij1.append(val)
-            open_uren.append(uur)
-        except:
-            continue
+def partition_run_lengths(L):
+    """Flexibele blokken: prioritair 3 uur, dan 2,4,1 om shift te vullen."""
+    blocks = [3,2,4,1]
+    dp = [(10**9, [])]*(L+1)
+    dp[0] = (0, [])
+    for i in range(1, L+1):
+        best = (10**9, [])
+        for b in blocks:
+            if i-b < 0:
+                continue
+            prev_ones, prev_blocks = dp[i-b]
+            new_blocks = prev_blocks + [b]
+            ones = prev_ones + (1 if b==1 else 0)
+            if ones < best[0]:
+                best = (ones, new_blocks)
+        dp[i] = best
+    return dp[L][1]
 
-# Studentenlijst reconstrueren
-studenten = []
-for row in range(4, ws.max_row + 1):
-    naam = ws.cell(row, 2).value
+def contiguous_runs(sorted_hours):
+    runs=[]
+    if not sorted_hours:
+        return runs
+    run=[sorted_hours[0]]
+    for h in sorted_hours[1:]:
+        if h==run[-1]+1:
+            run.append(h)
+        else:
+            runs.append(run)
+            run=[h]
+    runs.append(run)
+    return runs
+
+# Helpers die in meerdere delen gebruikt worden
+def normalize_attr(name):
+    """Normaliseer attractienaam zodat 'X 2' telt als 'X'; trim & lower-case voor vergelijking."""
+    if not name:
+        return ""
+    s = str(name).strip()
+    parts = s.rsplit(" ", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        s = parts[0]
+    return s.strip().lower()
+
+def parse_header_uur(header):
+    """Map headertekst (bv. '14u', '14:00', '14:30') naar het hele uur (14)."""
+    if not header:
+        return None
+    s = str(header).strip()
+    try:
+        if "u" in s:
+            return int(s.split("u")[0])
+        if ":" in s:
+            uur, _min = s.split(":")
+            return int(uur)
+        return int(s)
+    except:
+        return None
+
+# -----------------------------
+# Studenten inlezen
+# -----------------------------
+studenten=[]
+for rij in range(2,500):
+    naam = ws.cell(rij,12).value
     if not naam:
         continue
-    attracties = [ws.cell(row, col).value for col in range(13, 47) if ws.cell(row, col).value]
-    uren_beschikbaar = []
-    for col in range(2, ws.max_column + 1):
-        val = ws.cell(1, col).value
-        if val and (":" in str(val) or str(val).isdigit()):
-            try:
-                uur = int(str(val).split(":")[0])
-                if ws.cell(row, col).value == naam:
-                    uren_beschikbaar.append(uur)
-            except:
-                continue
+    uren_beschikbaar=[10+(kol-3) for kol in range(3,12) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
+    attracties=[ws.cell(1,kol).value for kol in range(14,32) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
+    try:
+        aantal_attracties=int(ws[f'AG{rij}'].value) if ws[f'AG{rij}'].value else len(attracties)
+    except:
+        aantal_attracties=len(attracties)
     studenten.append({
         "naam": naam,
-        "attracties": attracties,
-        "uren_beschikbaar": uren_beschikbaar,
-        "werkuren": len(uren_beschikbaar),
-        "is_pauzevlinder": False,
-        "assigned_hours": [],
-        "assigned_attracties": set(),
-        "aantal_attracties": len(attracties)
+        "uren_beschikbaar": sorted(uren_beschikbaar),
+        "attracties":[a for a in attracties if a],
+        "aantal_attracties":aantal_attracties,
+        "is_pauzevlinder":False,
+        "pv_number":None,
+        "assigned_attracties":set(),
+        "assigned_hours":[]
     })
 
+# -----------------------------
+# Openingsuren
+# -----------------------------
+open_uren=[int(str(ws.cell(1,kol).value).replace("u","").strip()) for kol in range(36,45) if ws.cell(2,kol).value in [1,True,"WAAR","X"]]
+if not open_uren:
+    open_uren=list(range(10,19))
+open_uren=sorted(set(open_uren))
+
+# -----------------------------
+
 # Pauzevlinders
+# -----------------------------
 pauzevlinder_namen=[ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
 
 def compute_pauze_hours(open_uren):
@@ -98,86 +153,8 @@ for idx,pvnaam in enumerate(pauzevlinder_namen,start=1):
         if s["naam"]==pvnaam:
             s["is_pauzevlinder"]=True
             s["pv_number"]=idx
-            s["uren_beschikbaar"]= [u for u in s["uren_beschikbaar"] if u not in required_pauze_hours]
+            s["uren_beschikbaar"]=[u for u in s["uren_beschikbaar"] if u not in required_pauze_hours]
             break
-
-# Maak 'selected' lijst van pauzevlinders (dicts met naam en attracties)
-selected = [s for s in studenten if s.get("is_pauzevlinder")]
-
-# -----------------------------
-# Hulpfuncties
-# -----------------------------
-def max_consecutive_hours(urenlijst):
-
-    ## --------- NIEUWE PAUZEPLANNING voor alle studenten incl. pauzevlinders ---------
-    if 'Pauzes' in [ws.title for ws in wb_out.worksheets]:
-        ws_pauze = wb_out['Pauzes']
-    else:
-        ws_pauze = wb_out.create_sheet('Pauzes')
-
-    # Lichtgele fill voor headers
-    light_fill = PatternFill(start_color="FFFDE7", fill_type="solid")
-
-    def plan_pauzes(student, kwartier_labels, attracties_per_kwartier, pauzevlinder_cap=None):
-        # Bepaal werkblokken (alle kwartieren waarop student werkt)
-        werk_kwartieren = [i for i, attr in enumerate(attracties_per_kwartier) if attr is not None]
-        if len(werk_kwartieren) < 8:  # minder dan 2 uur werken, geen pauze
-            return []
-        # Pauzes mogen niet in eerste of laatste uur (4 kwartieren) van werktijd
-        geldige = [i for i in werk_kwartieren if (i - werk_kwartieren[0] >= 4 and werk_kwartieren[-1] - i >= 4)]
-        if not geldige:
-            return []
-        pauzes = []
-        # Bepaal aantal pauzes
-        werkuren = len(werk_kwartieren) / 4
-        lange = 1 if werkuren > 6 else 0
-        korte = 1
-        # Zoek alle mogelijke plekken voor lange pauze (2 aaneengesloten geldige kwartieren, attractie moet overneembaar zijn)
-        lange_opties = []
-        for i in geldige:
-            if i+1 in geldige:
-                # Check of pauzevlinder attractie kan overnemen (of 'extra')
-                attr1 = attracties_per_kwartier[i]
-                attr2 = attracties_per_kwartier[i+1]
-                if (pauzevlinder_cap is None or attr1 == 'extra' or attr2 == 'extra' or (attr1 and pauzevlinder_cap(attr1)) and (attr2 and pauzevlinder_cap(attr2))):
-                    lange_opties.append(i)
-        # Kies random uit opties
-        lange_idx = None
-        if lange and lange_opties:
-            lange_idx = random.choice(lange_opties)
-            pauzes.append(('lang', lange_idx))
-        # Korte pauze: minstens 6 kwartieren van lange pauze vandaan, indien mogelijk
-        korte_opties = []
-        for i in geldige:
-            # Check of pauzevlinder attractie kan overnemen (of 'extra')
-            attr = attracties_per_kwartier[i]
-            if pauzevlinder_cap is None or attr == 'extra' or (attr and pauzevlinder_cap(attr)):
-                if lange_idx is None or abs(i - lange_idx) >= 6:
-                    korte_opties.append(i)
-        korte_idx = None
-        if korte_opties:
-            korte_idx = random.choice(korte_opties)
-            pauzes.append(('kort', korte_idx))
-        elif korte:
-            # Als niet mogelijk met 1,5u afstand, probeer dichterbij (maar niet overlappen met lange)
-            korte_opties = [i for i in geldige if (pauzevlinder_cap is None or attracties_per_kwartier[i] == 'extra' or (attracties_per_kwartier[i] and pauzevlinder_cap(attracties_per_kwartier[i]))) and (lange_idx is None or abs(i-lange_idx) >= 2)]
-            if korte_opties:
-                korte_idx = random.choice(korte_opties)
-                pauzes.append(('kort', korte_idx))
-        return pauzes
-
-    # --- Bouw per kwartier de attractie waar de student werkt (voor pauzevlinders: eigen naam, voor anderen: planning)
-    def get_attracties_per_kwartier(student, kwartier_labels, ws_planning=None):
-        # ws_planning alleen nodig voor gewone studenten
-        werkuren = student.get('werkuren', 0)
-        # Bepaal werkuren als range
-        start_idx = 0
-        end_idx = len(kwartier_labels)-1
-        # Pauzevlinders: werken hele openingsuren
-        if student.get('is_pauzevlinder', False):
-            # Ze werken alle kwartieren binnen openingsuren
-            return [student['naam'] for _ in kwartier_labels]
-
 
 # Maak 'selected' lijst van pauzevlinders (dicts met naam en attracties)
 selected = [s for s in studenten if s.get("is_pauzevlinder")]
@@ -576,111 +553,50 @@ while len(unique_colors) < needed:
 
 student_kleuren = dict(zip(alle_namen, unique_colors))
 
+# Header
+ws_out.cell(1, 1, vandaag).font = Font(bold=True)
+ws_out.cell(1, 1).fill = white_fill
+for col_idx, uur in enumerate(sorted(open_uren), start=2):
+    ws_out.cell(1, col_idx, f"{uur}:00").font = Font(bold=True)
+    ws_out.cell(1, col_idx).fill = white_fill
+    ws_out.cell(1, col_idx).alignment = center_align
+    ws_out.cell(1, col_idx).border = thin_border
 
-# -----------------------------
-# Studenten en open_uren reconstrueren uit Excel
-# -----------------------------
+rij_out = 2
+for attr in attracties_te_plannen:
+    # FIX: correcte berekening max_pos
+    max_pos = max(
+        max(aantallen[uur].get(attr, 1) for uur in open_uren),
+        max(per_hour_assigned_counts[uur].get(attr, 0) for uur in open_uren)
+    )
 
-# Urenrij ophalen (open_uren): alle kolommen met een tijd in rij 1, vanaf kolom 2
-uren_rij1 = []
-open_uren = []
-for col in range(2, ws.max_column + 1):
-    val = ws.cell(1, col).value
-    if val and (":" in str(val) or str(val).isdigit()):
-        try:
-            uur = int(str(val).split(":")[0])
-            uren_rij1.append(val)
-            open_uren.append(uur)
-        except:
-            continue
-
-            s["pv_number"]=idx
-
-# -----------------------------
-# Studenten en open_uren reconstrueren uit Excel (enkel hier!)
-# -----------------------------
-
-# Urenrij ophalen (open_uren): alle kolommen met een tijd in rij 1, vanaf kolom 2
-uren_rij1 = []
-open_uren = []
-for col in range(2, ws.max_column + 1):
-    val = ws.cell(1, col).value
-    if val and (":" in str(val) or str(val).isdigit()):
-        try:
-            uur = int(str(val).split(":")[0])
-            uren_rij1.append(val)
-            open_uren.append(uur)
-        except:
-            continue
-
-# Studentenlijst reconstrueren
-studenten = []
-for row in range(4, ws.max_row + 1):
-    naam = ws.cell(row, 2).value
-    if not naam:
-        continue
-    attracties = [ws.cell(row, col).value for col in range(13, 47) if ws.cell(row, col).value]
-    uren_beschikbaar = []
-    for col in range(2, ws.max_column + 1):
-        val = ws.cell(1, col).value
-        if val and (":" in str(val) or str(val).isdigit()):
-            try:
-                uur = int(str(val).split(":")[0])
-                if ws.cell(row, col).value == naam:
-                    uren_beschikbaar.append(uur)
-            except:
-                continue
-    studenten.append({
-        "naam": naam,
-        "attracties": attracties,
-        "uren_beschikbaar": uren_beschikbaar,
-        "werkuren": len(uren_beschikbaar),
-        "is_pauzevlinder": False,
-        "assigned_hours": [],
-        "assigned_attracties": set(),
-        "aantal_attracties": len(attracties)
-    })
+    for pos_idx in range(1, max_pos + 1):
+        naam_attr = attr if max_pos == 1 else f"{attr} {pos_idx}"
+        ws_out.cell(rij_out, 1, naam_attr).font = Font(bold=True)
+        ws_out.cell(rij_out, 1).fill = white_fill
+        ws_out.cell(rij_out, 1).border = thin_border
 
 
-# Pauzevlinder namen ophalen
-pauzevlinder_namen = [ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
+        for col_idx, uur in enumerate(sorted(open_uren), start=2):
+            # Red spots nu wit maken
+            if attr in red_spots.get(uur, set()) and pos_idx == 2:
+                ws_out.cell(rij_out, col_idx, "").fill = white_fill
+                ws_out.cell(rij_out, col_idx).border = thin_border
+            else:
+                namen = assigned_map.get((uur, attr), [])
+                naam = namen[pos_idx - 1] if pos_idx - 1 < len(namen) else ""
+                ws_out.cell(rij_out, col_idx, naam).alignment = center_align
+                ws_out.cell(rij_out, col_idx).border = thin_border
+                if naam and naam in student_kleuren:
+                    ws_out.cell(rij_out, col_idx).fill = PatternFill(start_color=student_kleuren[naam], fill_type="solid")
 
-# Pauze-uren bepalen
-required_pauze_hours = compute_pauze_hours(open_uren)
+        rij_out += 1
 
-# Pauzevlinders markeren in studentenlijst
-for idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
-    for s in studenten:
-        if s["naam"] == pvnaam:
-            s["is_pauzevlinder"] = True
-            s["pv_number"] = idx
-            s["uren_beschikbaar"] = [u for u in s["uren_beschikbaar"] if u not in required_pauze_hours]
-            break
-
-# Maak 'selected' lijst van pauzevlinders (dicts met naam en attracties)
-selected = [s for s in studenten if s.get("is_pauzevlinder")]
-
-# Voeg hulpfunctie toe voor runs van uren (na imports)
-def contiguous_runs(uren):
-    """Geef een lijst van aaneengesloten runs van integers (uren)."""
-    if not uren:
-        return []
-    runs = []
-    run = [uren[0]]
-    for u in uren[1:]:
-        if u == run[-1] + 1:
-            run.append(u)
-        else:
-            runs.append(run)
-            run = [u]
-    runs.append(run)
-    return runs
-
-# Pauzevlinders en extra-blok na hoofdoutput
-rij_out = ws_out.max_row + 2
+# Pauzevlinders
+rij_out += 1
 for pv_idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
-    ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True)
-    ws_out.cell(rij_out, 1).fill = white_fill
+    ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True)  # tekst blijft zwart
+    ws_out.cell(rij_out, 1).fill = white_fill  # cel wit
     ws_out.cell(rij_out, 1).border = thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
         naam = pvnaam if uur in required_pauze_hours else ""
@@ -691,9 +607,11 @@ for pv_idx, pvnaam in enumerate(pauzevlinder_namen, start=1):
     rij_out += 1
 
 # Extra
-ws_out.cell(rij_out, 1, "Extra").font = Font(bold=True)
-ws_out.cell(rij_out, 1).fill = white_fill
+rij_out += 1
+ws_out.cell(rij_out, 1, "Extra").font = Font(bold=True)  # tekst blijft zwart
+ws_out.cell(rij_out, 1).fill = white_fill  # cel wit
 ws_out.cell(rij_out, 1).border = thin_border
+
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
     for r_offset, naam in enumerate(extra_assignments[uur]):
         ws_out.cell(rij_out + 1 + r_offset, col_idx, naam).alignment = center_align
@@ -716,256 +634,145 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-#DEEL 2
-#oooooooooooooooooooo
-#oooooooooooooooooooo
+# =====================
+# PAUZEPLANNING VOLGENS EISEN (vervangt DEEL 2 t/m DEEL 5)
+# =====================
 
-# -----------------------------
-# DEEL 2: Pauzevlinder overzicht
-# -----------------------------
-ws_pauze = wb_out.create_sheet(title="Pauzevlinders")
+kleur_lange_pauze = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # geel
+kleur_korte_pauze = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen
+kleur_leeg = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")        # lichtblauw
 
-light_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-center_align = Alignment(horizontal="center", vertical="center")
-thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
-                     top=Side(style="thin"), bottom=Side(style="thin"))
-
-
-
-# -----------------------------
-# Rij 1: Kwartieren van pauze-start tot pauze-eind
-# -----------------------------
-# Bepaal begin- en eindtijd van de pauzevlinder-periode
-pauze_start = min(required_pauze_hours) if required_pauze_hours else 12
-pauze_eind = max(required_pauze_hours) + 1 if required_pauze_hours else 17
-
-# Bouw lijst met kwartieren (bv. 12:00, 12:15, ..., 17:00)
+# Pauze tijdlabels (12:00-14:30 per halfuur, lege kolom, 15:30-17:15 per kwartier)
 uren_rij1 = []
-u = pauze_start
-m = 0
-while u < pauze_eind or (u == pauze_eind and m == 0):
+u, m = 12, 0
+while u < 15 or (u == 14 and m <= 30):
+    uren_rij1.append(f"{u:02d}:{m:02d}")
+    m += 30
+    if m >= 60:
+        u += 1
+        m = 0
+uren_rij1.append("")  # lege kolom
+u, m = 15, 30
+while u < 17 or (u == 17 and m <= 15):
     uren_rij1.append(f"{u:02d}:{m:02d}")
     m += 15
     if m >= 60:
         u += 1
         m = 0
 
-
-# Schrijf kwartieren in rij 1, start in kolom B
-half_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # halfuurkleur
-quarter_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # kwartierkleur
+# Pauze slots: lijst van (col_idx, uur, minuut)
+pauze_slots = []
 for col_idx, tijd in enumerate(uren_rij1, start=2):
-    c = ws_pauze.cell(1, col_idx, tijd)
-    c.fill = PatternFill(start_color="FFFFFF", fill_type="solid")
-    c.alignment = center_align
-    c.border = thin_border
+    if tijd:
+        uur, minuut = map(int, tijd.split(":"))
+        pauze_slots.append((col_idx, uur, minuut))
 
-# Zet cel A1 ook in licht kleurtje
-a1 = ws_pauze.cell(1, 1, "")
-a1.fill = light_fill
-a1.border = thin_border
-
-
-# -----------------------------
-# Pauzevlinders en pauze-invulling
-# -----------------------------
+# Pauzevlinder-rijen
+ws_pauze = wb_out.create_sheet(title="Pauzevlinders")
+pv_rows = []
 rij_out = 2
 for pv_idx, pv in enumerate(selected, start=1):
-    # Titel: Pauzevlinder X
-    title_cell = ws_pauze.cell(rij_out, 1, f"Pauzevlinder {pv_idx}")
-    title_cell.font = Font(bold=True)
-    title_cell.fill = light_fill
-    title_cell.alignment = center_align
-    title_cell.border = thin_border
-
-    # Naam eronder (zelfde stijl en kleur)
+    ws_pauze.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True)
+    ws_pauze.cell(rij_out, 1).fill = kleur_leeg
+    ws_pauze.cell(rij_out, 1).alignment = center_align
+    ws_pauze.cell(rij_out, 1).border = thin_border
     naam_cel = ws_pauze.cell(rij_out + 1, 1, pv["naam"])
-    naam_cel.fill = light_fill
+    naam_cel.fill = kleur_leeg
     naam_cel.alignment = center_align
     naam_cel.border = thin_border
-
-
-
-    # --- Pauzeplanning volgens jouw regels ---
-    totaal_kwartieren = len(uren_rij1)
-    werkuren = pv.get("werkuren", 0)
-    # Pauze alleen mogelijk als er minstens 3 kwartieren zijn (geen pauze in eerste/laatste kwartier)
-    if totaal_kwartieren < 3:
-        rij_out += 3
-        continue
-    # Pauze mag niet in eerste of laatste kwartier
-    geldige_indices = list(range(1, totaal_kwartieren-1))
-    bezet = [False] * totaal_kwartieren
-    pauze_blokken = []
-    # Bepaal aantal pauzes
-    if werkuren > 6:
-        lange_pauzes = 1
-        korte_pauzes = 1
-    else:
-        lange_pauzes = 0
-        korte_pauzes = 1
-    # Eerst lange pauzes random verspreid
-    if lange_pauzes:
-        mogelijke_lange = [i for i in geldige_indices if i+1 in geldige_indices]
-        if mogelijke_lange:
-            idx = random.choice(mogelijke_lange)
-            pauze_blokken.append(("lang", idx))
-            bezet[idx] = bezet[idx+1] = True
-    # Dan korte pauzes random verspreid (niet overlappen met lange)
-    if korte_pauzes:
-        mogelijke_korte = [i for i in geldige_indices if not bezet[i]]
-        if mogelijke_korte:
-            idx = random.choice(mogelijke_korte)
-            pauze_blokken.append(("kort", idx))
-            bezet[idx] = True
-    # Sorteer op index zodat alles netjes op tijd staat
-    pauze_blokken.sort(key=lambda x: x[1])
-    # Vul de cellen met juiste kleur
-    for soort, idx in pauze_blokken:
-        if soort == "lang":
-            for offset in [0, 1]:
-                if idx + offset < totaal_kwartieren:
-                    c = ws_pauze.cell(rij_out + 1, idx + 2 + offset, pv["naam"])
-                    c.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-                    c.font = Font(bold=True, color="000000")
-                    c.alignment = center_align
-                    c.border = thin_border
-        else:
-            c = ws_pauze.cell(rij_out + 1, idx + 2, pv["naam"])
-            c.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-            c.font = Font(bold=True, color="000000")
-            c.alignment = center_align
-            c.border = thin_border
-
-    # --- Tabelsplitsing als te lang ---
-    max_kolommen = 16  # bv. max 16 kwartieren per rij, rest op nieuwe rij
-    if totaal_kwartieren > max_kolommen:
-        # Kopieer header voor tweede deel
-        rij_out += 3
-        for col_idx, tijd in enumerate(uren_rij1[max_kolommen:], start=2):
-            c = ws_pauze.cell(rij_out, col_idx, tijd)
-            c.fill = PatternFill(start_color="FFFFFF", fill_type="solid")
-            c.alignment = center_align
-            c.border = thin_border
-        # Zet naam opnieuw
-        title_cell2 = ws_pauze.cell(rij_out + 1, 1, f"Pauzevlinder {pv_idx} (vervolg)")
-        title_cell2.font = Font(bold=True)
-        title_cell2.fill = light_fill
-        title_cell2.alignment = center_align
-        title_cell2.border = thin_border
-        naam_cel2 = ws_pauze.cell(rij_out + 2, 1, pv["naam"])
-        naam_cel2.fill = light_fill
-        naam_cel2.alignment = center_align
-        naam_cel2.border = thin_border
-        # Vul pauzes in tweede deel
-        for soort, idx in pauze_blokken:
-            if idx >= max_kolommen:
-                rel_idx = idx - max_kolommen
-                if soort == "lang":
-                    for offset in [0, 1]:
-                        if rel_idx + offset < (totaal_kwartieren - max_kolommen):
-                            c = ws_pauze.cell(rij_out + 2, rel_idx + 2 + offset, pv["naam"])
-                            c.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-                            c.font = Font(bold=True, color="000000")
-                            c.alignment = center_align
-                            c.border = thin_border
-                else:
-                    c = ws_pauze.cell(rij_out + 2, rel_idx + 2, pv["naam"])
-                    c.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-                    c.font = Font(bold=True, color="000000")
-                    c.alignment = center_align
-                    c.border = thin_border
-        rij_out += 3
+    pv_rows.append((pv, rij_out + 1))
     rij_out += 3
-
-    rij_out += 3  # lege rij ertussen
-
-# -----------------------------
-# Kolombreedte voor overzicht
-# -----------------------------
 for col in range(1, len(uren_rij1) + 2):
     ws_pauze.column_dimensions[get_column_letter(col)].width = 10
+for col_idx, uur in enumerate(uren_rij1, start=2):
+    c = ws_pauze.cell(1, col_idx, uur)
+    c.fill = kleur_leeg
+    c.alignment = center_align
+    c.border = thin_border
+ws_pauze.cell(1, 1, "").fill = kleur_leeg
+ws_pauze.cell(1, 1).border = thin_border
 
-# Opslaan met dezelfde unieke naam
+# Helper: capability-set
+pv_cap_set = {pv["naam"]: {normalize_attr(a) for a in pv.get("attracties", [])} for pv, _ in pv_rows}
+def pv_kan_attr(pv, attr):
+    base = normalize_attr(attr)
+    return base in pv_cap_set.get(pv["naam"], set())
 
-# Maak in-memory bestand
-output = BytesIO()
-wb_out.save(output)
-output.seek(0)  # Zorg dat lezen vanaf begin kan
+def is_student_extra(naam):
+    # ws_out is de hoofdplanning sheet
+    for row in range(2, ws_out.max_row + 1):
+        for col in range(2, ws_out.max_column + 1):
+            if str(ws_out.cell(row, col).value).strip().lower() == str(naam).strip().lower():
+                header = str(ws_out.cell(1, col).value).strip().lower()
+                if "extra" in header:
+                    return True
+    return False
 
+def get_student_work_slots(naam):
+    slots = []
+    for col_idx, uur, minuut in pauze_slots:
+        for row in range(2, ws_out.max_row + 1):
+            if ws_out.cell(row, 1).value and ws_out.cell(row, col_idx).value == naam:
+                slots.append((col_idx, uur, minuut))
+                break
+    return slots
 
+def vind_attractie_op_slot(naam, col_idx):
+    for row in range(2, ws_out.max_row + 1):
+        if ws_out.cell(row, col_idx).value == naam:
+            return ws_out.cell(row, 1).value
+    return None
 
-#oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
-
-
-#DEEL 3
-#oooooooooooooooooooo
-#oooooooooooooooooooo
-
-import random
-from collections import defaultdict
- 
-import datetime
-
-# -----------------------------
-# DEEL 3: Extra naam voor pauzevlinders die langer dan 6 uur werken
-# -----------------------------
-
-# Sheet referenties
-ws_planning = wb_out["Planning"]
-ws_pauze = wb_out["Pauzevlinders"]
-
-# Pauzekolommen (B–G in Pauzevlinders sheet)
-pauze_cols = list(range(2, 8))  # B(2) t/m G(7)
-
-# Bouw lijst met pauzevlinder-rijen
-pv_rows = []
-for pv in selected:
-    row_found = None
-    for r in range(2, ws_pauze.max_row + 1):
-        if str(ws_pauze.cell(r, 1).value).strip() == str(pv["naam"]).strip():
-            row_found = r
-            break
-    if row_found is not None:
-        pv_rows.append((pv, row_found))
-
-# Bereken totaal uren per student in Werkblad "Planning"
-student_totalen = defaultdict(int)
-for row in ws_planning.iter_rows(min_row=2, values_only=True):
-    for naam in row[1:]:
-        if naam and str(naam).strip() != "":
-            student_totalen[naam] += 1
-
-# Loop door pauzevlinders in Werkblad "Pauzevlinders"
-for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen + 1 lege rij
-    naam_cel = ws_pauze.cell(row + 1, 1).value
-    if not naam_cel:
+# Pauzes plannen per student
+for s in studenten:
+    naam = s["naam"]
+    slots = get_student_work_slots(naam)
+    if not slots:
         continue
-    totaal_uren = student_totalen.get(naam_cel, 0)
-    if totaal_uren > 6:
-        # Kies random kolom tussen B en G (2 t/m 7)
-        random_col = random.randint(2, 7)
-        ws_pauze.cell(row + 1, random_col, naam_cel)
-        # Opmaak toepassen
-        ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
-        ws_pauze.cell(row + 1, random_col).border = Border(
-            left=Side(style="thin"),
-            right=Side(style="thin"),
-            top=Side(style="thin"),
-            bottom=Side(style="thin")
-        )
-
-# ---- Lege naamcellen inkleuren ----
-naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
-thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
-                     top=Side(style="thin"), bottom=Side(style="thin"))
-center_align = Alignment(horizontal="center", vertical="center")
-
+    geldige = slots[1:-1] if len(slots) > 2 else []
+    if not geldige:
+        continue
+    pauzes = []
+    werkminuten = len(slots) * 15
+    if werkminuten > 360:  # >6u
+        lange_opties = [i for i in range(len(geldige)-1) if geldige[i+1][0] == geldige[i][0]+1]
+        korte_opties = list(range(len(geldige)))
+        best = None
+        for li in lange_opties:
+            for ki in korte_opties:
+                if abs(geldige[li][0] - geldige[ki][0]) >= 6:
+                    best = (li, ki)
+                    break
+            if best:
+                break
+        if best:
+            lange = geldige[best[0]]
+            korte = geldige[best[1]]
+            pauzes = [("lang", lange), ("kort", korte)]
+        else:
+            pauzes = [("kort", geldige[len(geldige)//2])]
+    else:
+        pauzes = [("kort", geldige[len(geldige)//2])]
+    for soort, (col_idx, uur, minuut) in pauzes:
+        attr = vind_attractie_op_slot(naam, col_idx)
+        for pv, pv_row in pv_rows:
+            if is_student_extra(naam) or pv_kan_attr(pv, attr):
+                cel = ws_pauze.cell(pv_row, col_idx)
+                boven_cel = ws_pauze.cell(pv_row-1, col_idx)
+                boven_cel.value = attr
+                boven_cel.alignment = center_align
+                boven_cel.border = thin_border
+                cel.value = naam
+                cel.alignment = center_align
+                cel.border = thin_border
+                cel.fill = kleur_lange_pauze if soort=="lang" else kleur_korte_pauze
+                break
+# Lege cellen inkleuren
 for pv, pv_row in pv_rows:
-    for col in pauze_cols:
-        if ws_pauze.cell(pv_row, col).value in [None, ""]:
-            ws_pauze.cell(pv_row, col).fill = naam_leeg_fill
-
+    for col_idx, _, _ in pauze_slots:
+        cel = ws_pauze.cell(pv_row, col_idx)
+        if cel.value in [None, ""]:
+            cel.fill = kleur_leeg
 
 # -----------------------------
 # Opslaan in uniek bestand
@@ -988,8 +795,6 @@ def log_feedback(msg):
 
 log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek (B–G) in {planning_bestand}")
 
-# --- doorschuif debuglog naar feedback sheet ---
-
 
 
 
@@ -999,7 +804,7 @@ log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek 
 # DEEL 4: Lange werkers (>6 uur) pauze inplannen – gegarandeerd
 # -----------------------------
 
- 
+
 import random  # <— toegevoegd voor willekeurige verdeling
 
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
@@ -1014,11 +819,11 @@ pauze_cols = list(range(2, 8))  # B(2),C(3),D(4),E(5),F(6),G(7)
 
 def is_student_extra(naam):
     """Check of student in Planning bij 'extra' staat (kolom kan 'Extra' zijn of specifieke marker)."""
-    for row in range(2, ws_planning.max_row + 1):
-        if ws_planning.cell(row, 1).value:  # rij met attractienaam
-            for col in range(2, ws_planning.max_column + 1):
-                if str(ws_planning.cell(row, col).value).strip().lower() == str(naam).strip().lower():
-                    header = str(ws_planning.cell(1, col).value).strip().lower()
+    for row in range(2, ws_out.max_row + 1):
+        if ws_out.cell(row, 1).value:  # rij met attractienaam
+            for col in range(2, ws_out.max_column + 1):
+                if str(ws_out.cell(row, col).value).strip().lower() == str(naam).strip().lower():
+                    header = str(ws_out.cell(1, col).value).strip().lower()
                     if "extra" in header:  # of een andere logica afhankelijk van hoe 'extra' wordt aangeduid
                         return True
     return False
@@ -1075,28 +880,28 @@ lange_werkers_names = {s["naam"] for s in lange_werkers}
 def get_student_work_hours(naam):
     """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
     uren = set()
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
+    for col in range(2, ws_out.max_column + 1):
+        header = ws_out.cell(1, col).value
         uur = parse_header_uur(header)
         if uur is None:
             continue
         # check of student in deze kolom ergens staat
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
+        for row in range(2, ws_out.max_row + 1):
+            if ws_out.cell(row, col).value == naam:
                 uren.add(uur)
                 break
     return sorted(uren)
 
 def vind_attractie_op_uur(naam, uur):
     """Geef attractienaam (exact zoals in Planning-kolom A) waar student staat op dit uur; None als niet gevonden."""
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
+    for col in range(2, ws_out.max_column + 1):
+        header = ws_out.cell(1, col).value
         col_uur = parse_header_uur(header)
         if col_uur != uur:
             continue
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                return ws_planning.cell(row, 1).value
+        for row in range(2, ws_out.max_row + 1):
+            if ws_out.cell(row, col).value == naam:
+                return ws_out.cell(row, 1).value
     return None
 
 def pv_kan_attr(pv, attr):
@@ -1205,14 +1010,13 @@ else:
 
 
 
-
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
 
 # -----------------------------
 # DEEL 5: Kwartierpauzes namiddag (15:30-17:30)
 # -----------------------------
- 
+
 import random
 
 # Styles
@@ -1259,26 +1063,26 @@ min_werkers_names = {s["naam"] for s in min_werkers}
 # Werkuren per student
 def get_student_work_hours(naam):
     uren = set()
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
+    for col in range(2, ws_out.max_column + 1):
+        header = ws_out.cell(1, col).value
         uur = parse_header_uur(header)
         if uur is None:
             continue
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
+        for row in range(2, ws_out.max_row + 1):
+            if ws_out.cell(row, col).value == naam:
                 uren.add(uur)
                 break
     return sorted(uren)
 
 def vind_attractie_op_uur(naam, uur):
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
+    for col in range(2, ws_out.max_column + 1):
+        header = ws_out.cell(1, col).value
         col_uur = parse_header_uur(header)
         if col_uur != uur:
             continue
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                return ws_planning.cell(row,1).value
+        for row in range(2, ws_out.max_row + 1):
+            if ws_out.cell(row, col).value == naam:
+                return ws_out.cell(row, 1).value
     return None
 
 def pv_kan_attr(pv, attr):
