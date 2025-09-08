@@ -1321,4 +1321,3 @@ st.download_button(
     "Download planning",
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-)
