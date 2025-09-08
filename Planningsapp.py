@@ -774,6 +774,115 @@ for pv, pv_row in pv_rows:
         if cel.value in [None, ""]:
             cel.fill = kleur_leeg
 
+# =====================
+# PAUZE-TABEL PER PAUZEVLINDER PER KWARTIER
+# =====================
+
+def maak_pauze_tabel_per_kwartier(ws_pauze, pauzevlinders, studenten, ws_out):
+    from datetime import datetime, timedelta
+    # Helper: maak lijst van kwartieren tussen start en eindtijd
+    def kwartier_range(start, end):
+        tijden = []
+        t = start
+        while t < end:
+            tijden.append(t)
+            t += timedelta(minutes=15)
+        return tijden
+
+    # Bepaal werktijden per pauzevlinder
+    for idx, pv in enumerate(pauzevlinders, start=1):
+        naam = pv["naam"]
+        # Zoek alle kolommen waar deze pauzevlinder staat ingepland
+        werk_kwartieren = []
+        for col in range(2, ws_out.max_column + 1):
+            for row in range(2, ws_out.max_row + 1):
+                if ws_out.cell(row, col).value == naam:
+                    header = ws_out.cell(1, col).value
+                    try:
+                        tijd = datetime.strptime(str(header), "%H:%M")
+                        werk_kwartieren.append(tijd)
+                    except:
+                        continue
+        if not werk_kwartieren:
+            continue
+        start = min(werk_kwartieren)
+        end = max(werk_kwartieren) + timedelta(minutes=15)
+        kwartieren = kwartier_range(start, end)
+        # Tabelkop
+        rij = idx * 3 - 2
+        ws_pauze.cell(rij, 1, f"Pauzevlinder {idx}").font = Font(bold=True)
+        ws_pauze.cell(rij, 1).alignment = center_align
+        for kidx, tijd in enumerate(kwartieren, start=2):
+            ws_pauze.cell(rij, kidx, tijd.strftime("%H:%M")).alignment = center_align
+        # Pauze-rijen
+        ws_pauze.cell(rij+1, 1, naam).alignment = center_align
+        # Pauzes plannen: zoek student in deze tijd, vul korte/lange pauze
+        geplande_pauzes = pv.get("pauzes", [])  # verwacht: lijst van dicts met 'type', 'start' (datetime)
+        for pauze in geplande_pauzes:
+            ptype = pauze["type"]
+            pstart = pauze["start"]
+            for kidx, tijd in enumerate(kwartieren, start=2):
+                if tijd == pstart:
+                    ws_pauze.cell(rij+1, kidx, naam).alignment = center_align
+                    if ptype == "lang":
+                        ws_pauze.cell(rij+1, kidx, naam).fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+                        # Vul ook volgende kwartier
+                        if kidx+1 <= len(kwartieren)+1:
+                            ws_pauze.cell(rij+1, kidx+1, naam).fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+                    else:
+                        ws_pauze.cell(rij+1, kidx, naam).fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+
+# =====================
+# PAUZE-TABEL PER PAUZEVLINDER PER KWARTIER (VERVOLG)
+# =====================
+
+# Voor elke pauzevlinder: werkelijke pauze-uren invullen (op basis van toegewezen uren in hoofdplanning)
+for pv, rij in pv_rows:
+    naam = pv["naam"]
+    # Zoek alle toegewezen uren voor deze pauzevlinder
+    toegewezen_uren = []
+    for col in range(2, ws_out.max_column + 1):
+        header = ws_out.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur is None:
+            continue
+        # check of pauzevlinder in deze kolom staat
+        for row in range(2, ws_out.max_row + 1):
+            if ws_out.cell(row, col).value == naam:
+                toegewezen_uren.append(uur)
+                break
+    if not toegewezen_uren:
+        continue
+    toegewezen_uren = sorted(set(toegewezen_uren))  # uniek en gesorteerd
+    # Bepaal pauze-uren: standaard 12:00-13:00 en 17:00-18:00, maar afhankelijk van werkelijke uren
+    pauze_uren = []
+    if toegewezen_uren[0] < 13:
+        pauze_uren.append((12, 13))
+    if toegewezen_uren[-1] > 17:
+        pauze_uren.append((17, 18))
+    # Vul pauze-uren in de tabel
+    for pstart, pend in pauze_uren:
+        for col_idx, uur, minuut in pauze_slots:
+            if uur == pstart and col_idx < ws_pauze.max_column:
+                cel = ws_pauze.cell(rij, col_idx)
+                cel.value = naam
+                cel.alignment = center_align
+                cel.fill = kleur_lange_pauze
+                cel.border = thin_border
+            if uur == pend and col_idx < ws_pauze.max_column:
+                cel = ws_pauze.cell(rij, col_idx)
+                cel.value = naam
+                cel.alignment = center_align
+                cel.fill = kleur_lange_pauze
+                cel.border = thin_border
+
+# Lege cellen inkleuren
+for pv, pv_row in pv_rows:
+    for col_idx, _, _ in pauze_slots:
+        cel = ws_pauze.cell(pv_row, col_idx)
+        if cel.value in [None, ""]:
+            cel.fill = kleur_leeg
+
 # -----------------------------
 # Opslaan in uniek bestand
 # -----------------------------
