@@ -644,6 +644,9 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -663,7 +666,6 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
 # -----------------------------
 # Gebruik compute_pauze_hours/open_uren als basis voor de pauzeplanning-urenrij
 uren_rij1 = []
-from datetime import datetime, timedelta
 if required_pauze_hours:
     start_uur = min(required_pauze_hours)
     eind_uur = max(required_pauze_hours)
@@ -744,7 +746,6 @@ output.seek(0)  # Zorg dat lezen vanaf begin kan
 import random
 from collections import defaultdict
 from openpyxl.styles import Alignment, Border, Side, PatternFill
-import datetime
 
 # -----------------------------
 # DEEL 3: Extra naam voor pauzevlinders die langer dan 6 uur werken
@@ -1253,16 +1254,7 @@ wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 
-
-from datetime import datetime, timedelta
-def parse_time(header):
-    s = str(header).strip()
-    if 'u' in s:
-        parts = s.split('u')
-        uur = int(parts[0])
-        minuut = int(parts[1]) if len(parts) > 1 and parts[1] else 0
-        return datetime(2020,1,1,uur,minuut)
-    return None
+if niet_geplaatst:
 
 pauze_times = {}
 for col in pauze_cols:
@@ -1320,15 +1312,6 @@ else:
     log_feedback("✅ Alle studenten die >6u werken kregen een pauzeplek (B–G gevuld waar mogelijk)")
 
 # --- Pauzevlinder kwartierpauze met 2,5u tussenpauze, na alle lange pauzes indien geen lange pauze ---
-from datetime import datetime, timedelta
-def parse_time(header):
-    s = str(header).strip()
-    if 'u' in s:
-        parts = s.split('u')
-        uur = int(parts[0])
-        minuut = int(parts[1]) if len(parts) > 1 and parts[1] else 0
-        return datetime(2020,1,1,uur,minuut)
-    return None
 
 pauze_times = {}
 for col in pauze_cols:
