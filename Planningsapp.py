@@ -645,6 +645,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -653,6 +654,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 # DEEL 2: Pauzevlinder overzicht
 # -----------------------------
 ws_pauze = wb_out.create_sheet(title="Pauzevlinders")
+
 
 light_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 center_align = Alignment(horizontal="center", vertical="center")
@@ -1105,55 +1107,87 @@ for s in werkende_studenten:
     if student_totalen.get(naam, 0) > 6:
         # 1. Zoek 2 aaneengesloten kwartieren (lang)
         geplaatst = False
-        tries = 0
-        while not geplaatst and tries < 100:
-            random.shuffle(pv_rows)
+        for pv, pv_row in pv_rows:
+            for i in range(len(kwartier_cols)-1):
+                col1, _ = kwartier_cols[i]
+                col2, _ = kwartier_cols[i+1]
+                if col1 in werk_kwartieren and col2 in werk_kwartieren:
+                    if (pv_row, col1) not in bezet and (pv_row, col2) not in bezet:
+                        pauzes.append((pv_row, col1, "lang"))
+                        pauzes.append((pv_row, col2, "lang"))
+                        bezet.add((pv_row, col1))
+                        bezet.add((pv_row, col2))
+                        geplaatst = True
+                        break
+            if geplaatst:
+                break
+        # Als het niet lukt, plan gewoon de eerste 2 aaneengesloten kwartieren binnen werkuren, ongeacht bezet
+        if not geplaatst:
             for pv, pv_row in pv_rows:
                 for i in range(len(kwartier_cols)-1):
                     col1, _ = kwartier_cols[i]
                     col2, _ = kwartier_cols[i+1]
                     if col1 in werk_kwartieren and col2 in werk_kwartieren:
-                        if (pv_row, col1) not in bezet and (pv_row, col2) not in bezet:
-                            pauzes.append((pv_row, col1, "lang"))
-                            pauzes.append((pv_row, col2, "lang"))
-                            bezet.add((pv_row, col1))
-                            bezet.add((pv_row, col2))
-                            geplaatst = True
-                            break
+                        pauzes.append((pv_row, col1, "lang"))
+                        pauzes.append((pv_row, col2, "lang"))
+                        bezet.add((pv_row, col1))
+                        bezet.add((pv_row, col2))
+                        geplaatst = True
+                        if 'log_feedback' in globals():
+                            log_feedback(f"⚠️ {naam}: lange pauze moest geforceerd worden (mogelijk overschreven)")
+                        break
                 if geplaatst:
                     break
-            tries += 1
         # 2. Zoek 1 extra kwartier (kort), niet overlappend met lang
+        geplande_lang = set((pv_row, col_idx) for pv_row, col_idx, typ in pauzes if typ == "lang")
         geplaatst = False
-        tries = 0
-        while not geplaatst and tries < 100:
-            random.shuffle(pv_rows)
+        for pv, pv_row in pv_rows:
+            for col_idx, _ in kwartier_cols:
+                if col_idx in werk_kwartieren and (pv_row, col_idx) not in bezet and (pv_row, col_idx) not in geplande_lang:
+                    pauzes.append((pv_row, col_idx, "kort"))
+                    bezet.add((pv_row, col_idx))
+                    geplaatst = True
+                    break
+            if geplaatst:
+                break
+        # Als het niet lukt, plan gewoon het eerste kwartier binnen werkuren dat niet samenvalt met lang
+        if not geplaatst:
             for pv, pv_row in pv_rows:
                 for col_idx, _ in kwartier_cols:
-                    if col_idx in werk_kwartieren and (pv_row, col_idx) not in bezet:
+                    if col_idx in werk_kwartieren and (pv_row, col_idx) not in geplande_lang:
                         pauzes.append((pv_row, col_idx, "kort"))
                         bezet.add((pv_row, col_idx))
+                        if 'log_feedback' in globals():
+                            log_feedback(f"⚠️ {naam}: korte pauze moest geforceerd worden (mogelijk overschreven)")
                         geplaatst = True
                         break
                 if geplaatst:
                     break
-            tries += 1
     else:
         # --- Korte werkers: altijd 1 kwartier pauze ---
         geplaatst = False
-        tries = 0
-        while not geplaatst and tries < 100:
-            random.shuffle(pv_rows)
+        for pv, pv_row in pv_rows:
+            for col_idx, _ in kwartier_cols:
+                if col_idx in werk_kwartieren and (pv_row, col_idx) not in bezet:
+                    pauzes.append((pv_row, col_idx, "kort"))
+                    bezet.add((pv_row, col_idx))
+                    geplaatst = True
+                    break
+            if geplaatst:
+                break
+        # Als het niet lukt, plan gewoon het eerste kwartier binnen werkuren
+        if not geplaatst:
             for pv, pv_row in pv_rows:
                 for col_idx, _ in kwartier_cols:
-                    if col_idx in werk_kwartieren and (pv_row, col_idx) not in bezet:
+                    if col_idx in werk_kwartieren:
                         pauzes.append((pv_row, col_idx, "kort"))
                         bezet.add((pv_row, col_idx))
+                        if 'log_feedback' in globals():
+                            log_feedback(f"⚠️ {naam}: korte pauze moest geforceerd worden (mogelijk overschreven)")
                         geplaatst = True
                         break
                 if geplaatst:
                     break
-            tries += 1
     student_pauzes[naam] = pauzes
 
 # 5. Schrijf de namen in de juiste cellen bij de juiste pauzevlinder
