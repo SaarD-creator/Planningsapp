@@ -141,8 +141,10 @@ def compute_pauze_hours(open_uren):
         return [h for h in open_uren if 12 <= h <= 16]
     elif 10 in open_uren and 17 in open_uren:
         return [h for h in open_uren if 12 <= h <= 16]
-    elif 12 in open_uren:
+    elif 14 in open_uren and 18 in open_uren:
         return [h for h in open_uren if 15 <= h <= 17]
+    elif 12 in open_uren:
+        return [h for h in open_uren if 13 <= h <= 18]
     else:
         return list(open_uren)
 
