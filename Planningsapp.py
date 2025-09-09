@@ -645,7 +645,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -910,7 +909,7 @@ center_align = Alignment(horizontal="center", vertical="center")
 # -----------------------------
 # Opslaan in uniek bestand
 # -----------------------------
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 planning_bestand = f"Planning_{timestamp}.xlsx"
 
 
@@ -1335,6 +1334,6 @@ output.seek(0)
 st.download_button(
     "Download planning",
     data=output.getvalue(),
-    file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    file_name=f"Planning_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
 
