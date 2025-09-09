@@ -645,9 +645,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1096,6 +1093,7 @@ for pv in selected:
 kwartier_cols = [(col_idx, ws_pauze.cell(1, col_idx).value) for col_idx in range(2, ws_pauze.max_column+1)]
 
 # 4. Pauzes plannen: per student, plaats in een vrije cel bij een pauzevlinder op een kwartier waar student werkt
+
 import random
 bezet = set()  # (pv_row, col_idx)
 student_pauzes = {}  # naam -> geplande pauzes: lijst van (pv_row, col_idx, type)
@@ -1103,37 +1101,59 @@ for s in werkende_studenten:
     naam = s["naam"]
     werk_kwartieren = student_werk_kwartieren[naam]
     pauzes = []
-    # Lange pauze: 2 aaneengesloten kwartieren
-    if student_lange_pauze.get(naam, False):
-        found = False
-        random.shuffle(pv_rows)
-        for pv, pv_row in pv_rows:
-            # Zoek 2 aaneengesloten kwartieren waar student werkt en beide cellen vrij zijn
-            for i in range(len(kwartier_cols)-1):
-                col1, _ = kwartier_cols[i]
-                col2, _ = kwartier_cols[i+1]
-                if col1 in werk_kwartieren and col2 in werk_kwartieren:
-                    if (pv_row, col1) not in bezet and (pv_row, col2) not in bezet:
-                        pauzes.append((pv_row, col1, "lang"))
-                        pauzes.append((pv_row, col2, "lang"))
-                        bezet.add((pv_row, col1))
-                        bezet.add((pv_row, col2))
-                        found = True
+    # --- Lange werkers: altijd 2 aaneengesloten kwartieren (lang) en 1 extra kwartier (kort) ---
+    if student_totalen.get(naam, 0) > 6:
+        # 1. Zoek 2 aaneengesloten kwartieren (lang)
+        geplaatst = False
+        tries = 0
+        while not geplaatst and tries < 100:
+            random.shuffle(pv_rows)
+            for pv, pv_row in pv_rows:
+                for i in range(len(kwartier_cols)-1):
+                    col1, _ = kwartier_cols[i]
+                    col2, _ = kwartier_cols[i+1]
+                    if col1 in werk_kwartieren and col2 in werk_kwartieren:
+                        if (pv_row, col1) not in bezet and (pv_row, col2) not in bezet:
+                            pauzes.append((pv_row, col1, "lang"))
+                            pauzes.append((pv_row, col2, "lang"))
+                            bezet.add((pv_row, col1))
+                            bezet.add((pv_row, col2))
+                            geplaatst = True
+                            break
+                if geplaatst:
+                    break
+            tries += 1
+        # 2. Zoek 1 extra kwartier (kort), niet overlappend met lang
+        geplaatst = False
+        tries = 0
+        while not geplaatst and tries < 100:
+            random.shuffle(pv_rows)
+            for pv, pv_row in pv_rows:
+                for col_idx, _ in kwartier_cols:
+                    if col_idx in werk_kwartieren and (pv_row, col_idx) not in bezet:
+                        pauzes.append((pv_row, col_idx, "kort"))
+                        bezet.add((pv_row, col_idx))
+                        geplaatst = True
                         break
-            if found:
-                break
-    # Korte pauze: 1 kwartier, mag niet overlappen met lange pauze
-    found = False
-    random.shuffle(pv_rows)
-    for pv, pv_row in pv_rows:
-        for col_idx, _ in kwartier_cols:
-            if col_idx in werk_kwartieren and (pv_row, col_idx) not in bezet:
-                pauzes.append((pv_row, col_idx, "kort"))
-                bezet.add((pv_row, col_idx))
-                found = True
-                break
-        if found:
-            break
+                if geplaatst:
+                    break
+            tries += 1
+    else:
+        # --- Korte werkers: altijd 1 kwartier pauze ---
+        geplaatst = False
+        tries = 0
+        while not geplaatst and tries < 100:
+            random.shuffle(pv_rows)
+            for pv, pv_row in pv_rows:
+                for col_idx, _ in kwartier_cols:
+                    if col_idx in werk_kwartieren and (pv_row, col_idx) not in bezet:
+                        pauzes.append((pv_row, col_idx, "kort"))
+                        bezet.add((pv_row, col_idx))
+                        geplaatst = True
+                        break
+                if geplaatst:
+                    break
+            tries += 1
     student_pauzes[naam] = pauzes
 
 # 5. Schrijf de namen in de juiste cellen bij de juiste pauzevlinder
@@ -1163,8 +1183,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
 
 
 
