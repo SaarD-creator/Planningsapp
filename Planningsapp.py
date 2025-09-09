@@ -1,4 +1,4 @@
-niet random, geen extra's, kleurtjes!
+# niet random, geen extra's, kleurtjes!
 
 
 import streamlit as st
