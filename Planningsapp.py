@@ -642,6 +642,9 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -675,10 +678,10 @@ else:
     start_uur = 12
     eind_uur = 17
 
-# Bouw kwartier-rij
+# Bouw kwartier-rij met marge: laatste kwartier = eind_uur - 15 min
 uren_rij1 = []
 tijd = datetime(2020,1,1,start_uur,0)
-end = datetime(2020,1,1,eind_uur,45)
+end = datetime(2020,1,1,eind_uur,30)  # dus laatste kwartier is eind_uur:30
 while tijd <= end:
     uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
     tijd += timedelta(minutes=15)
