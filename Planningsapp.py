@@ -647,6 +647,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -780,20 +781,80 @@ for pv in selected:
         pv_rows.append((pv, row_found))
 
 
-# Geef elke pauzevlinder minimaal één kwartierpauze in hun eigen rij (lichtpaars)
+# Geef elke pauzevlinder een kwartierpauze met minimaal 2,5 uur tussenpauze
 for pv, pv_row in pv_rows:
-    heeft_pauze = False
+    # Verzamel alle pauze-kolommen (en bijbehorende uren)
+    col_uur_pairs = []
     for col in pauze_cols:
-        if ws_pauze.cell(pv_row, col).value not in [None, ""]:
-            heeft_pauze = True
-            break
-    if not heeft_pauze:
-        for col in pauze_cols:
+        header = ws_pauze.cell(1, col).value
+        if header:
+            s = str(header).strip()
+            if "u" in s:
+                parts = s.split("u")
+                try:
+                    uur = int(parts[0])
+                except:
+                    continue
+                col_uur_pairs.append((col, uur))
+
+    # Zoek alle reeds geplaatste pauzes in deze rij
+    geplaatste = [col for col in pauze_cols if ws_pauze.cell(pv_row, col).value not in [None, ""]]
+    # Zoek alle lange pauzes in deze rij (twee naast elkaar)
+    lange_pauze_indices = []
+    for i in range(len(col_uur_pairs)-1):
+        col1, uur1 = col_uur_pairs[i]
+        col2, uur2 = col_uur_pairs[i+1]
+        if ws_pauze.cell(pv_row, col1).value == pv["naam"] and ws_pauze.cell(pv_row, col2).value == pv["naam"]:
+            lange_pauze_indices.append(i)
+
+    # Verzamel alle lange pauze einduren van alle pauzevlinders
+    alle_lange_pauze_einduren = []
+    for pv2, pv_row2 in pv_rows:
+        for i in range(len(col_uur_pairs)-1):
+            col1, uur1 = col_uur_pairs[i]
+            col2, uur2 = col_uur_pairs[i+1]
+            if ws_pauze.cell(pv_row2, col1).value == pv2["naam"] and ws_pauze.cell(pv_row2, col2).value == pv2["naam"]:
+                alle_lange_pauze_einduren.append(uur2)
+
+    # Zoek een plek voor een korte pauze met minimaal 2,5 uur (10 blokjes) na eigen lange pauze (indien aanwezig)
+    # en na alle lange pauzes als er geen lange pauze is
+    min_gap = 2.5  # uur
+    min_gap_blokken = int(min_gap * 4)  # 10 blokjes van 15 min
+    geplaatste_korte = False
+    if lange_pauze_indices:
+        # Heeft zelf een lange pauze, zoek korte pauze 10 blokjes verder
+        laatste_lange_idx = lange_pauze_indices[-1]
+        _, eigen_lange_einduur = col_uur_pairs[laatste_lange_idx+1]
+        for idx, (col, uur) in enumerate(col_uur_pairs):
+            if idx > laatste_lange_idx+min_gap_blokken-1 and ws_pauze.cell(pv_row, col).value in [None, ""]:
+                ws_pauze.cell(pv_row, col).value = pv["naam"]
+                ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
+                ws_pauze.cell(pv_row, col).border = thin_border
+                ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")
+                geplaatste_korte = True
+                break
+    else:
+        # Geen lange pauze, zoek korte pauze na álle lange pauzes van anderen
+        if alle_lange_pauze_einduren:
+            laatste_lange = max(alle_lange_pauze_einduren)
+        else:
+            laatste_lange = -1
+        for idx, (col, uur) in enumerate(col_uur_pairs):
+            if uur > laatste_lange and ws_pauze.cell(pv_row, col).value in [None, ""]:
+                ws_pauze.cell(pv_row, col).value = pv["naam"]
+                ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
+                ws_pauze.cell(pv_row, col).border = thin_border
+                ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")
+                geplaatste_korte = True
+                break
+    # Als nog geen korte pauze geplaatst, zet hem op de eerste vrije plek na alle lange pauzes
+    if not geplaatste_korte:
+        for idx, (col, uur) in enumerate(col_uur_pairs):
             if ws_pauze.cell(pv_row, col).value in [None, ""]:
                 ws_pauze.cell(pv_row, col).value = pv["naam"]
                 ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
                 ws_pauze.cell(pv_row, col).border = thin_border
-                ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
+                ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")
                 break
 
 # Bereken totaal uren per student in Werkblad "Planning"
@@ -1293,4 +1354,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
