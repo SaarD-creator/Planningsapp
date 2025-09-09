@@ -739,6 +739,16 @@ for pv_idx, pv in enumerate(selected, start=1):
 for col in range(1, len(uren_rij1) + 2):
     ws_pauze.column_dimensions[get_column_letter(col)].width = 10
 
+# Gebruik exact dezelfde open_uren en headers als in deel 1 voor de pauzeplanning
+uren_rij1 = []
+for uur in sorted(open_uren):
+    # Zoek de originele header uit ws_out (de hoofdplanning)
+    for col in range(2, ws_out.max_column + 1):
+        header = ws_out.cell(1, col).value
+        if header and str(header).startswith(str(uur)):
+            uren_rij1.append(header)
+            break
+
 # Opslaan met dezelfde unieke naam
 
 # Maak in-memory bestand
