@@ -646,10 +646,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 #oooooooooooooooooooo
 #oooooooooooooooooooo
 
-#DEEL 2
-#oooooooooooooooooooo
-#oooooooooooooooooooo
-
 # -----------------------------
 # DEEL 2: Pauzevlinder overzicht
 # -----------------------------
@@ -668,22 +664,38 @@ from datetime import datetime, timedelta
 
 # Verzamel alle pauzevlinder-uren (per pauzevlinder, alleen als ze echt als pauzevlinder staan)
 pv_start_end = []
+# Verzamel alle kwartieren waarop pauzevlinders als pauzevlinder staan (gebruik echte kolomheaders)
+pv_kwartieren = []
 for pv in selected:
-    pv_uren = [uur for uur in open_uren if pv["naam"] in [naam for naam in assigned_map.get((uur, attr), []) for attr in attracties_te_plannen]]
-    if pv_uren:
-        pv_start_end.append((min(pv_uren), max(pv_uren)))
-if pv_start_end:
-    start_uur = min(start for start, end in pv_start_end)
-    eind_uur = max(end for start, end in pv_start_end) - 1  # 1 uur aftrekken
+    pv_tijden = []
+    for uur in open_uren:
+        for attr in attracties_te_plannen:
+            namen = assigned_map.get((uur, attr), [])
+            for idx, naam in enumerate(namen):
+                if naam == pv["naam"]:
+                    # Zoek de echte header (met minuten) uit de planning
+                    for col in range(2, ws_out.max_column + 1):
+                        header = ws_out.cell(1, col).value
+                        if header and str(header).startswith(str(uur)):
+                            try:
+                                tijd = datetime.strptime(str(header).replace('u',':').replace('.',':'), "%H:%M")
+                                pv_tijden.append(tijd)
+                            except:
+                                continue
+    if pv_tijden:
+        pv_kwartieren.extend(pv_tijden)
+        pv_start_end.append((min(pv_tijden), max(pv_tijden)))
+if pv_kwartieren:
+    start_dt = min(pv_kwartieren)
+    end_dt = max(pv_kwartieren) + timedelta(minutes=30)  # +30min marge
 else:
-    start_uur = 12
-    eind_uur = 16
+    start_dt = datetime(2020,1,1,12,0)
+    end_dt = datetime(2020,1,1,16,30)
 
-# Bouw kwartier-rij met marge: laatste kwartier = eind_uur:30
+# Bouw kwartier-rij van start_dt tot end_dt
 uren_rij1 = []
-tijd = datetime(2020,1,1,start_uur,0)
-end = datetime(2020,1,1,eind_uur,30)
-while tijd <= end:
+tijd = start_dt
+while tijd <= end_dt:
     uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
     tijd += timedelta(minutes=15)
 
@@ -1251,5 +1263,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
