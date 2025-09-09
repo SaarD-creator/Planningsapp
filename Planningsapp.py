@@ -646,6 +646,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -663,43 +664,21 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
 # -----------------------------
 # Rij 1: Uren
 # -----------------------------
-# Bepaal vroegste start en laatste eindtijd van alle pauzevlinders
-from datetime import datetime, timedelta
-pv_start = None
-pv_end = None
-for pv in selected:
-    pv_uren = [uur for uur in open_uren if pv["naam"] in [naam for naam in assigned_map.get((uur, attr), []) for attr in attracties_te_plannen]]
-    if pv_uren:
-        # Zoek de echte header (met minuten) uit ws_out
-        tijden = []
-        for uur in pv_uren:
-            for col in range(2, ws_out.max_column + 1):
-                header = ws_out.cell(1, col).value
-                if header and str(header).startswith(str(uur)):
-                    try:
-                        tijd = datetime.strptime(str(header).replace('u',':').replace('.',':'), "%H:%M")
-                        tijden.append(tijd)
-                    except:
-                        continue
-        if tijden:
-            start = min(tijden)
-            end = max(tijden) + timedelta(hours=1)  # einde blokje = uur + 1
-            if pv_start is None or start < pv_start:
-                pv_start = start
-            if pv_end is None or end > pv_end:
-                pv_end = end
-if pv_start is None or pv_end is None:
-    pv_start = datetime(2020,1,1,12,0)
-    pv_end = datetime(2020,1,1,16,0)
-
-# Laatste kwartier = eindtijd - 30 minuten
-pv_end_kwartier = pv_end - timedelta(minutes=30)
-
+# Gebruik compute_pauze_hours/open_uren als basis voor de pauzeplanning-urenrij
 uren_rij1 = []
-tijd = pv_start
-while tijd <= pv_end_kwartier:
-    uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
-    tijd += timedelta(minutes=15)
+from datetime import datetime, timedelta
+if required_pauze_hours:
+    start_uur = min(required_pauze_hours)
+    eind_uur = max(required_pauze_hours)
+    tijd = datetime(2020,1,1,start_uur,0)
+    end = datetime(2020,1,1,eind_uur,45)
+    while tijd <= end:
+        uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
+        tijd += timedelta(minutes=15)
+else:
+    # fallback: gebruik open_uren
+    for uur in sorted(open_uren):
+        uren_rij1.append(f"{uur}u")
 
 # Schrijf uren in rij 1, start in kolom B
 for col_idx, uur in enumerate(uren_rij1, start=2):
