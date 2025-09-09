@@ -1240,11 +1240,55 @@ for pv, pv_row in pv_rows:
         if ws_pauze.cell(pv_row, col).value in [None, ""]:
             ws_pauze.cell(pv_row, col).fill = pauze_fill
 
-# -----------------------------
-# Opslaan in hetzelfde unieke bestand als DEEL 3
-# -----------------------------
+# =====================
+# Pauzes invullen: over alle kwartierkolommen, lange pauze = 2 vakjes
+# =====================
 
+pauze_kleur_kort = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen
+pauze_kleur_lang = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # geel
 
+# Bepaal per student of ze een lange pauze verdienen (>6u)
+student_lange_pauze = {s["naam"]: (student_totalen.get(s["naam"],0) > 6) for s in studenten}
+
+# Helper: vind alle kwartierkolommen (col_idx) en bijbehorende tijdstippen
+kwartier_cols = [(col_idx, ws_pauze.cell(1, col_idx).value) for col_idx in range(2, ws_pauze.max_column+1)]
+
+# Loop per pauzevlinder-rij
+for pv, pv_row in pv_rows:
+    naam = pv["naam"]
+    # verzamel alle kwartierkolommen waar deze pauzevlinder werkt (voor filtering)
+    for s in studenten:
+        if s["naam"] == naam:
+            werktijden = s.get("uren_beschikbaar", [])
+            break
+    else:
+        werktijden = []
+    # Pauze-plaatsen: alle kwartierkolommen
+    geplande = 0
+    max_pauzes = 2 if student_lange_pauze.get(naam, False) else 1
+    for col_idx, tijdlabel in kwartier_cols:
+        # Check of deze pauzevlinder op dit kwartier werkt (optioneel: filteren)
+        # Hier kun je evt. werktijden-check toevoegen
+        if geplande >= max_pauzes:
+            break
+        # Check of attractie overgenomen kan worden (evt. met pv_kan_attr)
+        # (Hier kun je logica toevoegen voor attractie-overname)
+        # Plaats pauze
+        ws_pauze.cell(pv_row, col_idx, naam).alignment = center_align
+        ws_pauze.cell(pv_row, col_idx).border = thin_border
+        if max_pauzes == 2:
+            ws_pauze.cell(pv_row, col_idx).fill = pauze_kleur_lang
+            # Vul ook volgende kwartier
+            if col_idx+1 <= ws_pauze.max_column:
+                ws_pauze.cell(pv_row, col_idx+1, naam).alignment = center_align
+                ws_pauze.cell(pv_row, col_idx+1).border = thin_border
+                ws_pauze.cell(pv_row, col_idx+1).fill = pauze_kleur_lang
+            geplande += 2
+        else:
+            ws_pauze.cell(pv_row, col_idx).fill = pauze_kleur_kort
+            geplande += 1
+
+# Maak in-memory bestand
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
@@ -1254,5 +1298,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
