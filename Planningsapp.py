@@ -789,48 +789,49 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
     naam_cel = ws_pauze.cell(row + 1, 1).value
     if not naam_cel:
         continue
-    # Pauzevlinders mogen direct toegewezen worden
-    if naam_cel in [pv["naam"] for pv in selected]:
-        totaal_uren = student_totalen.get(naam_cel, 0)
-        if totaal_uren > 6:
-            pauze_cols_sorted = sorted(pauze_cols)
-            uur_col_pairs = []
-            for col in pauze_cols_sorted:
-                col_header = ws_pauze.cell(1, col).value
-                col_uur = None
-                try:
-                    if col_header:
-                        s = str(col_header).strip()
-                        if "u" in s:
-                            parts = s.split("u")
-                            col_uur = int(parts[0])
-                        elif ":" in s:
-                            col_uur = int(s.split(":")[0])
-                except:
-                    pass
-                if col_uur is not None:
-                    uur_col_pairs.append((col_uur, col))
-            geplaatst = False
-            for i in range(len(uur_col_pairs)-1):
-                _, col1 = uur_col_pairs[i]
-                _, col2 = uur_col_pairs[i+1]
-                if col2 == col1 + 1:
-                    cel1 = ws_pauze.cell(row + 1, col1)
-                    cel2 = ws_pauze.cell(row + 1, col2)
-                    if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                        cel1.value = naam_cel
-                        cel2.value = naam_cel
-                        cel1.alignment = Alignment(horizontal="center", vertical="center")
-                        cel2.alignment = Alignment(horizontal="center", vertical="center")
-                        cel1.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-                        cel2.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-                        geplaatst = True
-                        break
-            if not geplaatst and pauze_cols_sorted:
-                random_col = random.choice(pauze_cols_sorted)
-                ws_pauze.cell(row + 1, random_col, naam_cel)
-                ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
-                ws_pauze.cell(row + 1, random_col).border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+    # Alleen echte pauzevlinders mogen direct toegewezen worden
+    if naam_cel not in [pv["naam"] for pv in selected]:
+        continue
+    totaal_uren = student_totalen.get(naam_cel, 0)
+    if totaal_uren > 6:
+        pauze_cols_sorted = sorted(pauze_cols)
+        uur_col_pairs = []
+        for col in pauze_cols_sorted:
+            col_header = ws_pauze.cell(1, col).value
+            col_uur = None
+            try:
+                if col_header:
+                    s = str(col_header).strip()
+                    if "u" in s:
+                        parts = s.split("u")
+                        col_uur = int(parts[0])
+                    elif ":" in s:
+                        col_uur = int(s.split(":")[0])
+            except:
+                pass
+            if col_uur is not None:
+                uur_col_pairs.append((col_uur, col))
+        geplaatst = False
+        for i in range(len(uur_col_pairs)-1):
+            _, col1 = uur_col_pairs[i]
+            _, col2 = uur_col_pairs[i+1]
+            if col2 == col1 + 1:
+                cel1 = ws_pauze.cell(row + 1, col1)
+                cel2 = ws_pauze.cell(row + 1, col2)
+                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                    cel1.value = naam_cel
+                    cel2.value = naam_cel
+                    cel1.alignment = Alignment(horizontal="center", vertical="center")
+                    cel2.alignment = Alignment(horizontal="center", vertical="center")
+                    cel1.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+                    cel2.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+                    geplaatst = True
+                    break
+        if not geplaatst and pauze_cols_sorted:
+            random_col = random.choice(pauze_cols_sorted)
+            ws_pauze.cell(row + 1, random_col, naam_cel)
+            ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
+            ws_pauze.cell(row + 1, random_col).border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
 
 # ---- Lege naamcellen inkleuren ----
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
@@ -1434,3 +1435,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
