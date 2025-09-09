@@ -1088,9 +1088,9 @@ def plaats_student(student, harde_mode=False):
                     cel2.alignment = center_align
                     cel2.border = thin_border
                     reg["lange"] = True
-                    # Nu: zoek een korte pauze minstens 6 blokjes (1,5u) verderop
+                    # Nu: zoek een korte pauze minstens 10 blokjes (2,5u) verderop
                     if not reg["korte"]:
-                        for j in range(i+6, len(uur_col_pairs)):
+                        for j in range(i+10, len(uur_col_pairs)):
                             uur_kort, col_kort = uur_col_pairs[j]
                             attr_kort = vind_attractie_op_uur(naam, uur_kort)
                             if not attr_kort:
@@ -1259,7 +1259,9 @@ else:
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
-
+# -----------------------------
+# Opslaan in hetzelfde unieke bestand als DEEL 3
+# -----------------------------
 
 output = BytesIO()
 wb_out.save(output)
