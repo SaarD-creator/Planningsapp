@@ -816,18 +816,20 @@ for pv2, pv_row2 in pv_rows:
 
 for pv, pv_row in pv_rows:
     eigen_lange = get_lange_pauze_tijden(pv_row)
-    # Zoek alle bestaande pauzetijden in deze rij
     bestaande_pauzes = [pauze_times[col] for col in pauze_cols if ws_pauze.cell(pv_row, col).value]
-    # Zoek mogelijke blokjes voor korte pauze
+    # Bepaal het laatste tijdstip van alle lange pauzes (eigen én anderen)
+    laatste_lange = None
+    if eigen_lange:
+        laatste_lange = max(eigen_lange)
+    elif alle_lange_pauze_tijden:
+        laatste_lange = max(alle_lange_pauze_tijden)
+    # Zoek mogelijke blokjes voor korte pauze, maar begin pas na laatste_lange + min_gap
     for col in pauze_cols:
+        t = pauze_times[col]
         if ws_pauze.cell(pv_row, col).value:
             continue
-        t = pauze_times[col]
-        # 1. Minimaal 2,5u na eigen lange pauze (indien aanwezig)
-        if eigen_lange and any((t - el) < min_gap for el in eigen_lange if t > el):
-            continue
-        # 2. Minimaal 2,5u na alle lange pauzes van anderen als geen eigen lange pauze
-        if not eigen_lange and any((t - alpt) < min_gap for alpt in alle_lange_pauze_tijden if t > alpt):
+        # Sla alle tijdstippen over die vóór of te dicht op de laatste lange pauze liggen
+        if laatste_lange and t <= (laatste_lange + min_gap):
             continue
         # 3. Minimaal 2,5u afstand tot andere pauzes van deze pauzevlinder
         if any(abs((t - bp).total_seconds()) < min_gap.total_seconds() for bp in bestaande_pauzes):
