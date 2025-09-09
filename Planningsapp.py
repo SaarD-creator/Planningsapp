@@ -1054,7 +1054,7 @@ else:
 
 
 # =====================
-# Pauzes plannen: alle studenten, lange pauze (>6u) = 2 kwartieren, korte pauze = 1 kwartier
+# Pauzes plannen: alle studenten, eigen rij, lange pauze (>6u) = 2 kwartieren, korte pauze = 1 kwartier
 # =====================
 
 pauze_kleur_kort = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen
@@ -1066,17 +1066,23 @@ student_lange_pauze = {naam: (uren > 6) for naam, uren in student_totalen.items(
 # Helper: alle kwartierkolommen (col_idx, tijdlabel)
 kwartier_cols = [(col_idx, ws_pauze.cell(1, col_idx).value) for col_idx in range(2, ws_pauze.max_column+1)]
 
-# Plan pauzes per student (alle studenten, niet alleen pauzevlinders)
+# Maak mapping: naam -> pauze-rij (indien niet aanwezig, voeg toe)
+naam_to_row = {pv["naam"]: row for pv, row in pv_rows}
+rij_out = ws_pauze.max_row + 1
 for s in studenten:
     naam = s["naam"]
-    # Zoek de juiste pauze-rij (pv_row) voor deze student
-    pv_row = None
-    for pv, row in pv_rows:
-        if pv["naam"] == naam:
-            pv_row = row
-            break
-    if pv_row is None:
-        continue
+    if naam not in naam_to_row:
+        ws_pauze.cell(rij_out, 1, naam).font = Font(bold=True)
+        ws_pauze.cell(rij_out, 1).fill = light_fill
+        ws_pauze.cell(rij_out, 1).alignment = center_align
+        ws_pauze.cell(rij_out, 1).border = thin_border
+        naam_to_row[naam] = rij_out
+        rij_out += 1
+
+# Plan pauzes per student (alle studenten)
+for s in studenten:
+    naam = s["naam"]
+    pv_row = naam_to_row[naam]
     geplande = 0
     # Eerst: lange pauze (2 kwartieren naast elkaar) als nodig
     if student_lange_pauze.get(naam, False):
@@ -1116,6 +1122,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
 
 
 
