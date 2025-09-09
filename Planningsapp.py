@@ -837,7 +837,7 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
             ws_pauze.cell(row + 1, random_col).border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
 
 # ---- Lege naamcellen inkleuren ----
-naam_leeg_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+naam_leeg_fill = PatternFill(start_color="D9F7BE", end_color="D9F7BE", fill_type="solid")
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
 center_align = Alignment(horizontal="center", vertical="center")
