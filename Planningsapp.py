@@ -648,7 +648,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -759,6 +758,7 @@ import datetime
 ws_planning = wb_out["Planning"]
 ws_pauze = wb_out["Pauzevlinders"]
 
+
 # Pauzekolommen (B–G in Pauzevlinders sheet)
 # Dynamisch: alle kolommen waar in rij 1 een uur staat (bv. '13u45', '14u', ...)
 pauze_cols = []
@@ -766,6 +766,23 @@ for col in range(2, ws_pauze.max_column + 1):
     header = ws_pauze.cell(1, col).value
     if header and ("u" in str(header)):
         pauze_cols.append(col)
+
+# Geef elke pauzevlinder minimaal één kwartierpauze in hun eigen rij (lichtpaars)
+for pv, pv_row in pv_rows:
+    heeft_pauze = False
+    for col in pauze_cols:
+        if ws_pauze.cell(pv_row, col).value not in [None, ""]:
+            heeft_pauze = True
+            break
+    if not heeft_pauze:
+        for col in pauze_cols:
+            if ws_pauze.cell(pv_row, col).value in [None, ""]:
+                ws_pauze.cell(pv_row, col).value = pv["naam"]
+                ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
+                ws_pauze.cell(pv_row, col).border = thin_border
+                ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
+                break
+
 
 # Bouw lijst met pauzevlinder-rijen
 pv_rows = []
@@ -777,6 +794,22 @@ for pv in selected:
             break
     if row_found is not None:
         pv_rows.append((pv, row_found))
+
+# Geef elke pauzevlinder minimaal één kwartierpauze in hun eigen rij (lichtpaars)
+for pv, pv_row in pv_rows:
+    heeft_pauze = False
+    for col in pauze_cols:
+        if ws_pauze.cell(pv_row, col).value not in [None, ""]:
+            heeft_pauze = True
+            break
+    if not heeft_pauze:
+        for col in pauze_cols:
+            if ws_pauze.cell(pv_row, col).value in [None, ""]:
+                ws_pauze.cell(pv_row, col).value = pv["naam"]
+                ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
+                ws_pauze.cell(pv_row, col).border = thin_border
+                ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
+                break
 
 # Bereken totaal uren per student in Werkblad "Planning"
 student_totalen = defaultdict(int)
