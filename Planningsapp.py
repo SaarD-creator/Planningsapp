@@ -647,7 +647,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1055,51 +1054,21 @@ else:
 
 
 # =====================
-# Pauzes plannen: pauzevlinders en andere studenten >6u
+# Pauzes plannen: alle studenten, lange pauze (>6u) = 2 kwartieren, korte pauze = 1 kwartier
 # =====================
 
 pauze_kleur_kort = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen
 pauze_kleur_lang = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # geel
 
-# Bepaal wie een lange pauze verdient
-student_lange_pauze = {s["naam"]: (student_totalen.get(s["naam"],0) > 6) for s in studenten}
+# Bepaal wie een lange pauze verdient (op basis van student_totalen, dus kolom B)
+student_lange_pauze = {naam: (uren > 6) for naam, uren in student_totalen.items()}
 
 # Helper: alle kwartierkolommen (col_idx, tijdlabel)
 kwartier_cols = [(col_idx, ws_pauze.cell(1, col_idx).value) for col_idx in range(2, ws_pauze.max_column+1)]
 
-# Eerst: pauzevlinders
-for pv, pv_row in pv_rows:
-    naam = pv["naam"]
-    # 1 lange pauze (2 kwartieren naast elkaar)
-    lange_gepland = False
-    for i in range(len(kwartier_cols)-1):
-        col1, _ = kwartier_cols[i]
-        col2, _ = kwartier_cols[i+1]
-        if ws_pauze.cell(pv_row, col1).value in [None, ""] and ws_pauze.cell(pv_row, col2).value in [None, ""]:
-            ws_pauze.cell(pv_row, col1, naam).alignment = center_align
-            ws_pauze.cell(pv_row, col1, naam).border = thin_border
-            ws_pauze.cell(pv_row, col1, naam).fill = pauze_kleur_lang
-            ws_pauze.cell(pv_row, col2, naam).alignment = center_align
-            ws_pauze.cell(pv_row, col2, naam).border = thin_border
-            ws_pauze.cell(pv_row, col2, naam).fill = pauze_kleur_lang
-            lange_gepland = True
-            break
-    # Extra korte pauze als >6u
-    if student_lange_pauze.get(naam, False):
-        for col_idx, _ in kwartier_cols:
-            if ws_pauze.cell(pv_row, col_idx).value in [None, ""]:
-                ws_pauze.cell(pv_row, col_idx, naam).alignment = center_align
-                ws_pauze.cell(pv_row, col_idx, naam).border = thin_border
-                ws_pauze.cell(pv_row, col_idx, naam).fill = pauze_kleur_kort
-                break
-
-# Daarna: andere studenten >6u (geen pauzevlinder)
+# Plan pauzes per student (alle studenten, niet alleen pauzevlinders)
 for s in studenten:
     naam = s["naam"]
-    if naam in [pv["naam"] for pv, _ in pv_rows]:
-        continue
-    if not student_lange_pauze.get(naam, False):
-        continue
     # Zoek de juiste pauze-rij (pv_row) voor deze student
     pv_row = None
     for pv, row in pv_rows:
@@ -1108,19 +1077,22 @@ for s in studenten:
             break
     if pv_row is None:
         continue
-    # 1 lange pauze (2 kwartieren naast elkaar)
-    for i in range(len(kwartier_cols)-1):
-        col1, _ = kwartier_cols[i]
-        col2, _ = kwartier_cols[i+1]
-        if ws_pauze.cell(pv_row, col1).value in [None, ""] and ws_pauze.cell(pv_row, col2).value in [None, ""]:
-            ws_pauze.cell(pv_row, col1, naam).alignment = center_align
-            ws_pauze.cell(pv_row, col1, naam).border = thin_border
-            ws_pauze.cell(pv_row, col1, naam).fill = pauze_kleur_lang
-            ws_pauze.cell(pv_row, col2, naam).alignment = center_align
-            ws_pauze.cell(pv_row, col2, naam).border = thin_border
-            ws_pauze.cell(pv_row, col2, naam).fill = pauze_kleur_lang
-            break
-    # 1 korte pauze (1 kwartier)
+    geplande = 0
+    # Eerst: lange pauze (2 kwartieren naast elkaar) als nodig
+    if student_lange_pauze.get(naam, False):
+        for i in range(len(kwartier_cols)-1):
+            col1, _ = kwartier_cols[i]
+            col2, _ = kwartier_cols[i+1]
+            if ws_pauze.cell(pv_row, col1).value in [None, ""] and ws_pauze.cell(pv_row, col2).value in [None, ""]:
+                ws_pauze.cell(pv_row, col1, naam).alignment = center_align
+                ws_pauze.cell(pv_row, col1, naam).border = thin_border
+                ws_pauze.cell(pv_row, col1, naam).fill = pauze_kleur_lang
+                ws_pauze.cell(pv_row, col2, naam).alignment = center_align
+                ws_pauze.cell(pv_row, col2, naam).border = thin_border
+                ws_pauze.cell(pv_row, col2, naam).fill = pauze_kleur_lang
+                geplande += 2
+                break
+    # Daarna: altijd een korte pauze (1 kwartier)
     for col_idx, _ in kwartier_cols:
         if ws_pauze.cell(pv_row, col_idx).value in [None, ""]:
             ws_pauze.cell(pv_row, col_idx, naam).alignment = center_align
@@ -1144,6 +1116,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
 
 
 
