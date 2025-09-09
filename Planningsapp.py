@@ -646,6 +646,10 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 #oooooooooooooooooooo
 #oooooooooooooooooooo
 
+#DEEL 2
+#oooooooooooooooooooo
+#oooooooooooooooooooo
+
 # -----------------------------
 # DEEL 2: Pauzevlinder overzicht
 # -----------------------------
@@ -662,23 +666,23 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
 # Dynamisch: bepaal vroegste en laatste uur van alle pauzevlinders
 from datetime import datetime, timedelta
 
-# Verzamel alle pauzevlinder-uren
-pv_uren = []
+# Verzamel alle pauzevlinder-uren (per pauzevlinder, alleen als ze echt als pauzevlinder staan)
+pv_start_end = []
 for pv in selected:
-    for uur in open_uren:
-        if pv["naam"] in [naam for naam in assigned_map.get((uur, attr), []) for attr in attracties_te_plannen]:
-            pv_uren.append(uur)
-if pv_uren:
-    start_uur = min(pv_uren)
-    eind_uur = max(pv_uren) - 1  # 1 uur aftrekken voor pauzeplanning
+    pv_uren = [uur for uur in open_uren if pv["naam"] in [naam for naam in assigned_map.get((uur, attr), []) for attr in attracties_te_plannen]]
+    if pv_uren:
+        pv_start_end.append((min(pv_uren), max(pv_uren)))
+if pv_start_end:
+    start_uur = min(start for start, end in pv_start_end)
+    eind_uur = max(end for start, end in pv_start_end) - 1  # 1 uur aftrekken
 else:
     start_uur = 12
-    eind_uur = 16  # default ook 1 uur minder
+    eind_uur = 16
 
 # Bouw kwartier-rij met marge: laatste kwartier = eind_uur:30
 uren_rij1 = []
 tijd = datetime(2020,1,1,start_uur,0)
-end = datetime(2020,1,1,eind_uur,30)  # dus laatste kwartier is eind_uur:30
+end = datetime(2020,1,1,eind_uur,30)
 while tijd <= end:
     uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
     tijd += timedelta(minutes=15)
@@ -1247,4 +1251,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
