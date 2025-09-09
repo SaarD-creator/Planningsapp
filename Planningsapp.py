@@ -643,7 +643,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -919,8 +918,10 @@ for pv in selected:
         pv_cap_set[pv["naam"]] = {normalize_attr(a) for a in pv.get("attracties", [])}
 
 # Lange werkers: namen-set voor snelle checks
+
+# Iedereen met '-18' in de naam krijgt altijd een halfuurpauze
 lange_werkers = [s for s in studenten
-                 if student_totalen.get(s["naam"], 0) > 6
+                 if (student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"])) )
                  and s["naam"] not in [pv["naam"] for pv in selected]]
 lange_werkers_names = {s["naam"] for s in lange_werkers}
 
@@ -1110,7 +1111,9 @@ for pv in selected:
         pv_cap_set[pv["naam"]] = {normalize_attr(a) for a in pv.get("attracties", [])}
 
 # Studenten die minstens 1 uur werken
-min_werkers = [s for s in studenten if student_totalen.get(s["naam"],0) >= 1]
+
+# Iedereen met '-18' in de naam krijgt geen kwartierpauze
+min_werkers = [s for s in studenten if student_totalen.get(s["naam"],0) >= 1 and "-18" not in str(s["naam"])]
 min_werkers_names = {s["naam"] for s in min_werkers}
 
 # Werkuren per student
