@@ -1157,7 +1157,17 @@ for s in werkende_studenten:
     student_pauzes[naam] = pauzes
 
 # 5. Schrijf de namen in de juiste cellen bij de juiste pauzevlinder
+
+# Debug: log naar Feedback-sheet
+if 'ws_feedback' not in locals():
+    ws_feedback = wb_out.create_sheet("Feedback")
+def log_feedback(msg):
+    next_row = ws_feedback.max_row + 1
+    ws_feedback.cell(next_row, 1, msg)
+
 for naam, pauzes in student_pauzes.items():
+    geplande_types = [t for _, _, t in pauzes]
+    log_feedback(f"Student {naam}: werk_kwartieren={sorted(student_werk_kwartieren[naam])} pauzes={pauzes} types={geplande_types}")
     for pv_row, col_idx, typ in pauzes:
         ws_pauze.cell(pv_row, col_idx, naam)
         ws_pauze.cell(pv_row, col_idx).alignment = center_align
@@ -1183,8 +1193,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
 
 
 
