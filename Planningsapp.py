@@ -647,7 +647,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -886,16 +885,13 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
             ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
             ws_pauze.cell(row + 1, random_col).border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
 
+
 # ---- Lege naamcellen inkleuren ----
 naam_leeg_fill = PatternFill(start_color="D9F7BE", end_color="D9F7BE", fill_type="solid")
 thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
                      top=Side(style="thin"), bottom=Side(style="thin"))
 center_align = Alignment(horizontal="center", vertical="center")
-
-for pv, pv_row in pv_rows:
-    for col in pauze_cols:
-        if ws_pauze.cell(pv_row, col).value in [None, ""]:
-            ws_pauze.cell(pv_row, col).fill = naam_leeg_fill
+## (verplaatst naar na de definitie van pv_rows)
 
 
 # -----------------------------
@@ -1328,3 +1324,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
