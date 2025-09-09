@@ -647,7 +647,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1248,6 +1247,43 @@ for pv, pv_row in pv_rows:
             # Anders: kwartierpauze
             cel.fill = lichtpaars_fill
 
+# ---- Korte pauze voor pauzevlinders zelf toevoegen ----
+for pv, pv_row in pv_rows:
+    # Zoek alle blokken met de naam van de pauzevlinder in deze rij
+    blokken = []  # lijst van (start_idx, lengte)
+    idx = 0
+    while idx < len(pauze_cols):
+        col = pauze_cols[idx]
+        cel = ws_pauze.cell(pv_row, col)
+        if cel.value == pv["naam"]:
+            # Kijk hoe lang het blok is
+            lengte = 1
+            while idx+lengte < len(pauze_cols) and ws_pauze.cell(pv_row, pauze_cols[idx+lengte]).value == pv["naam"]:
+                lengte += 1
+            blokken.append((idx, lengte))
+            idx += lengte
+        else:
+            idx += 1
+    # Zoek de index van het einde van de lange pauze (dubbel blok)
+    lange_blok_einde = None
+    for start, lengte in blokken:
+        if lengte >= 2:
+            lange_blok_einde = start + lengte - 1
+            break
+    # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze
+    if lange_blok_einde is not None:
+        min_kort_idx = lange_blok_einde + 10
+        for idx in range(min_kort_idx, len(pauze_cols)):
+            col = pauze_cols[idx]
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value in [None, ""]:
+                cel.value = pv["naam"]
+                cel.fill = lichtpaars_fill
+                cel.alignment = center_align
+                cel.border = thin_border
+                # Optioneel: bovenliggende cel (attractie) leeg laten of markeren
+                break
+
 
 # Maak in-memory bestand
 output = BytesIO()
@@ -1278,5 +1314,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
