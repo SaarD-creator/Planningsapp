@@ -647,6 +647,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1107,6 +1108,7 @@ def plaats_student(student, harde_mode=False):
                                     cel_kort.value = naam
                                     cel_kort.alignment = center_align
                                     cel_kort.border = thin_border
+                                    cel_kort.fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
                                     reg["korte"] = True
                                     return True
                                 elif harde_mode:
@@ -1118,6 +1120,7 @@ def plaats_student(student, harde_mode=False):
                                         cel_kort.value = naam
                                         cel_kort.alignment = center_align
                                         cel_kort.border = thin_border
+                                        cel_kort.fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
                                         reg["korte"] = True
                                         return True
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
@@ -1196,6 +1199,7 @@ def plaats_student(student, harde_mode=False):
                     cel.value = naam
                     cel.alignment = center_align
                     cel.border = thin_border
+                    cel.fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
                     reg["korte"] = True
                     return True
             else:
@@ -1209,6 +1213,7 @@ def plaats_student(student, harde_mode=False):
                             cel.value = naam
                             cel.alignment = center_align
                             cel.border = thin_border
+                            cel.fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
                             reg["korte"] = True
                             return True
     return False
