@@ -644,7 +644,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -778,68 +777,7 @@ for pv in selected:
         pv_rows.append((pv, row_found))
 
 
-# --- Pauzevlinder kwartierpauze met 2,5u tussenpauze, na alle lange pauzes indien geen lange pauze ---
-from datetime import datetime, timedelta
-def parse_time(header):
-    # header: '13u45' of '14u' -> datetime object
-    s = str(header).strip()
-    if 'u' in s:
-        parts = s.split('u')
-        uur = int(parts[0])
-        minuut = int(parts[1]) if len(parts) > 1 and parts[1] else 0
-        return datetime(2020,1,1,uur,minuut)
-    return None
 
-pauze_times = {}
-for col in pauze_cols:
-    header = ws_pauze.cell(1, col).value
-    pauze_times[col] = parse_time(header)
-
-min_gap = timedelta(minutes=150)  # 2,5 uur
-
-def get_lange_pauze_tijden(pv_row):
-    tijden = []
-    for i in range(len(pauze_cols)-1):
-        col1 = pauze_cols[i]
-        col2 = pauze_cols[i+1]
-        if ws_pauze.cell(pv_row, col1).value and ws_pauze.cell(pv_row, col2).value:
-            if ws_pauze.cell(pv_row, col1).value == ws_pauze.cell(pv_row, col2).value:
-                t1 = pauze_times[col1]
-                t2 = pauze_times[col2]
-                if t1 and t2:
-                    tijden.append(max(t1, t2))
-    return tijden
-
-alle_lange_pauze_tijden = []
-for pv2, pv_row2 in pv_rows:
-    alle_lange_pauze_tijden.extend(get_lange_pauze_tijden(pv_row2))
-
-for pv, pv_row in pv_rows:
-    eigen_lange = get_lange_pauze_tijden(pv_row)
-    bestaande_pauzes = [pauze_times[col] for col in pauze_cols if ws_pauze.cell(pv_row, col).value]
-    # Bepaal het laatste tijdstip van alle lange pauzes (eigen én anderen)
-    laatste_lange = None
-    if eigen_lange:
-        laatste_lange = max(eigen_lange)
-    elif alle_lange_pauze_tijden:
-        laatste_lange = max(alle_lange_pauze_tijden)
-    # Zoek mogelijke blokjes voor korte pauze, maar begin pas na laatste_lange + min_gap
-    for col in pauze_cols:
-        t = pauze_times[col]
-        if ws_pauze.cell(pv_row, col).value:
-            continue
-        # Sla alle tijdstippen over die vóór of te dicht op de laatste lange pauze liggen
-        if laatste_lange and t <= (laatste_lange + min_gap):
-            continue
-        # 3. Minimaal 2,5u afstand tot andere pauzes van deze pauzevlinder
-        if any(abs((t - bp).total_seconds()) < min_gap.total_seconds() for bp in bestaande_pauzes):
-            continue
-        # Plaats korte pauze
-        ws_pauze.cell(pv_row, col).value = pv["naam"]
-        ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
-        ws_pauze.cell(pv_row, col).border = thin_border
-        ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")
-        break
 
 # Bereken totaal uren per student in Werkblad "Planning"
 student_totalen = defaultdict(int)
@@ -1316,14 +1254,132 @@ output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 
 if niet_geplaatst:
+from datetime import datetime, timedelta
+def parse_time(header):
+    s = str(header).strip()
+    if 'u' in s:
+        parts = s.split('u')
+        uur = int(parts[0])
+        minuut = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+        return datetime(2020,1,1,uur,minuut)
+    return None
+
+pauze_times = {}
+for col in pauze_cols:
+    header = ws_pauze.cell(1, col).value
+    pauze_times[col] = parse_time(header)
+
+min_gap = timedelta(minutes=150)  # 2,5 uur
+
+def get_lange_pauze_tijden(pv_row):
+    tijden = []
+    for i in range(len(pauze_cols)-1):
+        col1 = pauze_cols[i]
+        col2 = pauze_cols[i+1]
+        if ws_pauze.cell(pv_row, col1).value and ws_pauze.cell(pv_row, col2).value:
+            if ws_pauze.cell(pv_row, col1).value == ws_pauze.cell(pv_row, col2).value:
+                t1 = pauze_times[col1]
+                t2 = pauze_times[col2]
+                if t1 and t2:
+                    tijden.append(max(t1, t2))
+    return tijden
+
+alle_lange_pauze_tijden = []
+for pv2, pv_row2 in pv_rows:
+    alle_lange_pauze_tijden.extend(get_lange_pauze_tijden(pv_row2))
+
+for pv, pv_row in pv_rows:
+    eigen_lange = get_lange_pauze_tijden(pv_row)
+    bestaande_pauzes = [pauze_times[col] for col in pauze_cols if ws_pauze.cell(pv_row, col).value]
+    # Bepaal het laatste tijdstip van alle lange pauzes (eigen én anderen)
+    laatste_lange = None
+    if eigen_lange:
+        laatste_lange = max(eigen_lange)
+    elif alle_lange_pauze_tijden:
+        laatste_lange = max(alle_lange_pauze_tijden)
+    # Zoek mogelijke blokjes voor korte pauze, maar begin pas na laatste_lange + min_gap
+    for col in pauze_cols:
+        t = pauze_times[col]
+        if ws_pauze.cell(pv_row, col).value:
+            continue
+        # Sla alle tijdstippen over die vóór of te dicht op de laatste lange pauze liggen
+        if laatste_lange and t <= (laatste_lange + min_gap):
+            continue
+        # 3. Minimaal 2,5u afstand tot andere pauzes van deze pauzevlinder
+        if any(abs((t - bp).total_seconds()) < min_gap.total_seconds() for bp in bestaande_pauzes):
+            continue
+        # Plaats korte pauze
+        ws_pauze.cell(pv_row, col).value = pv["naam"]
+        ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
+        ws_pauze.cell(pv_row, col).border = thin_border
+        ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")
+        break
+
     log_feedback(f"⚠️ Nog niet geplaatst (controleer of pv's deze attracties kunnen): {[s['naam'] for s in niet_geplaatst]}")
 else:
     log_feedback("✅ Alle studenten die >6u werken kregen een pauzeplek (B–G gevuld waar mogelijk)")
 
+# --- Pauzevlinder kwartierpauze met 2,5u tussenpauze, na alle lange pauzes indien geen lange pauze ---
+from datetime import datetime, timedelta
+def parse_time(header):
+    s = str(header).strip()
+    if 'u' in s:
+        parts = s.split('u')
+        uur = int(parts[0])
+        minuut = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+        return datetime(2020,1,1,uur,minuut)
+    return None
 
+pauze_times = {}
+for col in pauze_cols:
+    header = ws_pauze.cell(1, col).value
+    pauze_times[col] = parse_time(header)
 
+min_gap = timedelta(minutes=150)  # 2,5 uur
 
-#ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
+def get_lange_pauze_tijden(pv_row):
+    tijden = []
+    for i in range(len(pauze_cols)-1):
+        col1 = pauze_cols[i]
+        col2 = pauze_cols[i+1]
+        if ws_pauze.cell(pv_row, col1).value and ws_pauze.cell(pv_row, col2).value:
+            if ws_pauze.cell(pv_row, col1).value == ws_pauze.cell(pv_row, col2).value:
+                t1 = pauze_times[col1]
+                t2 = pauze_times[col2]
+                if t1 and t2:
+                    tijden.append(max(t1, t2))
+    return tijden
+
+alle_lange_pauze_tijden = []
+for pv2, pv_row2 in pv_rows:
+    alle_lange_pauze_tijden.extend(get_lange_pauze_tijden(pv_row2))
+
+for pv, pv_row in pv_rows:
+    eigen_lange = get_lange_pauze_tijden(pv_row)
+    bestaande_pauzes = [pauze_times[col] for col in pauze_cols if ws_pauze.cell(pv_row, col).value]
+    # Bepaal het laatste tijdstip van alle lange pauzes (eigen én anderen)
+    laatste_lange = None
+    if eigen_lange:
+        laatste_lange = max(eigen_lange)
+    elif alle_lange_pauze_tijden:
+        laatste_lange = max(alle_lange_pauze_tijden)
+    # Zoek mogelijke blokjes voor korte pauze, maar begin pas na laatste_lange + min_gap
+    for col in pauze_cols:
+        t = pauze_times[col]
+        if ws_pauze.cell(pv_row, col).value:
+            continue
+        # Sla alle tijdstippen over die vóór of te dicht op de laatste lange pauze liggen
+        if laatste_lange and t <= (laatste_lange + min_gap):
+            continue
+        # 3. Minimaal 2,5u afstand tot andere pauzes van deze pauzevlinder
+        if any(abs((t - bp).total_seconds()) < min_gap.total_seconds() for bp in bestaande_pauzes):
+            continue
+        # Plaats korte pauze
+        ws_pauze.cell(pv_row, col).value = pv["naam"]
+        ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
+        ws_pauze.cell(pv_row, col).border = thin_border
+        ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")
+        break
 
 # -----------------------------
 # Opslaan in hetzelfde unieke bestand als DEEL 3
@@ -1338,4 +1394,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
