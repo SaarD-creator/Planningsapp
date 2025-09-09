@@ -766,22 +766,6 @@ for col in range(2, ws_pauze.max_column + 1):
     if header and ("u" in str(header)):
         pauze_cols.append(col)
 
-# Geef elke pauzevlinder minimaal één kwartierpauze in hun eigen rij (lichtpaars)
-for pv, pv_row in pv_rows:
-    heeft_pauze = False
-    for col in pauze_cols:
-        if ws_pauze.cell(pv_row, col).value not in [None, ""]:
-            heeft_pauze = True
-            break
-    if not heeft_pauze:
-        for col in pauze_cols:
-            if ws_pauze.cell(pv_row, col).value in [None, ""]:
-                ws_pauze.cell(pv_row, col).value = pv["naam"]
-                ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
-                ws_pauze.cell(pv_row, col).border = thin_border
-                ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
-                break
-
 
 
 # Bouw lijst met pauzevlinder-rijen
@@ -795,21 +779,6 @@ for pv in selected:
     if row_found is not None:
         pv_rows.append((pv, row_found))
 
-# Geef elke pauzevlinder minimaal één kwartierpauze in hun eigen rij (lichtpaars)
-for pv, pv_row in pv_rows:
-    heeft_pauze = False
-    for col in pauze_cols:
-        if ws_pauze.cell(pv_row, col).value not in [None, ""]:
-            heeft_pauze = True
-            break
-    if not heeft_pauze:
-        for col in pauze_cols:
-            if ws_pauze.cell(pv_row, col).value in [None, ""]:
-                ws_pauze.cell(pv_row, col).value = pv["naam"]
-                ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
-                ws_pauze.cell(pv_row, col).border = thin_border
-                ws_pauze.cell(pv_row, col).fill = PatternFill(start_color="EAD1DC", end_color="EAD1DC", fill_type="solid")  # lichtpaars
-                break
 
 # Geef elke pauzevlinder minimaal één kwartierpauze in hun eigen rij (lichtpaars)
 for pv, pv_row in pv_rows:
