@@ -661,25 +661,25 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
 # -----------------------------
 # Rij 1: Uren
 # -----------------------------
-
-# Dynamisch: alle kolommen waar een uur boven staat in rij 1
+# Gebruik compute_pauze_hours/open_uren als basis voor de pauzeplanning-urenrij
 uren_rij1 = []
-uren_col_idx = []
-for col in range(2, ws_out.max_column + 1):
-    header = ws_out.cell(1, col).value
-    if header:
-        try:
-            # Herken uur-header (bv. '14u', '15:00', '14:15', ...)
-            s = str(header).strip().lower().replace(":00", "u").replace(":15", "u15").replace(":30", "u30").replace(":45", "u45")
-            if s.endswith("u") or any(s.endswith(f"u{m:02d}") for m in [15,30,45]):
-                uren_rij1.append(header)
-                uren_col_idx.append(col)
-        except:
-            pass
+from datetime import datetime, timedelta
+if required_pauze_hours:
+    start_uur = min(required_pauze_hours)
+    eind_uur = max(required_pauze_hours)
+    tijd = datetime(2020,1,1,start_uur,0)
+    end = datetime(2020,1,1,eind_uur,45)
+    while tijd <= end:
+        uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
+        tijd += timedelta(minutes=15)
+else:
+    # fallback: gebruik open_uren
+    for uur in sorted(open_uren):
+        uren_rij1.append(f"{uur}u")
 
 # Schrijf uren in rij 1, start in kolom B
-for idx, uur in enumerate(uren_rij1, start=2):
-    c = ws_pauze.cell(1, idx, uur)
+for col_idx, uur in enumerate(uren_rij1, start=2):
+    c = ws_pauze.cell(1, col_idx, uur)
     c.fill = light_fill
     c.alignment = center_align
     c.border = thin_border
@@ -755,15 +755,12 @@ ws_planning = wb_out["Planning"]
 ws_pauze = wb_out["Pauzevlinders"]
 
 # Pauzekolommen (B–G in Pauzevlinders sheet)
-
-# Dynamisch: alle kolommen waar een uur boven staat in rij 1
+# Dynamisch: alle kolommen waar in rij 1 een uur staat (bv. '13u45', '14u', ...)
 pauze_cols = []
 for col in range(2, ws_pauze.max_column + 1):
     header = ws_pauze.cell(1, col).value
-    if header:
-        s = str(header).strip().lower().replace(":00", "u").replace(":15", "u15").replace(":30", "u30").replace(":45", "u45")
-        if s.endswith("u") or any(s.endswith(f"u{m:02d}") for m in [15,30,45]):
-            pauze_cols.append(col)
+    if header and ("u" in str(header)):
+        pauze_cols.append(col)
 
 # Bouw lijst met pauzevlinder-rijen
 pv_rows = []
@@ -790,18 +787,17 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
         continue
     totaal_uren = student_totalen.get(naam_cel, 0)
     if totaal_uren > 6:
-        # Kies random kolom uit alle uurkolommen
-        if pauze_cols:
-            random_col = random.choice(pauze_cols)
-            ws_pauze.cell(row + 1, random_col, naam_cel)
-            # Opmaak toepassen
-            ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
-            ws_pauze.cell(row + 1, random_col).border = Border(
-                left=Side(style="thin"),
-                right=Side(style="thin"),
-                top=Side(style="thin"),
-                bottom=Side(style="thin")
-            )
+        # Kies random kolom tussen B en G (2 t/m 7)
+        random_col = random.randint(2, 7)
+        ws_pauze.cell(row + 1, random_col, naam_cel)
+        # Opmaak toepassen
+        ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
+        ws_pauze.cell(row + 1, random_col).border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin")
+        )
 
 # ---- Lege naamcellen inkleuren ----
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
@@ -860,15 +856,12 @@ center_align = Alignment(horizontal="center", vertical="center")
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
 
 # Alleen kolommen B..G
-
-# Dynamisch: alle kolommen waar een uur boven staat in rij 1
+# Dynamisch: alle kolommen waar in rij 1 een uur staat (bv. '13u45', '14u', ...)
 pauze_cols = []
 for col in range(2, ws_pauze.max_column + 1):
     header = ws_pauze.cell(1, col).value
-    if header:
-        s = str(header).strip().lower().replace(":00", "u").replace(":15", "u15").replace(":30", "u30").replace(":45", "u45")
-        if s.endswith("u") or any(s.endswith(f"u{m:02d}") for m in [15,30,45]):
-            pauze_cols.append(col)
+    if header and ("u" in str(header)):
+        pauze_cols.append(col)
 
 
 def is_student_extra(naam):
@@ -1081,15 +1074,12 @@ center_align = Alignment(horizontal="center", vertical="center")
 pauze_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen
 
 # Kolommen I..P
-
-# Dynamisch: alle kolommen waar een uur boven staat in rij 1
+# Dynamisch: alle kolommen waar in rij 1 een uur staat (bv. '13u45', '14u', ...)
 pauze_cols = []
 for col in range(2, ws_pauze.max_column + 1):
     header = ws_pauze.cell(1, col).value
-    if header:
-        s = str(header).strip().lower().replace(":00", "u").replace(":15", "u15").replace(":30", "u30").replace(":45", "u45")
-        if s.endswith("u") or any(s.endswith(f"u{m:02d}") for m in [15,30,45]):
-            pauze_cols.append(col)
+    if header and ("u" in str(header)):
+        pauze_cols.append(col)
 
 # Helper: map kolomheader naar uur
 def parse_header_uur(header):
@@ -1276,8 +1266,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
 
 
 
