@@ -647,6 +647,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1281,7 +1282,34 @@ for pv, pv_row in pv_rows:
                 cel.fill = lichtpaars_fill
                 cel.alignment = center_align
                 cel.border = thin_border
-                # Optioneel: bovenliggende cel (attractie) leeg laten of markeren
+                break
+    else:
+        # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
+        # Zoek globaal het laatste dubbele blok in de sheet (over alle pauzevlinders)
+        laatste_dubbel_idx = -1
+        for other_pv, other_pv_row in pv_rows:
+            idx2 = 0
+            while idx2 < len(pauze_cols):
+                col2 = pauze_cols[idx2]
+                cel2 = ws_pauze.cell(other_pv_row, col2)
+                if cel2.value == other_pv["naam"]:
+                    lengte2 = 1
+                    while idx2+lengte2 < len(pauze_cols) and ws_pauze.cell(other_pv_row, pauze_cols[idx2+lengte2]).value == other_pv["naam"]:
+                        lengte2 += 1
+                    if lengte2 >= 2 and idx2+lengte2-1 > laatste_dubbel_idx:
+                        laatste_dubbel_idx = idx2+lengte2-1
+                    idx2 += lengte2
+                else:
+                    idx2 += 1
+        min_kort_idx = laatste_dubbel_idx + 1 if laatste_dubbel_idx >= 0 else 0
+        for idx in range(min_kort_idx, len(pauze_cols)):
+            col = pauze_cols[idx]
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value in [None, ""]:
+                cel.value = pv["naam"]
+                cel.fill = lichtpaars_fill
+                cel.alignment = center_align
+                cel.border = thin_border
                 break
 
 
