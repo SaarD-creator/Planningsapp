@@ -648,6 +648,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -781,7 +782,7 @@ for pv in selected:
         pv_rows.append((pv, row_found))
 
 
-# Geef elke pauzevlinder een kwartierpauze met minimaal 2,5 uur tussenpauze
+# --- Pauzevlinder kwartierpauze met 2,5u tussenpauze, na alle lange pauzes indien geen lange pauze ---
 for pv, pv_row in pv_rows:
     # Verzamel alle pauze-kolommen (en bijbehorende uren)
     col_uur_pairs = []
@@ -797,8 +798,6 @@ for pv, pv_row in pv_rows:
                     continue
                 col_uur_pairs.append((col, uur))
 
-    # Zoek alle reeds geplaatste pauzes in deze rij
-    geplaatste = [col for col in pauze_cols if ws_pauze.cell(pv_row, col).value not in [None, ""]]
     # Zoek alle lange pauzes in deze rij (twee naast elkaar)
     lange_pauze_indices = []
     for i in range(len(col_uur_pairs)-1):
@@ -816,17 +815,13 @@ for pv, pv_row in pv_rows:
             if ws_pauze.cell(pv_row2, col1).value == pv2["naam"] and ws_pauze.cell(pv_row2, col2).value == pv2["naam"]:
                 alle_lange_pauze_einduren.append(uur2)
 
-    # Zoek een plek voor een korte pauze met minimaal 2,5 uur (10 blokjes) na eigen lange pauze (indien aanwezig)
-    # en na alle lange pauzes als er geen lange pauze is
-    min_gap = 2.5  # uur
-    min_gap_blokken = int(min_gap * 4)  # 10 blokjes van 15 min
+    min_gap_blokken = 10  # 2,5 uur = 10 blokjes
     geplaatste_korte = False
     if lange_pauze_indices:
         # Heeft zelf een lange pauze, zoek korte pauze 10 blokjes verder
         laatste_lange_idx = lange_pauze_indices[-1]
-        _, eigen_lange_einduur = col_uur_pairs[laatste_lange_idx+1]
         for idx, (col, uur) in enumerate(col_uur_pairs):
-            if idx > laatste_lange_idx+min_gap_blokken-1 and ws_pauze.cell(pv_row, col).value in [None, ""]:
+            if idx > laatste_lange_idx + min_gap_blokken - 1 and ws_pauze.cell(pv_row, col).value in [None, ""]:
                 ws_pauze.cell(pv_row, col).value = pv["naam"]
                 ws_pauze.cell(pv_row, col).alignment = Alignment(horizontal="center", vertical="center")
                 ws_pauze.cell(pv_row, col).border = thin_border
@@ -835,10 +830,7 @@ for pv, pv_row in pv_rows:
                 break
     else:
         # Geen lange pauze, zoek korte pauze na álle lange pauzes van anderen
-        if alle_lange_pauze_einduren:
-            laatste_lange = max(alle_lange_pauze_einduren)
-        else:
-            laatste_lange = -1
+        laatste_lange = max(alle_lange_pauze_einduren) if alle_lange_pauze_einduren else -1
         for idx, (col, uur) in enumerate(col_uur_pairs):
             if uur > laatste_lange and ws_pauze.cell(pv_row, col).value in [None, ""]:
                 ws_pauze.cell(pv_row, col).value = pv["naam"]
