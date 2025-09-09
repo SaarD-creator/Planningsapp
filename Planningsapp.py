@@ -647,6 +647,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1221,23 +1222,31 @@ lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_typ
 lichtpaars_fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # kwartierpauze
 
 for pv, pv_row in pv_rows:
-    for col in pauze_cols:
+    for idx, col in enumerate(pauze_cols):
         cel = ws_pauze.cell(pv_row, col)
         if cel.value in [None, ""]:
             cel.fill = naam_leeg_fill
         else:
             # Check of dit een lange pauze is (dubbele blok: zelfde naam in 2 naast elkaar liggende cellen)
             is_langepauze = False
-            if col+1 in pauze_cols:
-                cel_next = ws_pauze.cell(pv_row, col+1)
+            # Kijk vooruit: als deze en de volgende cel dezelfde naam hebben, kleur beide groen
+            if idx+1 < len(pauze_cols):
+                next_col = pauze_cols[idx+1]
+                cel_next = ws_pauze.cell(pv_row, next_col)
                 if cel_next.value == cel.value and cel.value not in [None, ""]:
                     is_langepauze = True
-            if is_langepauze:
-                cel.fill = lichtgroen_fill
-                # Ook de volgende cel kleuren
-                ws_pauze.cell(pv_row, col+1).fill = lichtgroen_fill
-            else:
-                cel.fill = lichtpaars_fill
+                    cel.fill = lichtgroen_fill
+                    cel_next.fill = lichtgroen_fill
+                    continue  # sla de volgende cel over, die is al gekleurd
+            # Kijk achteruit: als vorige cel al groen is door lange pauze, deze niet opnieuw kleuren
+            if idx > 0:
+                prev_col = pauze_cols[idx-1]
+                prev_cel = ws_pauze.cell(pv_row, prev_col)
+                if prev_cel.value == cel.value and cel.value not in [None, ""]:
+                    # Deze cel is al als tweede helft van lange pauze gekleurd
+                    continue
+            # Anders: kwartierpauze
+            cel.fill = lichtpaars_fill
 
 
 # Maak in-memory bestand
