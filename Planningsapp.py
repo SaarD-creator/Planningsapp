@@ -659,30 +659,29 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
 # -----------------------------
 # Rij 1: Uren
 # -----------------------------
+# Dynamisch: bepaal vroegste en laatste uur van alle pauzevlinders
+from datetime import datetime, timedelta
+
+# Verzamel alle pauzevlinder-uren
+pv_uren = []
+for pv in selected:
+    for uur in open_uren:
+        if pv["naam"] in [naam for naam in assigned_map.get((uur, attr), []) for attr in attracties_te_plannen]:
+            pv_uren.append(uur)
+if pv_uren:
+    start_uur = min(pv_uren)
+    eind_uur = max(pv_uren)
+else:
+    start_uur = 12
+    eind_uur = 17
+
+# Bouw kwartier-rij
 uren_rij1 = []
-
-# Halve uren 12:00 tot 14:30
-u = 12
-m = 0
-while u < 15 or (u == 14 and m <= 30):
-    uren_rij1.append(f"{u:02d}:{m:02d}")
-    m += 30
-    if m >= 60:
-        u += 1
-        m = 0
-
-# Lege kolom tussen 14:30 en 15:30
-uren_rij1.append("")  # lege kolom
-
-# Start vanaf 15:30 met kwartier tot 17:15
-u = 15
-m = 30
-while u < 17 or (u == 17 and m <= 15):
-    uren_rij1.append(f"{u:02d}:{m:02d}")
-    m += 15
-    if m >= 60:
-        u += 1
-        m = 0
+tijd = datetime(2020,1,1,start_uur,0)
+end = datetime(2020,1,1,eind_uur,45)
+while tijd <= end:
+    uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
+    tijd += timedelta(minutes=15)
 
 # Schrijf uren in rij 1, start in kolom B
 for col_idx, uur in enumerate(uren_rij1, start=2):
