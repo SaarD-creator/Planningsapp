@@ -647,6 +647,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1060,51 +1061,91 @@ else:
 pauze_kleur_kort = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen
 pauze_kleur_lang = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # geel
 
-# Bepaal wie een lange pauze verdient (op basis van student_totalen, dus kolom B)
-student_lange_pauze = {naam: (uren > 6) for naam, uren in student_totalen.items()}
 
-# Helper: alle kwartierkolommen (col_idx, tijdlabel)
+
+# --- Nieuwe pauzeplanning: studenten verschijnen als naam in de cel van een pauzevlinder op het juiste kwartier ---
+# 1. Verzamel werkende studenten en hun werk-kwartieren
+werkende_studenten = []
+student_lange_pauze = {}
+student_werk_kwartieren = {}
+for s in studenten:
+    naam = s["naam"]
+    werk_kwartieren = []
+    for col_idx in range(2, ws_planning.max_column+1):
+        for row in range(2, ws_planning.max_row+1):
+            if ws_planning.cell(row, col_idx).value == naam:
+                werk_kwartieren.append(col_idx)
+                break
+    if werk_kwartieren:
+        werkende_studenten.append(s)
+        student_werk_kwartieren[naam] = set(werk_kwartieren)
+        student_lange_pauze[naam] = (student_totalen.get(naam, 0) > 6)
+
+# 2. Pauzevlinder-rijen ophalen
+pv_rows = []  # lijst: (pv_dict, naam_rij_index)
+for pv in selected:
+    row_found = None
+    for r in range(2, ws_pauze.max_row + 1):
+        if str(ws_pauze.cell(r, 1).value).strip() == str(pv["naam"]).strip():
+            row_found = r
+            break
+    if row_found is not None:
+        pv_rows.append((pv, row_found))
+
+# 3. Helper: alle kwartierkolommen (col_idx, tijdlabel)
 kwartier_cols = [(col_idx, ws_pauze.cell(1, col_idx).value) for col_idx in range(2, ws_pauze.max_column+1)]
 
-# Maak mapping: naam -> pauze-rij (indien niet aanwezig, voeg toe)
-naam_to_row = {pv["naam"]: row for pv, row in pv_rows}
-rij_out = ws_pauze.max_row + 1
-for s in studenten:
+# 4. Pauzes plannen: per student, plaats in een vrije cel bij een pauzevlinder op een kwartier waar student werkt
+import random
+bezet = set()  # (pv_row, col_idx)
+student_pauzes = {}  # naam -> geplande pauzes: lijst van (pv_row, col_idx, type)
+for s in werkende_studenten:
     naam = s["naam"]
-    if naam not in naam_to_row:
-        ws_pauze.cell(rij_out, 1, naam).font = Font(bold=True)
-        ws_pauze.cell(rij_out, 1).fill = light_fill
-        ws_pauze.cell(rij_out, 1).alignment = center_align
-        ws_pauze.cell(rij_out, 1).border = thin_border
-        naam_to_row[naam] = rij_out
-        rij_out += 1
-
-# Plan pauzes per student (alle studenten)
-for s in studenten:
-    naam = s["naam"]
-    pv_row = naam_to_row[naam]
-    geplande = 0
-    # Eerst: lange pauze (2 kwartieren naast elkaar) als nodig
+    werk_kwartieren = student_werk_kwartieren[naam]
+    pauzes = []
+    # Lange pauze: 2 aaneengesloten kwartieren
     if student_lange_pauze.get(naam, False):
-        for i in range(len(kwartier_cols)-1):
-            col1, _ = kwartier_cols[i]
-            col2, _ = kwartier_cols[i+1]
-            if ws_pauze.cell(pv_row, col1).value in [None, ""] and ws_pauze.cell(pv_row, col2).value in [None, ""]:
-                ws_pauze.cell(pv_row, col1, naam).alignment = center_align
-                ws_pauze.cell(pv_row, col1, naam).border = thin_border
-                ws_pauze.cell(pv_row, col1, naam).fill = pauze_kleur_lang
-                ws_pauze.cell(pv_row, col2, naam).alignment = center_align
-                ws_pauze.cell(pv_row, col2, naam).border = thin_border
-                ws_pauze.cell(pv_row, col2, naam).fill = pauze_kleur_lang
-                geplande += 2
+        found = False
+        random.shuffle(pv_rows)
+        for pv, pv_row in pv_rows:
+            # Zoek 2 aaneengesloten kwartieren waar student werkt en beide cellen vrij zijn
+            for i in range(len(kwartier_cols)-1):
+                col1, _ = kwartier_cols[i]
+                col2, _ = kwartier_cols[i+1]
+                if col1 in werk_kwartieren and col2 in werk_kwartieren:
+                    if (pv_row, col1) not in bezet and (pv_row, col2) not in bezet:
+                        pauzes.append((pv_row, col1, "lang"))
+                        pauzes.append((pv_row, col2, "lang"))
+                        bezet.add((pv_row, col1))
+                        bezet.add((pv_row, col2))
+                        found = True
+                        break
+            if found:
                 break
-    # Daarna: altijd een korte pauze (1 kwartier)
-    for col_idx, _ in kwartier_cols:
-        if ws_pauze.cell(pv_row, col_idx).value in [None, ""]:
-            ws_pauze.cell(pv_row, col_idx, naam).alignment = center_align
-            ws_pauze.cell(pv_row, col_idx, naam).border = thin_border
-            ws_pauze.cell(pv_row, col_idx, naam).fill = pauze_kleur_kort
+    # Korte pauze: 1 kwartier, mag niet overlappen met lange pauze
+    found = False
+    random.shuffle(pv_rows)
+    for pv, pv_row in pv_rows:
+        for col_idx, _ in kwartier_cols:
+            if col_idx in werk_kwartieren and (pv_row, col_idx) not in bezet:
+                pauzes.append((pv_row, col_idx, "kort"))
+                bezet.add((pv_row, col_idx))
+                found = True
+                break
+        if found:
             break
+    student_pauzes[naam] = pauzes
+
+# 5. Schrijf de namen in de juiste cellen bij de juiste pauzevlinder
+for naam, pauzes in student_pauzes.items():
+    for pv_row, col_idx, typ in pauzes:
+        ws_pauze.cell(pv_row, col_idx, naam)
+        ws_pauze.cell(pv_row, col_idx).alignment = center_align
+        ws_pauze.cell(pv_row, col_idx).border = thin_border
+        if typ == "lang":
+            ws_pauze.cell(pv_row, col_idx).fill = pauze_kleur_lang
+        else:
+            ws_pauze.cell(pv_row, col_idx).fill = pauze_kleur_kort
 
 
 
@@ -1122,6 +1163,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
