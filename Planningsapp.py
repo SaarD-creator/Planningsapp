@@ -644,6 +644,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -993,6 +994,8 @@ def vind_attractie_op_uur(naam, uur):
 def pv_kan_attr(pv, attr):
     """Check of pv attr kan (met normalisatie, zodat 'X 2' telt als 'X')."""
     base = normalize_attr(attr)
+    if base == "extra":
+        return True
     return base in pv_cap_set.get(pv["naam"], set())
 
 # Willekeurige volgorde van pauzeplekken (pv-rij x kolom) om lege cellen random te spreiden
@@ -1360,4 +1363,3 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
