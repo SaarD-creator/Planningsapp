@@ -662,14 +662,22 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
 # -----------------------------
 # Rij 1: Uren
 # -----------------------------
+# Bepaal start- en einduur uit open_uren
+if open_uren:
+    start_uur = min(open_uren)
+    eind_uur = max(open_uren) - 1  # 1 uur marge
+else:
+    start_uur = 12
+    eind_uur = 16
+
 uren_rij1 = []
-for uur in sorted(open_uren):
-    # Zoek de originele header uit ws_out (de hoofdplanning)
-    for col in range(2, ws_out.max_column + 1):
-        header = ws_out.cell(1, col).value
-        if header and str(header).startswith(str(uur)):
-            uren_rij1.append(header)
-            break
+from datetime import datetime, timedelta
+start_dt = datetime(2020,1,1,start_uur,0)
+end_dt = datetime(2020,1,1,eind_uur,30)  # laatste kwartier = eind_uur:30
+cur = start_dt
+while cur <= end_dt:
+    uren_rij1.append(f"{cur.hour}u" if cur.minute==0 else f"{cur.hour}u{cur.minute:02d}")
+    cur += timedelta(minutes=15)
 
 # Schrijf uren in rij 1, start in kolom B
 for col_idx, uur in enumerate(uren_rij1, start=2):
