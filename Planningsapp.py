@@ -1253,7 +1253,7 @@ wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 
-if niet_geplaatst:
+
 from datetime import datetime, timedelta
 def parse_time(header):
     s = str(header).strip()
