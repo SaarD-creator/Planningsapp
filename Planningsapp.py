@@ -646,6 +646,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -851,11 +852,11 @@ for pv, pv_row in pv_rows:
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 planning_bestand = f"Planning_{timestamp}.xlsx"
 
+
 # Maak in-memory bestand
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
-
 
 ws_feedback = wb_out.create_sheet("Feedback")
 def log_feedback(msg):
@@ -863,6 +864,29 @@ def log_feedback(msg):
     next_row = ws_feedback.max_row + 1
     ws_feedback.cell(next_row, 1, msg)
 
+# Debug: tel per student het aantal korte en lange pauzes in het pauzeblad
+from collections import Counter
+student_korte = Counter()
+student_lange = Counter()
+for pv, pv_row in pv_rows:
+    for col in pauze_cols:
+        naam = ws_pauze.cell(pv_row, col).value
+        if not naam or naam in [pv["naam"] for pv in selected]:
+            continue
+        # Detecteer of deze cel een korte of lange pauze is (stel: lange = dubbele blokken naast elkaar)
+        # Hier: als deze en de volgende kolom ook deze naam hebben, telt als lange pauze
+        is_lange = False
+        if col+1 in pauze_cols:
+            if ws_pauze.cell(pv_row, col+1).value == naam:
+                is_lange = True
+        if is_lange:
+            student_lange[naam] += 1
+        else:
+            student_korte[naam] += 1
+
+log_feedback("--- Pauzeoverzicht per student ---")
+for naam in sorted(set(list(student_korte.keys()) + list(student_lange.keys()))):
+    log_feedback(f"{naam}: korte pauzes={student_korte[naam]}, lange pauzes={student_lange[naam]}")
 
 log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek (B–G) in {planning_bestand}")
 
