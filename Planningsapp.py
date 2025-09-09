@@ -921,8 +921,12 @@ for pv in selected:
 
 # Iedereen met '-18' in de naam krijgt altijd een halfuurpauze
 lange_werkers = [s for s in studenten
-                 if (student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"])) )
-                 and s["naam"] not in [pv["naam"] for pv in selected]]
+    if (
+        student_totalen.get(s["naam"], 0) > 6
+        or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)
+    )
+    and s["naam"] not in [pv["naam"] for pv in selected]
+]
 lange_werkers_names = {s["naam"] for s in lange_werkers}
 
 def get_student_work_hours(naam):
@@ -970,13 +974,73 @@ def plaats_student(student, harde_mode=False):
     naam = student["naam"]
     werk_uren = get_student_work_hours(naam)  # echte uren waarop student in 'Planning' staat
 
+    # Sorteer alle pauzekolommen op volgorde
+    pauze_cols_sorted = sorted(pauze_cols)
+    # Zoek alle (uur, col) paren
+    uur_col_pairs = []
+    for col in pauze_cols_sorted:
+        col_header = ws_pauze.cell(1, col).value
+        col_uur = parse_header_uur(col_header)
+        if col_uur is not None:
+            uur_col_pairs.append((col_uur, col))
+
+    # Probeer 2 blokjes na elkaar te vinden voor de lange pauze
+    for i in range(len(uur_col_pairs)-1):
+        uur1, col1 = uur_col_pairs[i]
+        uur2, col2 = uur_col_pairs[i+1]
+        # Alleen als de blokjes direct na elkaar zijn (zelfde uur of kwartier verschil)
+        if col2 == col1 + 1:
+            attr1 = vind_attractie_op_uur(naam, uur1)
+            attr2 = vind_attractie_op_uur(naam, uur2)
+            if not attr1 or not attr2:
+                continue
+            # Probeer alle pauzevlinders
+            for (pv, pv_row, _) in slot_order:
+                if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+                    continue
+                cel1 = ws_pauze.cell(pv_row, col1)
+                cel2 = ws_pauze.cell(pv_row, col2)
+                boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+                boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                    # Vul beide blokjes
+                    boven_cel1.value = attr1
+                    boven_cel1.alignment = center_align
+                    boven_cel1.border = thin_border
+                    boven_cel2.value = attr2
+                    boven_cel2.alignment = center_align
+                    boven_cel2.border = thin_border
+                    cel1.value = naam
+                    cel1.alignment = center_align
+                    cel1.border = thin_border
+                    cel2.value = naam
+                    cel2.alignment = center_align
+                    cel2.border = thin_border
+                    return True
+                elif harde_mode:
+                    # Overschrijven alleen als geen lange werker
+                    occupant1 = str(cel1.value).strip() if cel1.value else ""
+                    occupant2 = str(cel2.value).strip() if cel2.value else ""
+                    if (occupant1 not in lange_werkers_names) and (occupant2 not in lange_werkers_names):
+                        boven_cel1.value = attr1
+                        boven_cel1.alignment = center_align
+                        boven_cel1.border = thin_border
+                        boven_cel2.value = attr2
+                        boven_cel2.alignment = center_align
+                        boven_cel2.border = thin_border
+                        cel1.value = naam
+                        cel1.alignment = center_align
+                        cel1.border = thin_border
+                        cel2.value = naam
+                        cel2.alignment = center_align
+                        cel2.border = thin_border
+                        return True
+    # Als geen dubbele blokjes mogelijk zijn, probeer fallback (oude logica, 1 blokje)
     # uren ook willekeurig proberen, voor extra spreiding
     for uur in random.sample(werk_uren, len(werk_uren)):
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
-
-        # Probeer alle slots in random volgorde; filter op uur en pv-capability
         for (pv, pv_row, col) in slot_order:
             col_header = ws_pauze.cell(1, col).value
             col_uur = parse_header_uur(col_header)
@@ -984,35 +1048,28 @@ def plaats_student(student, harde_mode=False):
                 continue
             if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
                 continue
-
-            cel = ws_pauze.cell(pv_row, col)            # naamcel (rij met pv-naam)
-            boven_cel = ws_pauze.cell(pv_row - 1, col)  # attractiecel (rij erboven)
+            cel = ws_pauze.cell(pv_row, col)
+            boven_cel = ws_pauze.cell(pv_row - 1, col)
             current_val = cel.value
-
             if current_val in [None, ""]:
-                # Vrij: direct plaatsen
                 boven_cel.value = attr
                 boven_cel.alignment = center_align
                 boven_cel.border = thin_border
-
                 cel.value = naam
                 cel.alignment = center_align
                 cel.border = thin_border
                 return True
             else:
-                # Bezet: in harde modus enkel overschrijven als de huidige naam GEEN lange werker is
                 if harde_mode:
                     occupant = str(current_val).strip()
                     if occupant not in lange_werkers_names:
                         boven_cel.value = attr
                         boven_cel.alignment = center_align
                         boven_cel.border = thin_border
-
                         cel.value = naam
                         cel.alignment = center_align
                         cel.border = thin_border
                         return True
-        # volgende werk-uur proberen
     return False
 
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
@@ -1269,8 +1326,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
 
 
 
