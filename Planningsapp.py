@@ -644,6 +644,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -661,45 +662,14 @@ thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
 # -----------------------------
 # Rij 1: Uren
 # -----------------------------
-# Dynamisch: bepaal vroegste en laatste uur van alle pauzevlinders
-from datetime import datetime, timedelta
-
-# Verzamel alle pauzevlinder-uren (per pauzevlinder, alleen als ze echt als pauzevlinder staan)
-pv_start_end = []
-# Verzamel alle kwartieren waarop pauzevlinders als pauzevlinder staan (gebruik echte kolomheaders)
-pv_kwartieren = []
-for pv in selected:
-    pv_tijden = []
-    for uur in open_uren:
-        for attr in attracties_te_plannen:
-            namen = assigned_map.get((uur, attr), [])
-            for idx, naam in enumerate(namen):
-                if naam == pv["naam"]:
-                    # Zoek de echte header (met minuten) uit de planning
-                    for col in range(2, ws_out.max_column + 1):
-                        header = ws_out.cell(1, col).value
-                        if header and str(header).startswith(str(uur)):
-                            try:
-                                tijd = datetime.strptime(str(header).replace('u',':').replace('.',':'), "%H:%M")
-                                pv_tijden.append(tijd)
-                            except:
-                                continue
-    if pv_tijden:
-        pv_kwartieren.extend(pv_tijden)
-        pv_start_end.append((min(pv_tijden), max(pv_tijden)))
-if pv_kwartieren:
-    start_dt = min(pv_kwartieren)
-    end_dt = max(pv_kwartieren) + timedelta(minutes=30)  # +30min marge
-else:
-    start_dt = datetime(2020,1,1,12,0)
-    end_dt = datetime(2020,1,1,16,30)
-
-# Bouw kwartier-rij van start_dt tot end_dt
 uren_rij1 = []
-tijd = start_dt
-while tijd <= end_dt:
-    uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
-    tijd += timedelta(minutes=15)
+for uur in sorted(open_uren):
+    # Zoek de originele header uit ws_out (de hoofdplanning)
+    for col in range(2, ws_out.max_column + 1):
+        header = ws_out.cell(1, col).value
+        if header and str(header).startswith(str(uur)):
+            uren_rij1.append(header)
+            break
 
 # Schrijf uren in rij 1, start in kolom B
 for col_idx, uur in enumerate(uren_rij1, start=2):
