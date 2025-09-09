@@ -670,10 +670,10 @@ for pv in selected:
             pv_uren.append(uur)
 if pv_uren:
     start_uur = min(pv_uren)
-    eind_uur = max(pv_uren)
+    eind_uur = max(pv_uren) - 1  # 1 uur aftrekken voor pauzeplanning
 else:
     start_uur = 12
-    eind_uur = 17
+    eind_uur = 16  # default ook 1 uur minder
 
 # Bouw kwartier-rij met marge: laatste kwartier = eind_uur:30
 uren_rij1 = []
@@ -944,7 +944,7 @@ def pv_kan_attr(pv, attr):
 
 # Willekeurige volgorde van pauzeplekken (pv-rij x kolom) om lege cellen random te spreiden
 slot_order = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
-random.shuffle(slot_order)  # <— kern om lege plekken later willekeurig verspreid te krijgen
+random.shuffle(slot_order)  # <— kern om lege plekken later willekeurig te verspreiden
 
 def plaats_student(student, harde_mode=False):
     """
