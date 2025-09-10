@@ -1220,9 +1220,11 @@ for _ in range(max_passes):
 # ---- Lege naamcellen inkleuren (alleen de NAAM-rij; bovenliggende attractie-rij NIET kleuren) ----
 
 # ---- Pauze-kleuren: lichtgroen voor lange pauze (dubbele blok), lichtpaars voor kwartierpauze (enkel blok) ----
+
 lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lange pauze
 lichtpaars_fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # kwartierpauze
 
+# Pauze kleuren invullen (lange en korte pauzes)
 for pv, pv_row in pv_rows:
     for idx, col in enumerate(pauze_cols):
         cel = ws_pauze.cell(pv_row, col)
@@ -1314,13 +1316,51 @@ for pv, pv_row in pv_rows:
                 cel.border = thin_border
                 break
 
+# ---- Korte pauze voor ALLE studenten (ook <=6u, behalve pauzevlinders en lange werkers) ----
+for s in studenten:
+    if s["naam"] in [pv["naam"] for pv in selected]:
+        continue  # sla pauzevlinders zelf over
+    if s["naam"] in [lw["naam"] for lw in lange_werkers]:
+        continue  # sla lange werkers over (die zijn al behandeld)
+    # Probeer een korte pauze toe te wijzen
+    # Hergebruik plaats_student, maar forceer alleen korte pauze
+    naam = s["naam"]
+    werk_uren = get_student_work_hours(naam)
+    pauze_cols_sorted = sorted(pauze_cols)
+    slot_order_short = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
+    random.shuffle(slot_order_short)
+    geplaatst = False
+    for uur in random.sample(werk_uren, len(werk_uren)):
+        attr = vind_attractie_op_uur(naam, uur)
+        if not attr:
+            continue
+        for (pv, pv_row, col) in slot_order_short:
+            col_header = ws_pauze.cell(1, col).value
+            col_uur = parse_header_uur(col_header)
+            if col_uur != uur:
+                continue
+            if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                continue
+            cel = ws_pauze.cell(pv_row, col)
+            boven_cel = ws_pauze.cell(pv_row - 1, col)
+            current_val = cel.value
+            if current_val in [None, ""]:
+                boven_cel.value = attr
+                boven_cel.alignment = center_align
+                boven_cel.border = thin_border
+                cel.value = naam
+                cel.alignment = center_align
+                cel.border = thin_border
+                cel.fill = lichtpaars_fill
+                geplaatst = True
+                break
+        if geplaatst:
+            break
 
-# Maak in-memory bestand
+
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
-
-
 if niet_geplaatst:
     log_feedback(f"⚠️ Nog niet geplaatst (controleer of pv's deze attracties kunnen): {[s['naam'] for s in niet_geplaatst]}")
 else:
@@ -1344,6 +1384,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
 
 
 
