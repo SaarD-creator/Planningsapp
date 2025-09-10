@@ -650,7 +650,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1070,30 +1069,22 @@ def plaats_student(student, harde_mode=False):
                     cel2.alignment = center_align
                     cel2.border = thin_border
                     reg["lange"] = True
-                    # Nu: zoek een korte pauze minstens 10 blokjes (2,5u) verderop
+                    # Nu: zoek een korte pauze, eerst 10 t/m 16 blokjes afstand, dan 9 t/m 1
                     if not reg["korte"]:
-                        for j in range(i+10, len(uur_col_pairs)):
-                            uur_kort, col_kort = uur_col_pairs[j]
-                            attr_kort = vind_attractie_op_uur(naam, uur_kort)
-                            if not attr_kort:
-                                continue
-                            for (pv2, pv_row2, _) in slot_order:
-                                if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
+                        found = False
+                        # Eerst 10 t/m 16 blokjes afstand
+                        for min_blokjes in range(10, 17):
+                            for j in range(i+min_blokjes, len(uur_col_pairs)):
+                                uur_kort, col_kort = uur_col_pairs[j]
+                                attr_kort = vind_attractie_op_uur(naam, uur_kort)
+                                if not attr_kort:
                                     continue
-                                cel_kort = ws_pauze.cell(pv_row2, col_kort)
-                                boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
-                                if cel_kort.value in [None, ""]:
-                                    boven_cel_kort.value = attr_kort
-                                    boven_cel_kort.alignment = center_align
-                                    boven_cel_kort.border = thin_border
-                                    cel_kort.value = naam
-                                    cel_kort.alignment = center_align
-                                    cel_kort.border = thin_border
-                                    reg["korte"] = True
-                                    return True
-                                elif harde_mode:
-                                    occupant = str(cel_kort.value).strip() if cel_kort.value else ""
-                                    if occupant not in lange_werkers_names:
+                                for (pv2, pv_row2, _) in slot_order:
+                                    if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
+                                        continue
+                                    cel_kort = ws_pauze.cell(pv_row2, col_kort)
+                                    boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
+                                    if cel_kort.value in [None, ""]:
                                         boven_cel_kort.value = attr_kort
                                         boven_cel_kort.alignment = center_align
                                         boven_cel_kort.border = thin_border
@@ -1101,7 +1092,59 @@ def plaats_student(student, harde_mode=False):
                                         cel_kort.alignment = center_align
                                         cel_kort.border = thin_border
                                         reg["korte"] = True
+                                        found = True
                                         return True
+                                    elif harde_mode:
+                                        occupant = str(cel_kort.value).strip() if cel_kort.value else ""
+                                        if occupant not in lange_werkers_names:
+                                            boven_cel_kort.value = attr_kort
+                                            boven_cel_kort.alignment = center_align
+                                            boven_cel_kort.border = thin_border
+                                            cel_kort.value = naam
+                                            cel_kort.alignment = center_align
+                                            cel_kort.border = thin_border
+                                            reg["korte"] = True
+                                            found = True
+                                            return True
+                            if found:
+                                break
+                        # Dan 9 t/m 1 blokjes afstand
+                        if not found:
+                            for min_blokjes in range(9, 0, -1):
+                                for j in range(i+min_blokjes, len(uur_col_pairs)):
+                                    uur_kort, col_kort = uur_col_pairs[j]
+                                    attr_kort = vind_attractie_op_uur(naam, uur_kort)
+                                    if not attr_kort:
+                                        continue
+                                    for (pv2, pv_row2, _) in slot_order:
+                                        if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
+                                            continue
+                                        cel_kort = ws_pauze.cell(pv_row2, col_kort)
+                                        boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
+                                        if cel_kort.value in [None, ""]:
+                                            boven_cel_kort.value = attr_kort
+                                            boven_cel_kort.alignment = center_align
+                                            boven_cel_kort.border = thin_border
+                                            cel_kort.value = naam
+                                            cel_kort.alignment = center_align
+                                            cel_kort.border = thin_border
+                                            reg["korte"] = True
+                                            found = True
+                                            return True
+                                        elif harde_mode:
+                                            occupant = str(cel_kort.value).strip() if cel_kort.value else ""
+                                            if occupant not in lange_werkers_names:
+                                                boven_cel_kort.value = attr_kort
+                                                boven_cel_kort.alignment = center_align
+                                                boven_cel_kort.border = thin_border
+                                                cel_kort.value = naam
+                                                cel_kort.alignment = center_align
+                                                cel_kort.border = thin_border
+                                                reg["korte"] = True
+                                                found = True
+                                                return True
+                                if found:
+                                    break
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
                 elif harde_mode:
@@ -1411,7 +1454,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
