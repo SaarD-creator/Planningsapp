@@ -1015,15 +1015,21 @@ def plaats_student(student, harde_mode=False):
     """
     naam = student["naam"]
     werk_uren = get_student_work_hours(naam)  # echte uren waarop student in 'Planning' staat
+    # Pauze mag niet in eerste of laatste werkuur vallen
+    werk_uren_set = set(werk_uren)
+    if len(werk_uren) > 2:
+        verboden_uren = {werk_uren[0], werk_uren[-1]}
+    else:
+        verboden_uren = set(werk_uren)  # als maar 1 of 2 uur: geen pauze mogelijk
 
     # Sorteer alle pauzekolommen op volgorde
     pauze_cols_sorted = sorted(pauze_cols)
-    # Zoek alle (uur, col) paren
+    # Zoek alle (uur, col) paren, filter verboden uren
     uur_col_pairs = []
     for col in pauze_cols_sorted:
         col_header = ws_pauze.cell(1, col).value
         col_uur = parse_header_uur(col_header)
-        if col_uur is not None:
+        if col_uur is not None and col_uur in werk_uren_set and col_uur not in verboden_uren:
             uur_col_pairs.append((col_uur, col))
 
     # Houd bij of deze student al een lange/korte pauze heeft gekregen
@@ -1200,6 +1206,8 @@ def plaats_student(student, harde_mode=False):
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     # Korte pauze alleen als nog niet toegekend
     for uur in random.sample(werk_uren, len(werk_uren)):
+        if uur in verboden_uren:
+            continue
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
@@ -1395,11 +1403,17 @@ for s in studenten:
     # Probeer een korte pauze toe te wijzen
     naam = s["naam"]
     werk_uren = get_student_work_hours(naam)
+    if len(werk_uren) > 2:
+        verboden_uren = {werk_uren[0], werk_uren[-1]}
+    else:
+        verboden_uren = set(werk_uren)
     pauze_cols_sorted = sorted(pauze_cols)
     slot_order_short = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
     random.shuffle(slot_order_short)
     geplaatst = False
     for uur in random.sample(werk_uren, len(werk_uren)):
+        if uur in verboden_uren:
+            continue
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
@@ -1454,6 +1468,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
 
 
 
