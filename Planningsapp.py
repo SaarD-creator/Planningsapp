@@ -867,12 +867,21 @@ wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 
+
 ws_feedback = wb_out.create_sheet("Feedback")
 def log_feedback(msg):
     """Voeg een regel toe in het feedback-werkblad."""
     next_row = ws_feedback.max_row + 1
     ws_feedback.cell(next_row, 1, msg)
 
+# --- DEBUG: Herbereken lange_werkers en korte_pauze_ontvangers voor deze check ---
+lange_werkers = [s for s in studenten
+    if (
+        student_totalen.get(s["naam"], 0) > 6
+        or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)
+    )
+    and s["naam"] not in [pv["naam"] for pv in selected]
+]
 
 # --- DEBUG: Controleer of iedereen die een lange pauze verdient die ook heeft gekregen ---
 lange_pauze_missers = []
@@ -916,7 +925,6 @@ if korte_pauze_missers:
     log_feedback(f"❌ Geen korte pauze gevonden voor: {korte_pauze_missers}")
 else:
     log_feedback("✅ Iedereen die een korte pauze verdient heeft er één gekregen.")
-
 
 log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek (B–G) in {planning_bestand}")
 
@@ -1579,6 +1587,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
 
 
 
