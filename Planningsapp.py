@@ -872,6 +872,50 @@ def log_feedback(msg):
     ws_feedback.cell(next_row, 1, msg)
 
 
+# --- DEBUG: Controleer of iedereen die een lange pauze verdient die ook heeft gekregen ---
+lange_pauze_missers = []
+for s in studenten:
+    if s["naam"] in [pv["naam"] for pv in selected]:
+        continue  # pauzevlinders zelf niet
+    totaal_uren = student_totalen.get(s["naam"], 0)
+    if totaal_uren > 6 or ("-18" in str(s["naam"])):
+        # Check of deze student een lange pauze heeft gekregen in ws_pauze
+        heeft_lange = False
+        for row in range(2, ws_pauze.max_row + 1):
+            for col in range(2, ws_pauze.max_column + 1):
+                val = ws_pauze.cell(row, col).value
+                if val == s["naam"]:
+                    # Check of dit een dubbel blok is (naast elkaar)
+                    if col+1 <= ws_pauze.max_column and ws_pauze.cell(row, col+1).value == s["naam"]:
+                        heeft_lange = True
+                        break
+            if heeft_lange:
+                break
+        if not heeft_lange:
+            lange_pauze_missers.append(s["naam"])
+if lange_pauze_missers:
+    log_feedback(f"❌ Geen lange pauze gevonden voor: {lange_pauze_missers}")
+else:
+    log_feedback("✅ Iedereen die een lange pauze verdient heeft er één gekregen.")
+
+# --- DEBUG: Controleer of iedereen die een korte pauze verdient die ook heeft gekregen ---
+korte_pauze_missers = []
+for s in studenten:
+    if s["naam"] in [pv["naam"] for pv in selected]:
+        continue  # pauzevlinders zelf niet
+    if s["naam"] in [lw["naam"] for lw in lange_werkers]:
+        continue  # lange werkers al gecheckt
+    if s["naam"] in korte_pauze_ontvangers:
+        continue  # heeft korte pauze
+    totaal_uren = student_totalen.get(s["naam"], 0)
+    if totaal_uren > 0:
+        korte_pauze_missers.append(s["naam"])
+if korte_pauze_missers:
+    log_feedback(f"❌ Geen korte pauze gevonden voor: {korte_pauze_missers}")
+else:
+    log_feedback("✅ Iedereen die een korte pauze verdient heeft er één gekregen.")
+
+
 log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek (B–G) in {planning_bestand}")
 
 # --- doorschuif debuglog naar feedback sheet ---
