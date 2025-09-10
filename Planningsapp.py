@@ -652,7 +652,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1045,23 +1044,48 @@ def plaats_student(student, harde_mode=False):
     # Sorteer opties op col1 zodat de vroegste optie eerst komt
     lange_pauze_opties = sorted(lange_pauze_opties, key=lambda x: x[2])
 
-    # Probeer alle opties voor de lange pauze (max 1x per student)
-    if not reg["lange"]:
-        for optie in lange_pauze_opties:
-            i, uur1, col1, uur2, col2 = optie
-            attr1 = vind_attractie_op_uur(naam, uur1)
-            attr2 = vind_attractie_op_uur(naam, uur2)
-            if not attr1 or not attr2:
+    # Probeer alle opties voor de lange pauze (max 1x per student, ook in harde_mode)
+    if reg["lange"]:
+        return False
+    for optie in lange_pauze_opties:
+        # Controleer opnieuw of student al een lange pauze heeft (kan veranderd zijn in harde_mode)
+        if reg["lange"]:
+            break
+        i, uur1, col1, uur2, col2 = optie
+        attr1 = vind_attractie_op_uur(naam, uur1)
+        attr2 = vind_attractie_op_uur(naam, uur2)
+        if not attr1 or not attr2:
+            continue
+        for (pv, pv_row, _) in slot_order:
+            if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
                 continue
-            for (pv, pv_row, _) in slot_order:
-                if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
-                    continue
-                cel1 = ws_pauze.cell(pv_row, col1)
-                cel2 = ws_pauze.cell(pv_row, col2)
-                boven_cel1 = ws_pauze.cell(pv_row-1, col1)
-                boven_cel2 = ws_pauze.cell(pv_row-1, col2)
-                if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                    # Vul beide blokjes voor lange pauze
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+            boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                # Vul beide blokjes voor lange pauze
+                boven_cel1.value = attr1
+                boven_cel1.alignment = center_align
+                boven_cel1.border = thin_border
+                boven_cel2.value = attr2
+                boven_cel2.alignment = center_align
+                boven_cel2.border = thin_border
+                cel1.value = naam
+                cel1.alignment = center_align
+                cel1.border = thin_border
+                cel2.value = naam
+                cel2.alignment = center_align
+                cel2.border = thin_border
+                reg["lange"] = True
+                return True
+            elif harde_mode:
+                occupant1 = str(cel1.value).strip() if cel1.value else ""
+                occupant2 = str(cel2.value).strip() if cel2.value else ""
+                if (occupant1 not in lange_werkers_names) and (occupant2 not in lange_werkers_names):
+                    # Controleer opnieuw of student al een lange pauze heeft
+                    if reg["lange"]:
+                        break
                     boven_cel1.value = attr1
                     boven_cel1.alignment = center_align
                     boven_cel1.border = thin_border
@@ -1076,24 +1100,6 @@ def plaats_student(student, harde_mode=False):
                     cel2.border = thin_border
                     reg["lange"] = True
                     return True
-                elif harde_mode:
-                    occupant1 = str(cel1.value).strip() if cel1.value else ""
-                    occupant2 = str(cel2.value).strip() if cel2.value else ""
-                    if (occupant1 not in lange_werkers_names) and (occupant2 not in lange_werkers_names):
-                        boven_cel1.value = attr1
-                        boven_cel1.alignment = center_align
-                        boven_cel1.border = thin_border
-                        boven_cel2.value = attr2
-                        boven_cel2.alignment = center_align
-                        boven_cel2.border = thin_border
-                        cel1.value = naam
-                        cel1.alignment = center_align
-                        cel1.border = thin_border
-                        cel2.value = naam
-                        cel2.alignment = center_align
-                        cel2.border = thin_border
-                        reg["lange"] = True
-                        return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     # Korte pauze alleen als nog niet toegekend
     for uur in random.sample(werk_uren, len(werk_uren)):
