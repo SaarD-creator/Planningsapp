@@ -647,6 +647,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1146,6 +1147,11 @@ for _ in range(max_passes):
         break
     niet_geplaatst = rest
 
+
+# ---- Pauze-kleuren: lichtgroen voor lange pauze (dubbele blok), lichtpaars voor kwartierpauze (enkel blok) ----
+lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lange pauze
+lichtpaars_fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # kwartierpauze
+
 # ---- Korte pauzes voor lange werkers pas NA ALLE lange pauzes ----
 def plan_korte_pauzes_lange_werkers():
     # Zoek het laatste einde van een lange pauze (dubbel blok) in de sheet
@@ -1347,4 +1353,3 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
