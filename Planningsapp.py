@@ -651,6 +651,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1252,152 +1254,153 @@ for pv, pv_row in pv_rows:
                 next_col = pauze_cols[idx+1]
                 cel_next = ws_pauze.cell(pv_row, next_col)
                 if cel_next.value == cel.value and cel.value not in [None, ""]:
-                    is_langepauze = True
-                    cel.fill = lichtgroen_fill
-                    cel_next.fill = lichtgroen_fill
-                    continue  # sla de volgende cel over, die is al gekleurd
-            # Kijk achteruit: als vorige cel al groen is door lange pauze, deze niet opnieuw kleuren
-            if idx > 0:
-                prev_col = pauze_cols[idx-1]
-                prev_cel = ws_pauze.cell(pv_row, prev_col)
-                if prev_cel.value == cel.value and cel.value not in [None, ""]:
-                    # Deze cel is al als tweede helft van lange pauze gekleurd
-                    continue
-            # Anders: kwartierpauze
-            cel.fill = lichtpaars_fill
 
-# ---- Korte pauze voor pauzevlinders zelf toevoegen ----
-for pv, pv_row in pv_rows:
-    # Houd bij wie al een korte pauze heeft gehad (per naam)
-    if 'korte_pauze_gegeven_pv' not in globals():
-        global korte_pauze_gegeven_pv
-        korte_pauze_gegeven_pv = set()
-    naam = pv["naam"]
-    if naam in korte_pauze_gegeven_pv:
-        continue
-    # Zoek alle blokken met de naam van de pauzevlinder in deze rij
-    blokken = []  # lijst van (start_idx, lengte)
-    idx = 0
-    while idx < len(pauze_cols):
-        col = pauze_cols[idx]
-        cel = ws_pauze.cell(pv_row, col)
-        if cel.value == naam:
-            # Kijk hoe lang het blok is
-            lengte = 1
-            while idx+lengte < len(pauze_cols) and ws_pauze.cell(pv_row, pauze_cols[idx+lengte]).value == naam:
-                lengte += 1
-            blokken.append((idx, lengte))
-            idx += lengte
-        else:
-            idx += 1
-    # Zoek de index van het einde van de lange pauze (dubbel blok)
-    lange_blok_einde = None
-    for start, lengte in blokken:
-        if lengte >= 2:
-            lange_blok_einde = start + lengte - 1
-            break
-    # Zoek een vrij kwartierblok minimaal 10 blokjes na de lange pauze (maar mag ook later zijn)
-    if lange_blok_einde is not None:
-        min_kort_idx = lange_blok_einde + 10
-        # Zoek het eerste vrije blok NA min_kort_idx
-        kort_gepland = False
-        for idx in range(min_kort_idx, len(pauze_cols)):
-            col = pauze_cols[idx]
-            cel = ws_pauze.cell(pv_row, col)
-            boven_cel = ws_pauze.cell(pv_row-1, col)
-            if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
-                # Vul attractie boven de naam
-                header = ws_pauze.cell(1, col).value
-                uur = parse_header_uur(header)
-                attractie = vind_attractie_op_uur(naam, uur)
-                boven_cel.value = attractie
-                boven_cel.alignment = center_align
-                boven_cel.border = thin_border
-                cel.value = naam
-                cel.fill = lichtpaars_fill
-                cel.alignment = center_align
-                cel.border = thin_border
-                korte_pauze_gegeven_pv.add(naam)
-                kort_gepland = True
-                break
-        # Als er geen plek meer is na 2,5 uur, probeer dan het eerste vrije blok na de lange pauze (dus minder dan 2,5u, alleen als er helemaal geen plek meer is)
-        if not kort_gepland:
-            for idx in range(lange_blok_einde+1, len(pauze_cols)):
-                col = pauze_cols[idx]
-                cel = ws_pauze.cell(pv_row, col)
-                boven_cel = ws_pauze.cell(pv_row-1, col)
-                if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
-                    header = ws_pauze.cell(1, col).value
-                    uur = parse_header_uur(header)
-                    attractie = vind_attractie_op_uur(naam, uur)
-                    boven_cel.value = attractie
-                    boven_cel.alignment = center_align
-                    boven_cel.border = thin_border
-                    cel.value = naam
-                    cel.fill = lichtpaars_fill
-                    cel.alignment = center_align
-                    cel.border = thin_border
-                    korte_pauze_gegeven_pv.add(naam)
-                    break
-    else:
-        # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
-        # Zoek globaal het laatste dubbele blok in de sheet (over alle pauzevlinders)
-        laatste_dubbel_idx = -1
-        for other_pv, other_pv_row in pv_rows:
-            idx2 = 0
-            while idx2 < len(pauze_cols):
-                col2 = pauze_cols[idx2]
-                cel2 = ws_pauze.cell(other_pv_row, col2)
-                if cel2.value == other_pv["naam"]:
-                    lengte2 = 1
-                    while idx2+lengte2 < len(pauze_cols) and ws_pauze.cell(other_pv_row, pauze_cols[idx2+lengte2]).value == other_pv["naam"]:
-                        lengte2 += 1
-                    if lengte2 >= 2 and idx2+lengte2-1 > laatste_dubbel_idx:
-                        laatste_dubbel_idx = idx2+lengte2-1
-                    idx2 += lengte2
-                else:
-                    idx2 += 1
-        min_kort_idx = laatste_dubbel_idx + 1 if laatste_dubbel_idx >= 0 else 0
-        for idx in range(min_kort_idx, len(pauze_cols)):
-            col = pauze_cols[idx]
-            cel = ws_pauze.cell(pv_row, col)
-            boven_cel = ws_pauze.cell(pv_row-1, col)
-            if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
-                header = ws_pauze.cell(1, col).value
-                uur = parse_header_uur(header)
-                attractie = vind_attractie_op_uur(naam, uur)
-                boven_cel.value = attractie
-                boven_cel.alignment = center_align
-                boven_cel.border = thin_border
-                cel.value = naam
-                cel.fill = lichtpaars_fill
-                cel.alignment = center_align
-                cel.border = thin_border
-                korte_pauze_gegeven_pv.add(naam)
-                break
+                    # ...
+                    # Na het kleuren van alle pauzes:
+                    plan_korte_pauzes_lange_werkers()
 
+                    # ---- Lege naamcellen inkleuren (alleen de NAAM-rij; bovenliggende attractie-rij NIET kleuren) ----
 
-# Maak in-memory bestand
-output = BytesIO()
-wb_out.save(output)
-output.seek(0)  # Zorg dat lezen vanaf begin kan
+                    # ---- Pauze-kleuren: lichtgroen voor lange pauze (dubbele blok), lichtpaars voor kwartierpauze (enkel blok) ----
+                    lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lange pauze
+                    lichtpaars_fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # kwartierpauze
 
+                    for pv, pv_row in pv_rows:
+                        for idx, col in enumerate(pauze_cols):
+                            cel = ws_pauze.cell(pv_row, col)
+                            if cel.value in [None, ""]:
+                                cel.fill = naam_leeg_fill
+                            else:
+                                # Check of dit een lange pauze is (dubbele blok: zelfde naam in 2 naast elkaar liggende cellen)
+                                is_langepauze = False
+                                # Kijk vooruit: als deze en de volgende cel dezelfde naam hebben, kleur beide groen
+                                if idx+1 < len(pauze_cols):
+                                    next_col = pauze_cols[idx+1]
+                                    cel_next = ws_pauze.cell(pv_row, next_col)
+                                    if cel_next.value == cel.value and cel.value not in [None, ""]:
+                                        is_langepauze = True
+                                        cel.fill = lichtgroen_fill
+                                        cel_next.fill = lichtgroen_fill
+                                        continue  # sla de volgende cel over, die is al gekleurd
+                                # Kijk achteruit: als vorige cel al groen is door lange pauze, deze niet opnieuw kleuren
+                                if idx > 0:
+                                    prev_col = pauze_cols[idx-1]
+                                    prev_cel = ws_pauze.cell(pv_row, prev_col)
+                                    if prev_cel.value == cel.value and cel.value not in [None, ""]:
+                                        # Deze cel is al als tweede helft van lange pauze gekleurd
+                                        continue
+                                # Anders: kwartierpauze
+                                cel.fill = lichtpaars_fill
 
-if niet_geplaatst:
-    log_feedback(f"⚠️ Nog niet geplaatst (controleer of pv's deze attracties kunnen): {[s['naam'] for s in niet_geplaatst]}")
-else:
-    log_feedback("✅ Alle studenten die >6u werken kregen een pauzeplek (B–G gevuld waar mogelijk)")
-
-
-
-
-#ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
-
-
-# -----------------------------
-# Opslaan in hetzelfde unieke bestand als DEEL 3
-# -----------------------------
-output = BytesIO()
+                    # ---- Korte pauze voor pauzevlinders zelf toevoegen ----
+                    for pv, pv_row in pv_rows:
+                        # Houd bij wie al een korte pauze heeft gehad (per naam)
+                        if 'korte_pauze_gegeven_pv' not in globals():
+                            global korte_pauze_gegeven_pv
+                            korte_pauze_gegeven_pv = set()
+                        naam = pv["naam"]
+                        if naam in korte_pauze_gegeven_pv:
+                            continue
+                        # Zoek alle blokken met de naam van de pauzevlinder in deze rij
+                        blokken = []  # lijst van (start_idx, lengte)
+                        idx = 0
+                        while idx < len(pauze_cols):
+                            col = pauze_cols[idx]
+                            cel = ws_pauze.cell(pv_row, col)
+                            if cel.value == naam:
+                                # Kijk hoe lang het blok is
+                                lengte = 1
+                                while idx+lengte < len(pauze_cols) and ws_pauze.cell(pv_row, pauze_cols[idx+lengte]).value == naam:
+                                    lengte += 1
+                                blokken.append((idx, lengte))
+                                idx += lengte
+                            else:
+                                idx += 1
+                        # Zoek de index van het einde van de lange pauze (dubbel blok)
+                        lange_blok_einde = None
+                        for start, lengte in blokken:
+                            if lengte >= 2:
+                                lange_blok_einde = start + lengte - 1
+                                break
+                        # Zoek een vrij kwartierblok minimaal 10 blokjes na de lange pauze (maar mag ook later zijn)
+                        if lange_blok_einde is not None:
+                            min_kort_idx = lange_blok_einde + 10
+                            # Zoek het eerste vrije blok NA min_kort_idx
+                            kort_gepland = False
+                            for idx in range(min_kort_idx, len(pauze_cols)):
+                                col = pauze_cols[idx]
+                                cel = ws_pauze.cell(pv_row, col)
+                                boven_cel = ws_pauze.cell(pv_row-1, col)
+                                if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
+                                    # Vul attractie boven de naam
+                                    header = ws_pauze.cell(1, col).value
+                                    uur = parse_header_uur(header)
+                                    attractie = vind_attractie_op_uur(naam, uur)
+                                    boven_cel.value = attractie
+                                    boven_cel.alignment = center_align
+                                    boven_cel.border = thin_border
+                                    cel.value = naam
+                                    cel.fill = lichtpaars_fill
+                                    cel.alignment = center_align
+                                    cel.border = thin_border
+                                    korte_pauze_gegeven_pv.add(naam)
+                                    kort_gepland = True
+                                    break
+                            # Als er geen plek meer is na 2,5 uur, probeer dan het eerste vrije blok na de lange pauze (dus minder dan 2,5u, alleen als er helemaal geen plek meer is)
+                            if not kort_gepland:
+                                for idx in range(lange_blok_einde+1, len(pauze_cols)):
+                                    col = pauze_cols[idx]
+                                    cel = ws_pauze.cell(pv_row, col)
+                                    boven_cel = ws_pauze.cell(pv_row-1, col)
+                                    if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
+                                        header = ws_pauze.cell(1, col).value
+                                        uur = parse_header_uur(header)
+                                        attractie = vind_attractie_op_uur(naam, uur)
+                                        boven_cel.value = attractie
+                                        boven_cel.alignment = center_align
+                                        boven_cel.border = thin_border
+                                        cel.value = naam
+                                        cel.fill = lichtpaars_fill
+                                        cel.alignment = center_align
+                                        cel.border = thin_border
+                                        korte_pauze_gegeven_pv.add(naam)
+                                        break
+                        else:
+                            # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
+                            # Zoek globaal het laatste dubbele blok in de sheet (over alle pauzevlinders)
+                            laatste_dubbel_idx = -1
+                            for other_pv, other_pv_row in pv_rows:
+                                idx2 = 0
+                                while idx2 < len(pauze_cols):
+                                    col2 = pauze_cols[idx2]
+                                    cel2 = ws_pauze.cell(other_pv_row, col2)
+                                    if cel2.value == other_pv["naam"]:
+                                        lengte2 = 1
+                                        while idx2+lengte2 < len(pauze_cols) and ws_pauze.cell(other_pv_row, pauze_cols[idx2+lengte2]).value == other_pv["naam"]:
+                                            lengte2 += 1
+                                        if lengte2 >= 2 and idx2+lengte2-1 > laatste_dubbel_idx:
+                                            laatste_dubbel_idx = idx2+lengte2-1
+                                        idx2 += lengte2
+                                    else:
+                                        idx2 += 1
+                            min_kort_idx = laatste_dubbel_idx + 1 if laatste_dubbel_idx >= 0 else 0
+                            for idx in range(min_kort_idx, len(pauze_cols)):
+                                col = pauze_cols[idx]
+                                cel = ws_pauze.cell(pv_row, col)
+                                boven_cel = ws_pauze.cell(pv_row-1, col)
+                                if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
+                                    header = ws_pauze.cell(1, col).value
+                                    uur = parse_header_uur(header)
+                                    attractie = vind_attractie_op_uur(naam, uur)
+                                    boven_cel.value = attractie
+                                    boven_cel.alignment = center_align
+                                    boven_cel.border = thin_border
+                                    cel.value = naam
+                                    cel.fill = lichtpaars_fill
+                                    cel.alignment = center_align
+                                    cel.border = thin_border
+                                    korte_pauze_gegeven_pv.add(naam)
+                                    break
 wb_out.save(output)
 output.seek(0)
 # st.success("Planning gegenereerd!")
@@ -1406,4 +1409,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
