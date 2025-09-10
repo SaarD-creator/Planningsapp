@@ -647,7 +647,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1271,9 +1270,11 @@ for pv, pv_row in pv_rows:
         if lengte >= 2:
             lange_blok_einde = start + lengte - 1
             break
-    # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze
+    # Zoek een vrij kwartierblok minimaal 10 blokjes na de lange pauze (maar mag ook later zijn)
     if lange_blok_einde is not None:
         min_kort_idx = lange_blok_einde + 10
+        # Zoek het eerste vrije blok NA min_kort_idx
+        kort_gepland = False
         for idx in range(min_kort_idx, len(pauze_cols)):
             col = pauze_cols[idx]
             cel = ws_pauze.cell(pv_row, col)
@@ -1282,7 +1283,19 @@ for pv, pv_row in pv_rows:
                 cel.fill = lichtpaars_fill
                 cel.alignment = center_align
                 cel.border = thin_border
+                kort_gepland = True
                 break
+        # Als er geen plek meer is na 2,5 uur, probeer dan het eerste vrije blok na de lange pauze (dus minder dan 2,5u, alleen als er helemaal geen plek meer is)
+        if not kort_gepland:
+            for idx in range(lange_blok_einde+1, len(pauze_cols)):
+                col = pauze_cols[idx]
+                cel = ws_pauze.cell(pv_row, col)
+                if cel.value in [None, ""]:
+                    cel.value = pv["naam"]
+                    cel.fill = lichtpaars_fill
+                    cel.alignment = center_align
+                    cel.border = thin_border
+                    break
     else:
         # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
         # Zoek globaal het laatste dubbele blok in de sheet (over alle pauzevlinders)
