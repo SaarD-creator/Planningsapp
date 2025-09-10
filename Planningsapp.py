@@ -674,8 +674,9 @@ if required_pauze_hours:
     start_uur = min(required_pauze_hours)
     eind_uur = max(required_pauze_hours)
     tijd = datetime(2020,1,1,start_uur,0)
-    end = datetime(2020,1,1,eind_uur,45)
-    while tijd <= end:
+    # Laatste pauze mag een kwartier vóór het einde starten
+    laatste_pauze = datetime(2020,1,1,eind_uur,30)
+    while tijd <= laatste_pauze:
         uren_rij1.append(f"{tijd.hour}u" if tijd.minute==0 else f"{tijd.hour}u{tijd.minute:02d}")
         tijd += timedelta(minutes=15)
 else:
@@ -1468,6 +1469,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
 
 
 
