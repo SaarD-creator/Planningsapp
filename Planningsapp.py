@@ -20,8 +20,10 @@ vandaag = datetime.date.today().strftime("%d-%m-%Y")
 # Excelbestand uploaden
 # -----------------------------
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
+
 if not uploaded_file:
-    pass  # Zorgt dat er geen IndentationError ontstaat als er geen bestand is
+    st.warning("Upload eerst het Excelbestand met de gegevens om verder te gaan.")
+    st.stop()
 
 wb = load_workbook(BytesIO(uploaded_file.read()))
 ws = wb["Blad1"]
