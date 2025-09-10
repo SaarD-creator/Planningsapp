@@ -650,6 +650,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1318,12 +1320,38 @@ for pv, pv_row in pv_rows:
 
 # ---- Korte pauze voor ALLE studenten (ook <=6u, behalve pauzevlinders en lange werkers) ----
 for s in studenten:
+
+# --- Houd bij wie al een korte pauze heeft gekregen ---
+korte_pauze_ontvangers = set()
+# Zoek alle namen die al een korte pauze hebben in het pauzeoverzicht
+for pv, pv_row in pv_rows:
+    for col in pauze_cols:
+        cel = ws_pauze.cell(pv_row, col)
+        if cel.value and str(cel.value).strip() != "":
+            # Check of het een korte pauze is (enkel blok, niet dubbel)
+            idx = pauze_cols.index(col)
+            is_lange = False
+            if idx+1 < len(pauze_cols):
+                next_col = pauze_cols[idx+1]
+                cel_next = ws_pauze.cell(pv_row, next_col)
+                if cel_next.value == cel.value:
+                    is_lange = True
+            if idx > 0:
+                prev_col = pauze_cols[idx-1]
+                prev_cel = ws_pauze.cell(pv_row, prev_col)
+                if prev_cel.value == cel.value:
+                    is_lange = True
+            if not is_lange:
+                korte_pauze_ontvangers.add(str(cel.value).strip())
+
+for s in studenten:
     if s["naam"] in [pv["naam"] for pv in selected]:
         continue  # sla pauzevlinders zelf over
     if s["naam"] in [lw["naam"] for lw in lange_werkers]:
         continue  # sla lange werkers over (die zijn al behandeld)
+    if s["naam"] in korte_pauze_ontvangers:
+        continue  # deze student heeft al een korte pauze
     # Probeer een korte pauze toe te wijzen
-    # Hergebruik plaats_student, maar forceer alleen korte pauze
     naam = s["naam"]
     werk_uren = get_student_work_hours(naam)
     pauze_cols_sorted = sorted(pauze_cols)
@@ -1352,6 +1380,7 @@ for s in studenten:
                 cel.alignment = center_align
                 cel.border = thin_border
                 cel.fill = lichtpaars_fill
+                korte_pauze_ontvangers.add(naam)
                 geplaatst = True
                 break
         if geplaatst:
@@ -1384,6 +1413,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
