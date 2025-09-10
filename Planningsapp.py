@@ -647,7 +647,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1014,28 +1013,32 @@ def plaats_student(student, harde_mode=False):
     naam = student["naam"]
     werk_uren = get_student_work_hours(naam)  # echte uren waarop student in 'Planning' staat
 
-    # Sorteer alle pauzekolommen op volgorde
+    # Sorteer alle pauzekolommen op volgorde van kolomnummer (dus tijdsvolgorde)
     pauze_cols_sorted = sorted(pauze_cols)
-    # Zoek alle (uur, col) paren
+    # Zoek alle (uur, col) paren, gesorteerd op kolomvolgorde
     uur_col_pairs = []
     for col in pauze_cols_sorted:
         col_header = ws_pauze.cell(1, col).value
         col_uur = parse_header_uur(col_header)
         if col_uur is not None:
             uur_col_pairs.append((col_uur, col))
+    # Sorteer de paren op kolomnummer zodat de vroegste tijd eerst komt
+    uur_col_pairs = sorted(uur_col_pairs, key=lambda x: x[1])
 
     # Houd bij of deze student al een lange/korte pauze heeft gekregen
     if not hasattr(plaats_student, "pauze_registry"):
         plaats_student.pauze_registry = {}
     reg = plaats_student.pauze_registry.setdefault(naam, {"lange": False, "korte": False})
 
-    # Eerst: zoek alle mogelijke dubbele blokjes voor de lange pauze
+    # Eerst: zoek alle mogelijke dubbele blokjes voor de lange pauze, gesorteerd op tijd (kolomvolgorde)
     lange_pauze_opties = []
     for i in range(len(uur_col_pairs)-1):
         uur1, col1 = uur_col_pairs[i]
         uur2, col2 = uur_col_pairs[i+1]
         if col2 == col1 + 1:
             lange_pauze_opties.append((i, uur1, col1, uur2, col2))
+    # Sorteer opties op col1 zodat de vroegste optie eerst komt
+    lange_pauze_opties = sorted(lange_pauze_opties, key=lambda x: x[2])
 
     # Probeer alle opties voor de lange pauze (max 1x per student)
     if not reg["lange"]:
@@ -1353,3 +1356,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
