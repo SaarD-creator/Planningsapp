@@ -909,7 +909,11 @@ if lange_pauze_missers:
 else:
     log_feedback("✅ Iedereen die een lange pauze verdient heeft er één gekregen.")
 
+
 # --- DEBUG: Controleer of iedereen die een korte pauze verdient die ook heeft gekregen ---
+# Zorg dat korte_pauze_ontvangers altijd bestaat
+if 'korte_pauze_ontvangers' not in locals():
+    korte_pauze_ontvangers = set()
 korte_pauze_missers = []
 for s in studenten:
     if s["naam"] in [pv["naam"] for pv in selected]:
@@ -930,8 +934,9 @@ log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek 
 
 # --- doorschuif debuglog naar feedback sheet ---
 try:
-    for regel in doorschuif_debuglog:
-        log_feedback(regel)
+    if 'doorschuif_debuglog' in locals():
+        for regel in doorschuif_debuglog:
+            log_feedback(regel)
 except Exception as e:
     log_feedback(f"[DEBUGLOG ERROR] {e}")
 
