@@ -797,6 +797,7 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
     if not naam_cel:
         continue
     totaal_uren = student_totalen.get(naam_cel, 0)
+        # --- DEBUG: Controleer of iedereen die een lange pauze verdient die ook heeft gekregen ---
     if totaal_uren > 6:
         # Zoek alle pauzekolommen
         pauze_cols_sorted = sorted(pauze_cols)
@@ -822,6 +823,7 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
         for i in range(len(uur_col_pairs)-1):
             _, col1 = uur_col_pairs[i]
             _, col2 = uur_col_pairs[i+1]
+        # --- DEBUG: Controleer of iedereen die een korte pauze verdient die ook heeft gekregen ---
             if col2 == col1 + 1:
                 cel1 = ws_pauze.cell(row + 1, col1)
                 cel2 = ws_pauze.cell(row + 1, col2)
@@ -1146,7 +1148,7 @@ def plaats_student(student, harde_mode=False):
                                         cel_kort.border = thin_border
                                         reg["korte"] = True
                                         found = True
-                                        return True
+                                        break
                                     elif harde_mode:
                                         occupant = str(cel_kort.value).strip() if cel_kort.value else ""
                                         if occupant not in lange_werkers_names:
@@ -1158,7 +1160,7 @@ def plaats_student(student, harde_mode=False):
                                             cel_kort.border = thin_border
                                             reg["korte"] = True
                                             found = True
-                                            return True
+                                            break
                             if found:
                                 break
                         # Dan 9 t/m 1 blokjes afstand
@@ -1183,7 +1185,7 @@ def plaats_student(student, harde_mode=False):
                                             cel_kort.border = thin_border
                                             reg["korte"] = True
                                             found = True
-                                            return True
+                                            break
                                         elif harde_mode:
                                             occupant = str(cel_kort.value).strip() if cel_kort.value else ""
                                             if occupant not in lange_werkers_names:
@@ -1195,7 +1197,7 @@ def plaats_student(student, harde_mode=False):
                                                 cel_kort.border = thin_border
                                                 reg["korte"] = True
                                                 found = True
-                                                return True
+                                                break
                                 if found:
                                     break
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
@@ -1491,17 +1493,79 @@ for s in studenten:
 
 output = BytesIO()
 wb_out.save(output)
-output.seek(0)  # Zorg dat lezen vanaf begin kan
-if niet_geplaatst:
-    log_feedback(f"⚠️ Nog niet geplaatst (controleer of pv's deze attracties kunnen): {[s['naam'] for s in niet_geplaatst]}")
+output.seek(0)
+# --- DEBUG: Herbereken lange_werkers en korte_pauze_ontvangers voor deze check ---
+lange_werkers = [s for s in studenten
+    if (
+        student_totalen.get(s["naam"], 0) > 6
+        or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)
+    )
+    and s["naam"] not in [pv["naam"] for pv in selected]
+]
+korte_pauze_ontvangers = set()
+for pv, pv_row in pv_rows:
+    for col in pauze_cols:
+        cel = ws_pauze.cell(pv_row, col)
+        if cel.value and str(cel.value).strip() != "":
+            # Check of het een korte pauze is (enkel blok, niet dubbel)
+            idx = pauze_cols.index(col)
+            is_lange = False
+            if idx+1 < len(pauze_cols):
+                next_col = pauze_cols[idx+1]
+                cel_next = ws_pauze.cell(pv_row, next_col)
+                if cel_next.value == cel.value:
+                    is_lange = True
+            if idx > 0:
+                prev_col = pauze_cols[idx-1]
+                prev_cel = ws_pauze.cell(pv_row, prev_col)
+                if prev_cel.value == cel.value:
+                    is_lange = True
+            if not is_lange:
+                korte_pauze_ontvangers.add(str(cel.value).strip())
+
+# --- DEBUG: Controleer of iedereen die een lange pauze verdient die ook heeft gekregen ---
+lange_pauze_missers = []
+for s in studenten:
+    if s["naam"] in [pv["naam"] for pv in selected]:
+        continue  # pauzevlinders zelf niet
+    totaal_uren = student_totalen.get(s["naam"], 0)
+    if totaal_uren > 6 or ("-18" in str(s["naam"])):
+        # Check of deze student een lange pauze heeft gekregen in ws_pauze
+        heeft_lange = False
+        for row in range(2, ws_pauze.max_row + 1):
+            for col in range(2, ws_pauze.max_column + 1):
+                val = ws_pauze.cell(row, col).value
+                if val == s["naam"]:
+                    # Check of dit een dubbel blok is (naast elkaar)
+                    if col+1 <= ws_pauze.max_column and ws_pauze.cell(row, col+1).value == s["naam"]:
+                        heeft_lange = True
+                        break
+
+            if heeft_lange:
+                break
+        if not heeft_lange:
+            lange_pauze_missers.append(s["naam"])
+if lange_pauze_missers:
+    log_feedback(f"❌ Geen lange pauze gevonden voor: {lange_pauze_missers}")
 else:
-    log_feedback("✅ Alle studenten die >6u werken kregen een pauzeplek (B–G gevuld waar mogelijk)")
+    log_feedback("✅ Iedereen die een lange pauze verdient heeft er één gekregen.")
 
-
-
-
-#ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
-
+# --- DEBUG: Controleer of iedereen die een korte pauze verdient die ook heeft gekregen ---
+korte_pauze_missers = []
+for s in studenten:
+    if s["naam"] in [pv["naam"] for pv in selected]:
+        continue  # pauzevlinders zelf niet
+    if s["naam"] in [lw["naam"] for lw in lange_werkers]:
+        continue  # lange werkers al gecheckt
+    if s["naam"] in korte_pauze_ontvangers:
+        continue  # heeft korte pauze
+    totaal_uren = student_totalen.get(s["naam"], 0)
+    if totaal_uren > 0:
+        korte_pauze_missers.append(s["naam"])
+if korte_pauze_missers:
+    log_feedback(f"❌ Geen korte pauze gevonden voor: {korte_pauze_missers}")
+else:
+    log_feedback("✅ Iedereen die een korte pauze verdient heeft er één gekregen.")
 
 # -----------------------------
 # Opslaan in hetzelfde unieke bestand als DEEL 3
@@ -1515,6 +1579,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
