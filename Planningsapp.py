@@ -1006,9 +1006,8 @@ def pv_kan_attr(pv, attr):
         return True
     return base in pv_cap_set.get(pv["naam"], set())
 
-# Willekeurige volgorde van pauzeplekken (pv-rij x kolom) om lege cellen random te spreiden
-slot_order = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
-random.shuffle(slot_order)  # <— kern om lege plekken later willekeurig te verspreiden
+# Gesorteerde volgorde van pauzeplekken (pv-rij x kolom) zodat altijd de vroegste optie wordt gekozen
+slot_order = [(pv, pv_row, col) for (pv, pv_row) in sorted(pv_rows, key=lambda x: x[1]) for col in sorted(pauze_cols)]
 
 def plaats_student(student, harde_mode=False):
     """
@@ -1409,5 +1408,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
