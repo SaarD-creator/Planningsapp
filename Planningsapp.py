@@ -649,6 +649,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1210,7 +1212,16 @@ def plan_korte_pauzes_lange_werkers():
                 for idx in range(min_kort_idx, len(pauze_cols)):
                     col = pauze_cols[idx]
                     cel = ws_pauze.cell(pv_row, col)
+                    boven_cel = ws_pauze.cell(pv_row-1, col)
                     if cel.value in [None, ""] and naam not in korte_pauze_gegeven:
+                        # Vul attractie boven de naam
+                        # Zoek attractie op dit tijdstip
+                        header = ws_pauze.cell(1, col).value
+                        uur = parse_header_uur(header)
+                        attractie = vind_attractie_op_uur(naam, uur)
+                        boven_cel.value = attractie
+                        boven_cel.alignment = center_align
+                        boven_cel.border = thin_border
                         cel.value = naam
                         cel.fill = lichtpaars_fill
                         cel.alignment = center_align
@@ -1293,7 +1304,15 @@ for pv, pv_row in pv_rows:
         for idx in range(min_kort_idx, len(pauze_cols)):
             col = pauze_cols[idx]
             cel = ws_pauze.cell(pv_row, col)
+            boven_cel = ws_pauze.cell(pv_row-1, col)
             if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
+                # Vul attractie boven de naam
+                header = ws_pauze.cell(1, col).value
+                uur = parse_header_uur(header)
+                attractie = vind_attractie_op_uur(naam, uur)
+                boven_cel.value = attractie
+                boven_cel.alignment = center_align
+                boven_cel.border = thin_border
                 cel.value = naam
                 cel.fill = lichtpaars_fill
                 cel.alignment = center_align
@@ -1306,7 +1325,14 @@ for pv, pv_row in pv_rows:
             for idx in range(lange_blok_einde+1, len(pauze_cols)):
                 col = pauze_cols[idx]
                 cel = ws_pauze.cell(pv_row, col)
+                boven_cel = ws_pauze.cell(pv_row-1, col)
                 if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
+                    header = ws_pauze.cell(1, col).value
+                    uur = parse_header_uur(header)
+                    attractie = vind_attractie_op_uur(naam, uur)
+                    boven_cel.value = attractie
+                    boven_cel.alignment = center_align
+                    boven_cel.border = thin_border
                     cel.value = naam
                     cel.fill = lichtpaars_fill
                     cel.alignment = center_align
@@ -1335,7 +1361,14 @@ for pv, pv_row in pv_rows:
         for idx in range(min_kort_idx, len(pauze_cols)):
             col = pauze_cols[idx]
             cel = ws_pauze.cell(pv_row, col)
+            boven_cel = ws_pauze.cell(pv_row-1, col)
             if cel.value in [None, ""] and naam not in korte_pauze_gegeven_pv:
+                header = ws_pauze.cell(1, col).value
+                uur = parse_header_uur(header)
+                attractie = vind_attractie_op_uur(naam, uur)
+                boven_cel.value = attractie
+                boven_cel.alignment = center_align
+                boven_cel.border = thin_border
                 cel.value = naam
                 cel.fill = lichtpaars_fill
                 cel.alignment = center_align
