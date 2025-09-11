@@ -1335,25 +1335,30 @@ for pv, pv_row in pv_rows:
         if lengte >= 2:
             lange_blok_einde = start + lengte - 1
             break
-    # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze, NIET in de eerste 12 kwartieren (tenzij <=6u open)
     def is_toegestaan_pv_col(col):
         if len(open_uren) <= 6:
             return True
         return col not in get_verboden_korte_pauze_kolommen()
+    geplaatst = False
+    # Probeer flexibel: eerst 10-16 blokjes afstand, dan afbouwen tot 1
     if lange_blok_einde is not None:
-        min_kort_idx = lange_blok_einde + 10
-        for idx in range(min_kort_idx, len(pauze_cols)):
-            col = pauze_cols[idx]
-            if not is_toegestaan_pv_col(col):
-                continue
-            cel = ws_pauze.cell(pv_row, col)
-            if cel.value in [None, ""]:
-                cel.value = pv["naam"]
-                cel.fill = lichtpaars_fill
-                cel.alignment = center_align
-                cel.border = thin_border
+        for min_blokjes in range(10, 0, -1):
+            min_kort_idx = lange_blok_einde + min_blokjes
+            for idx in range(min_kort_idx, len(pauze_cols)):
+                col = pauze_cols[idx]
+                if not is_toegestaan_pv_col(col):
+                    continue
+                cel = ws_pauze.cell(pv_row, col)
+                if cel.value in [None, ""]:
+                    cel.value = pv["naam"]
+                    cel.fill = lichtpaars_fill
+                    cel.alignment = center_align
+                    cel.border = thin_border
+                    geplaatst = True
+                    break
+            if geplaatst:
                 break
-    else:
+    if not geplaatst:
         # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
         # Zoek globaal het laatste dubbele blok in de sheet (over alle pauzevlinders)
         laatste_dubbel_idx = -1
@@ -1376,6 +1381,18 @@ for pv, pv_row in pv_rows:
             col = pauze_cols[idx]
             if not is_toegestaan_pv_col(col):
                 continue
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value in [None, ""]:
+                cel.value = pv["naam"]
+                cel.fill = lichtpaars_fill
+                cel.alignment = center_align
+                cel.border = thin_border
+                geplaatst = True
+                break
+    # Als nog niet gelukt: forceer korte pauze in verboden blokje na de lange pauze
+    if lange_blok_einde is not None and not geplaatst:
+        for idx in range(lange_blok_einde+1, len(pauze_cols)):
+            col = pauze_cols[idx]
             cel = ws_pauze.cell(pv_row, col)
             if cel.value in [None, ""]:
                 cel.value = pv["naam"]
@@ -1552,9 +1569,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
-
 
 
 
