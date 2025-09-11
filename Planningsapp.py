@@ -650,9 +650,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -938,13 +935,15 @@ def parse_header_uur(header):
     except:
         return None
 
-# ---- Pauze-restrictie: geen korte pauze in eerste drie pauzevlinderuren (tenzij <=6u open) ----
-def is_korte_pauze_toegestaan(uur):
-    """Return True als korte pauze in dit uur mag vallen volgens de restrictie."""
+# ---- Pauze-restrictie: geen korte pauze in eerste 12 kwartieren van de pauzeplanning (tenzij <=6u open) ----
+def get_verboden_korte_pauze_kolommen():
+    """Geeft de kolomnummers van de eerste 12 kwartieren in ws_pauze (B t/m M)."""
+    return list(range(2, 14))  # kolommen 2 t/m 13 (B t/m M)
+
+def is_korte_pauze_toegestaan_col(col):
     if len(open_uren) <= 6:
         return True
-    eerste_drie = required_pauze_hours[:3]
-    return uur not in eerste_drie
+    return col not in get_verboden_korte_pauze_kolommen()
 
 def normalize_attr(name):
     """Normaliseer attractienaam zodat 'X 2' telt als 'X'; trim & lower-case voor vergelijking."""
@@ -1095,7 +1094,7 @@ def plaats_student(student, harde_mode=False):
                         for min_blokjes in range(10, 17):
                             for j in range(i+min_blokjes, len(uur_col_pairs)):
                                 uur_kort, col_kort = uur_col_pairs[j]
-                                if not is_korte_pauze_toegestaan(uur_kort):
+                                if not is_korte_pauze_toegestaan_col(col_kort):
                                     continue
                                 attr_kort = vind_attractie_op_uur(naam, uur_kort)
                                 if not attr_kort:
@@ -1134,7 +1133,7 @@ def plaats_student(student, harde_mode=False):
                             for min_blokjes in range(9, 0, -1):
                                 for j in range(i+min_blokjes, len(uur_col_pairs)):
                                     uur_kort, col_kort = uur_col_pairs[j]
-                                    if not is_korte_pauze_toegestaan(uur_kort):
+                                    if not is_korte_pauze_toegestaan_col(col_kort):
                                         continue
                                     attr_kort = vind_attractie_op_uur(naam, uur_kort)
                                     if not attr_kort:
@@ -1225,8 +1224,6 @@ def plaats_student(student, harde_mode=False):
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
-        if not is_korte_pauze_toegestaan(uur):
-            continue
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
@@ -1234,6 +1231,8 @@ def plaats_student(student, harde_mode=False):
             col_header = ws_pauze.cell(1, col).value
             col_uur = parse_header_uur(col_header)
             if col_uur != uur:
+                continue
+            if not is_korte_pauze_toegestaan_col(col):
                 continue
             if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
                 continue
@@ -1413,14 +1412,36 @@ for pv, pv_row in pv_rows:
                 korte_pauze_ontvangers.add(str(cel.value).strip())
 
 
+
+# ---- Korte pauze voor ALLE studenten (ook <=6u, behalve pauzevlinders en lange werkers) ----
+# --- Houd bij wie al een korte pauze heeft gekregen ---
+korte_pauze_ontvangers = set()
+# Zoek alle namen die al een korte pauze hebben in het pauzeoverzicht
+for pv, pv_row in pv_rows:
+    for col in pauze_cols:
+        cel = ws_pauze.cell(pv_row, col)
+        if cel.value and str(cel.value).strip() != "":
+            # Check of het een korte pauze is (enkel blok, niet dubbel)
+            idx = pauze_cols.index(col)
+            is_lange = False
+            if idx+1 < len(pauze_cols):
+                next_col = pauze_cols[idx+1]
+                cel_next = ws_pauze.cell(pv_row, next_col)
+                if cel_next.value == cel.value:
+                    is_lange = True
+            if idx > 0:
+                prev_col = pauze_cols[idx-1]
+                prev_cel = ws_pauze.cell(pv_row, prev_col)
+                if prev_cel.value == cel.value:
+                    is_lange = True
+            if not is_lange:
+                korte_pauze_ontvangers.add(str(cel.value).strip())
+
+# Nieuwe logica: alle studenten krijgen restrictie, waarschuwing als het niet lukt
+niet_geplaatste_korte_pauze = []
 for s in studenten:
-    if s["naam"] in [pv["naam"] for pv in selected]:
-        continue  # sla pauzevlinders zelf over
-    if s["naam"] in [lw["naam"] for lw in lange_werkers]:
-        continue  # sla lange werkers over (die zijn al behandeld)
     if s["naam"] in korte_pauze_ontvangers:
         continue  # deze student heeft al een korte pauze
-    # Probeer een korte pauze toe te wijzen
     naam = s["naam"]
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) > 2:
@@ -1434,8 +1455,6 @@ for s in studenten:
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
-        if not is_korte_pauze_toegestaan(uur):
-            continue
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
@@ -1443,6 +1462,8 @@ for s in studenten:
             col_header = ws_pauze.cell(1, col).value
             col_uur = parse_header_uur(col_header)
             if col_uur != uur:
+                continue
+            if not is_korte_pauze_toegestaan_col(col):
                 continue
             if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
                 continue
@@ -1462,6 +1483,9 @@ for s in studenten:
                 break
         if geplaatst:
             break
+    if not geplaatst:
+        niet_geplaatste_korte_pauze.append(naam)
+
 
 
 output = BytesIO()
@@ -1469,8 +1493,10 @@ wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
 if niet_geplaatst:
     log_feedback(f"⚠️ Nog niet geplaatst (controleer of pv's deze attracties kunnen): {[s['naam'] for s in niet_geplaatst]}")
-else:
-    log_feedback("✅ Alle studenten die >6u werken kregen een pauzeplek (B–G gevuld waar mogelijk)")
+if niet_geplaatste_korte_pauze:
+    log_feedback(f"⚠️ Niet voor iedereen kon een korte pauze buiten de eerste 12 kwartieren worden ingepland: {niet_geplaatste_korte_pauze}")
+if not niet_geplaatst and not niet_geplaatste_korte_pauze:
+    log_feedback("✅ Alle studenten kregen een korte pauze buiten de eerste 12 kwartieren (of restrictie was niet van toepassing)")
 
 
 
@@ -1490,10 +1516,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
-
-
 
 
 
