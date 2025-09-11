@@ -648,6 +648,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -919,12 +920,29 @@ def parse_header_uur(header):
 
 # ---- Pauze-restrictie: geen korte pauze in eerste 12 kwartieren van de pauzeplanning (tenzij <=6u open) ----
 def get_verboden_korte_pauze_kolommen():
-    """Geeft de kolomnummers van de eerste 12 kwartieren in ws_pauze (B t/m M)."""
-    return list(range(2, 14))  # kolommen 2 t/m 13 (B t/m M)
+    """Geeft de kolomnummers van de eerste drie pauzevlinderuren in ws_pauze (behalve als <=6u open)."""
+    if len(open_uren) <= 6:
+        return []
+    # Zoek de kolommen die horen bij de eerste drie unieke uren in de header
+    uren = []
+    kolommen = []
+    for col in range(2, ws_pauze.max_column + 1):
+        header = ws_pauze.cell(1, col).value
+        if header and ("u" in str(header)):
+            uur = parse_header_uur(header)
+            if uur not in uren:
+                uren.append(uur)
+            if len(uren) <= 3:
+                kolommen.append(col)
+            if len(uren) == 3 and col not in kolommen:
+                break
+    return kolommen
 
 def is_korte_pauze_toegestaan_col(col):
+    # Als openingsuren <= 6, altijd toegestaan
     if len(open_uren) <= 6:
         return True
+    # Anders: niet in de eerste drie pauzevlinderuren
     return col not in get_verboden_korte_pauze_kolommen()
 
 def normalize_attr(name):
@@ -1434,7 +1452,7 @@ for s in studenten:
     slot_order_short = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
     random.shuffle(slot_order_short)
     geplaatst = False
-    # Eerst: probeer buiten de eerste 12 kwartieren
+    # Eerst: probeer buiten de eerste drie pauzevlinderuren
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
@@ -1466,7 +1484,7 @@ for s in studenten:
                 break
         if geplaatst:
             break
-    # Als niet gelukt: forceer korte pauze in een verboden blokje
+    # Als niet gelukt: forceer korte pauze in een verboden blokje (eerste drie pauzevlinderuren)
     if not geplaatst:
         for uur in random.sample(werk_uren, len(werk_uren)):
             if uur in verboden_uren:
@@ -1534,6 +1552,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
