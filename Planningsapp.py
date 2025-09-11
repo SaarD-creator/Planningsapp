@@ -655,7 +655,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -822,15 +821,16 @@ for row in range(2, ws_pauze.max_row+1, 3):
                 pass
             if col_uur is not None:
                 uur_col_pairs.append((col_uur, col))
-        # Bepaal eerste 3 pauzevlinderuren
+        # Bepaal eerste 3 unieke pauzevlinderuren
         eerste3uren = sorted(set([u for u, _ in uur_col_pairs]))[:3]
-        eerste3cols = [col for u, col in uur_col_pairs if u in eerste3uren]
-        restcols = [col for u, col in uur_col_pairs if u not in eerste3uren]
+        # Alleen lange pauzes in de eerste 3 pauzevlinderuren
+        lange_pauze_cols = [col for u, col in uur_col_pairs if u in eerste3uren]
+        korte_pauze_cols = [col for u, col in uur_col_pairs if u not in eerste3uren]
         # Random verdeling van lange pauzes in eerste 3 uur
-        random.shuffle(eerste3cols)
+        random.shuffle(lange_pauze_cols)
         lange_pauze_aantal = 2  # standaard 2 lange pauzes per pauzevlinder
         geplaatste_lange = 0
-        for col in eerste3cols:
+        for col in lange_pauze_cols:
             cel = ws_pauze.cell(row + 1, col)
             if cel.value in [None, ""]:
                 cel.value = naam_cel
@@ -839,11 +839,11 @@ for row in range(2, ws_pauze.max_row+1, 3):
                 geplaatste_lange += 1
                 if geplaatste_lange >= lange_pauze_aantal:
                     break
-        # Random verdeling van korte pauzes in resterende tijd
-        random.shuffle(restcols)
+        # Random verdeling van korte pauzes in resterende tijd (buiten eerste 3 uur)
+        random.shuffle(korte_pauze_cols)
         korte_pauze_aantal = 1  # standaard 1 korte pauze per pauzevlinder
         geplaatste_korte = 0
-        for col in restcols:
+        for col in korte_pauze_cols:
             cel = ws_pauze.cell(row + 1, col)
             if cel.value in [None, ""]:
                 cel.value = naam_cel
@@ -1483,9 +1483,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
-
 
 
 
