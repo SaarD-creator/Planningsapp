@@ -1432,6 +1432,7 @@ for s in studenten:
     slot_order_short = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
     random.shuffle(slot_order_short)
     geplaatst = False
+    # Eerst: probeer buiten de eerste 12 kwartieren
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
@@ -1463,8 +1464,43 @@ for s in studenten:
                 break
         if geplaatst:
             break
+    # Als niet gelukt: forceer korte pauze in een verboden blokje
+    if not geplaatst:
+        for uur in random.sample(werk_uren, len(werk_uren)):
+            if uur in verboden_uren:
+                continue
+            attr = vind_attractie_op_uur(naam, uur)
+            if not attr:
+                continue
+            for (pv, pv_row, col) in slot_order_short:
+                col_header = ws_pauze.cell(1, col).value
+                col_uur = parse_header_uur(col_header)
+                if col_uur != uur:
+                    continue
+                # nu mag het ook in een verboden kolom
+                if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                    continue
+                cel = ws_pauze.cell(pv_row, col)
+                boven_cel = ws_pauze.cell(pv_row - 1, col)
+                current_val = cel.value
+                if current_val in [None, ""]:
+                    boven_cel.value = attr
+                    boven_cel.alignment = center_align
+                    boven_cel.border = thin_border
+                    cel.value = naam
+                    cel.alignment = center_align
+                    cel.border = thin_border
+                    cel.fill = lichtpaars_fill
+                    korte_pauze_ontvangers.add(naam)
+                    geplaatst = True
+                    break
+            if geplaatst:
+                break
     if not geplaatst:
         niet_geplaatste_korte_pauze.append(naam)
+    elif naam not in korte_pauze_ontvangers:
+        # fallback: als om een of andere reden niet geregistreerd
+        korte_pauze_ontvangers.add(naam)
 
 
 
@@ -1474,7 +1510,7 @@ output.seek(0)  # Zorg dat lezen vanaf begin kan
 if niet_geplaatst:
     log_feedback(f"⚠️ Nog niet geplaatst (controleer of pv's deze attracties kunnen): {[s['naam'] for s in niet_geplaatst]}")
 if niet_geplaatste_korte_pauze:
-    log_feedback(f"⚠️ Niet voor iedereen kon een korte pauze buiten de eerste 12 kwartieren worden ingepland: {niet_geplaatste_korte_pauze}")
+    log_feedback(f"⚠️ Niet voor iedereen kon een korte pauze buiten de eerste 12 kwartieren worden ingepland (maar iedereen heeft nu wel een korte pauze): {niet_geplaatste_korte_pauze}")
 if not niet_geplaatst and not niet_geplaatste_korte_pauze:
     log_feedback("✅ Alle studenten kregen een korte pauze buiten de eerste 12 kwartieren (of restrictie was niet van toepassing)")
 
@@ -1496,6 +1532,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
