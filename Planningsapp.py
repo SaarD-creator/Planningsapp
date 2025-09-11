@@ -652,6 +652,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -791,6 +793,26 @@ for row in ws_planning.iter_rows(min_row=2, values_only=True):
 
 # Loop door pauzevlinders in Werkblad "Pauzevlinders"
 
+## --- BEGIN: Restricties lange/korte pauzeuren ---
+# Bepaal de eerste drie pauzevlinderuren (op basis van headers in ws_pauze)
+eerste_drie_uren = []
+for col in sorted(pauze_cols):
+    header = ws_pauze.cell(1, col).value
+    uur = None
+    try:
+        if header:
+            s = str(header).strip()
+            if "u" in s:
+                uur = int(s.split("u")[0])
+            elif ":" in s:
+                uur = int(s.split(":")[0])
+    except:
+        pass
+    if uur is not None and uur not in eerste_drie_uren:
+        eerste_drie_uren.append(uur)
+    if len(eerste_drie_uren) == 3:
+        break
+
 # Pauzevlinders met >6u krijgen dubbele lange pauze (2 blokjes na elkaar)
 for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen + 1 lege rij
     naam_cel = ws_pauze.cell(row + 1, 1).value
@@ -798,9 +820,7 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
         continue
     totaal_uren = student_totalen.get(naam_cel, 0)
     if totaal_uren > 6:
-        # Zoek alle pauzekolommen
         pauze_cols_sorted = sorted(pauze_cols)
-        # Zoek alle (uur, col) paren
         uur_col_pairs = []
         for col in pauze_cols_sorted:
             col_header = ws_pauze.cell(1, col).value
@@ -809,16 +829,15 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
                 if col_header:
                     s = str(col_header).strip()
                     if "u" in s:
-                        parts = s.split("u")
-                        col_uur = int(parts[0])
+                        col_uur = int(s.split("u")[0])
                     elif ":" in s:
                         col_uur = int(s.split(":")[0])
             except:
                 pass
+            # Restrictie: alleen in eerste drie uren als open_uren > 6
+            if len(open_uren) > 6 and (col_uur not in eerste_drie_uren):
+                continue
             if col_uur is not None:
-                # Alleen in eerste drie pauzevlinderuren als openingsuren > 6
-                if exclusief_lange_pauze_uren and col_uur not in exclusief_lange_pauze_uren:
-                    continue
                 uur_col_pairs.append((col_uur, col))
         geplaatst = False
         for i in range(len(uur_col_pairs)-1):
@@ -841,6 +860,7 @@ for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen +
             ws_pauze.cell(row + 1, random_col, naam_cel)
             ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
             ws_pauze.cell(row + 1, random_col).border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+## --- EINDE: Restricties lange/korte pauzeuren ---
 
 # ---- Lege naamcellen inkleuren ----
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
@@ -1287,7 +1307,7 @@ for pv, pv_row in pv_rows:
         if cel.value in [None, ""]:
             cel.fill = naam_leeg_fill
         else:
-            # Check of dit een lange pauze is (dubbele blok: zelfde naam in 2 naast elkaar liggende cellen)
+            # Check of dit een lange pauze is (dubbel blok: zelfde naam in 2 naast elkaar liggende cellen)
             is_langepauze = False
             # Kijk vooruit: als deze en de volgende cel dezelfde naam hebben, kleur beide groen
             if idx+1 < len(pauze_cols):
@@ -1397,6 +1417,8 @@ for pv, pv_row in pv_rows:
             if not is_lange:
                 korte_pauze_ontvangers.add(str(cel.value).strip())
 
+
+# --- Korte pauze toewijzing met restrictie: niet in eerste drie uren als open_uren > 6 ---
 for s in studenten:
     if s["naam"] in [pv["naam"] for pv in selected]:
         continue  # sla pauzevlinders zelf over
@@ -1404,7 +1426,6 @@ for s in studenten:
         continue  # sla lange werkers over (die zijn al behandeld)
     if s["naam"] in korte_pauze_ontvangers:
         continue  # deze student heeft al een korte pauze
-    # Probeer een korte pauze toe te wijzen
     naam = s["naam"]
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) > 2:
@@ -1417,6 +1438,9 @@ for s in studenten:
     geplaatst = False
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
+            continue
+        # Restrictie: geen korte pauze in eerste drie uren als open_uren > 6
+        if len(open_uren) > 6 and uur in eerste_drie_uren:
             continue
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
@@ -1467,6 +1491,9 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
+
 
 
 
