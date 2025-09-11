@@ -654,7 +654,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1409,19 +1408,28 @@ for pv, pv_row in pv_rows:
                 korte_pauze_ontvangers.add(str(cel.value).strip())
 
 for s in studenten:
+
     if s["naam"] in [pv["naam"] for pv in selected]:
         continue  # sla pauzevlinders zelf over
     if s["naam"] in [lw["naam"] for lw in lange_werkers]:
         continue  # sla lange werkers over (die zijn al behandeld)
     if s["naam"] in korte_pauze_ontvangers:
         continue  # deze student heeft al een korte pauze
-    # Probeer een korte pauze toe te wijzen
     naam = s["naam"]
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) > 2:
         verboden_uren = {werk_uren[0], werk_uren[-1]}
     else:
         verboden_uren = set(werk_uren)
+    # Bepaal eerste 3 pauzevlinderuren (zoals bij lange pauzes)
+    alle_pauze_uren = []
+    for col in sorted(pauze_cols):
+        col_header = ws_pauze.cell(1, col).value
+        col_uur = parse_header_uur(col_header)
+        if col_uur is not None:
+            alle_pauze_uren.append(col_uur)
+    eerste3uren = sorted(set(alle_pauze_uren))[:3]
+    # Alleen korte pauzes buiten de eerste 3 pauzevlinderuren
     pauze_cols_sorted = sorted(pauze_cols)
     slot_order_short = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
     random.shuffle(slot_order_short)
@@ -1429,6 +1437,8 @@ for s in studenten:
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
+        if uur in eerste3uren:
+            continue  # geen korte pauze in eerste 3 pauzevlinderuren
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
@@ -1483,6 +1493,10 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
+
+
 
 
 
