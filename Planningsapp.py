@@ -648,7 +648,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1058,73 +1057,29 @@ def plaats_student(student, harde_mode=False):
                     if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
                         continue
                     mogelijke_dubbel.append((pv, pv_row, col1, col2, boven_cel1, boven_cel2, attr1, attr2))
-    if not reg["lange"] and mogelijke_dubbel:
-        pv, pv_row, col1, col2, boven_cel1, boven_cel2, attr1, attr2 = random.choice(mogelijke_dubbel)
-        boven_cel1.value = attr1
-        boven_cel1.alignment = center_align
-        boven_cel1.border = thin_border
-        boven_cel2.value = attr2
-        boven_cel2.alignment = center_align
-        boven_cel2.border = thin_border
-        cel1 = ws_pauze.cell(pv_row, col1)
-        cel2 = ws_pauze.cell(pv_row, col2)
-        cel1.value = naam
-        cel1.alignment = center_align
-        cel1.border = thin_border
-        cel2.value = naam
-        cel2.alignment = center_align
-        cel2.border = thin_border
-        reg["lange"] = True
-        # Nu: zoek een korte pauze, eerst 10 t/m 16 blokjes afstand, dan 9 t/m 1
-        if not reg["korte"]:
-            found = False
-            # Eerst 10 t/m 16 blokjes afstand
-            for min_blokjes in range(10, 17):
-                for i in range(len(uur_col_pairs)):
-                    if uur_col_pairs[i][1] == col2:
-                        start_idx = i
-                        break
-                else:
-                    continue
-                for j in range(start_idx+min_blokjes, len(uur_col_pairs)):
-                    uur_kort, col_kort = uur_col_pairs[j]
-                    if not is_korte_pauze_toegestaan_col(col_kort):
-                        continue
-                    attr_kort = vind_attractie_op_uur(naam, uur_kort)
-                    if not attr_kort:
-                        continue
-                    for (pv2, pv_row2, _) in slot_order:
-                        if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
-                            continue
-                        cel_kort = ws_pauze.cell(pv_row2, col_kort)
-                        boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
-                        if cel_kort.value in [None, ""]:
-                            boven_cel_kort.value = attr_kort
-                            boven_cel_kort.alignment = center_align
-                            boven_cel_kort.border = thin_border
-                            cel_kort.value = naam
-                            cel_kort.alignment = center_align
-                            cel_kort.border = thin_border
-                            reg["korte"] = True
-                            found = True
-                            return True
-                        elif harde_mode:
-                            occupant = str(cel_kort.value).strip() if cel_kort.value else ""
-                            if occupant not in lange_werkers_names:
-                                boven_cel_kort.value = attr_kort
-                                boven_cel_kort.alignment = center_align
-                                boven_cel_kort.border = thin_border
-                                cel_kort.value = naam
-                                cel_kort.alignment = center_align
-                                cel_kort.border = thin_border
-                                reg["korte"] = True
-                                found = True
-                                return True
-                if found:
-                    break
-            # Dan 9 t/m 1 blokjes afstand
-            if not found:
-                for min_blokjes in range(9, 0, -1):
+    if not reg["lange"]:
+        if mogelijke_dubbel:
+            pv, pv_row, col1, col2, boven_cel1, boven_cel2, attr1, attr2 = random.choice(mogelijke_dubbel)
+            boven_cel1.value = attr1
+            boven_cel1.alignment = center_align
+            boven_cel1.border = thin_border
+            boven_cel2.value = attr2
+            boven_cel2.alignment = center_align
+            boven_cel2.border = thin_border
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            cel1.value = naam
+            cel1.alignment = center_align
+            cel1.border = thin_border
+            cel2.value = naam
+            cel2.alignment = center_align
+            cel2.border = thin_border
+            reg["lange"] = True
+            # Nu: zoek een korte pauze, eerst 10 t/m 16 blokjes afstand, dan 9 t/m 1
+            if not reg["korte"]:
+                found = False
+                # Eerst 10 t/m 16 blokjes afstand
+                for min_blokjes in range(10, 17):
                     for i in range(len(uur_col_pairs)):
                         if uur_col_pairs[i][1] == col2:
                             start_idx = i
@@ -1167,8 +1122,75 @@ def plaats_student(student, harde_mode=False):
                                     return True
                     if found:
                         break
-        # Geen korte pauze gevonden, maar lange pauze is wel gezet
-    return True
+                # Dan 9 t/m 1 blokjes afstand
+                if not found:
+                    for min_blokjes in range(9, 0, -1):
+                        for i in range(len(uur_col_pairs)):
+                            if uur_col_pairs[i][1] == col2:
+                                start_idx = i
+                                break
+                        else:
+                            continue
+                        for j in range(start_idx+min_blokjes, len(uur_col_pairs)):
+                            uur_kort, col_kort = uur_col_pairs[j]
+                            if not is_korte_pauze_toegestaan_col(col_kort):
+                                continue
+                            attr_kort = vind_attractie_op_uur(naam, uur_kort)
+                            if not attr_kort:
+                                continue
+                            for (pv2, pv_row2, _) in slot_order:
+                                if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
+                                    continue
+                                cel_kort = ws_pauze.cell(pv_row2, col_kort)
+                                boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
+                                if cel_kort.value in [None, ""]:
+                                    boven_cel_kort.value = attr_kort
+                                    boven_cel_kort.alignment = center_align
+                                    boven_cel_kort.border = thin_border
+                                    cel_kort.value = naam
+                                    cel_kort.alignment = center_align
+                                    cel_kort.border = thin_border
+                                    reg["korte"] = True
+                                    found = True
+                                    return True
+                                elif harde_mode:
+                                    occupant = str(cel_kort.value).strip() if cel_kort.value else ""
+                                    if occupant not in lange_werkers_names:
+                                        boven_cel_kort.value = attr_kort
+                                        boven_cel_kort.alignment = center_align
+                                        boven_cel_kort.border = thin_border
+                                        cel_kort.value = naam
+                                        cel_kort.alignment = center_align
+                                        cel_kort.border = thin_border
+                                        reg["korte"] = True
+                                        found = True
+                                        return True
+                        if found:
+                            break
+            # Geen korte pauze gevonden, maar lange pauze is wel gezet
+            return True
+        else:
+            # Geen dubbel blokje mogelijk: plaats een enkel blokje in de eerste 12 kwartieren
+            for col in eerste12:
+                col_header = ws_pauze.cell(1, col).value
+                col_uur = parse_header_uur(col_header)
+                if col_uur not in werk_uren_set or col_uur in verboden_uren:
+                    continue
+                for (pv, pv_row, _) in slot_order:
+                    cel = ws_pauze.cell(pv_row, col)
+                    boven_cel = ws_pauze.cell(pv_row-1, col)
+                    if cel.value in [None, ""]:
+                        attr = vind_attractie_op_uur(naam, col_uur)
+                        if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                            continue
+                        boven_cel.value = attr
+                        boven_cel.alignment = center_align
+                        boven_cel.border = thin_border
+                        cel.value = naam
+                        cel.alignment = center_align
+                        cel.border = thin_border
+                        reg["lange"] = True
+                        return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     # Korte pauze alleen als nog niet toegekend
     for uur in random.sample(werk_uren, len(werk_uren)):
@@ -1474,5 +1496,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
+
 
 
