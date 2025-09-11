@@ -654,6 +654,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1041,7 +1042,10 @@ def plaats_student(student, harde_mode=False):
     for col in pauze_cols_sorted:
         col_header = ws_pauze.cell(1, col).value
         col_uur = parse_header_uur(col_header)
+        # Korte pauzes niet in exclusief_lange_pauze_uren als openingsuren > 6
         if col_uur is not None and col_uur in werk_uren_set and col_uur not in verboden_uren:
+            if exclusief_lange_pauze_uren and col_uur in exclusief_lange_pauze_uren:
+                continue  # sla deze uren over voor korte pauzes
             uur_col_pairs.append((col_uur, col))
 
     # Houd bij of deze student al een lange/korte pauze heeft gekregen
@@ -1426,6 +1430,9 @@ for s in studenten:
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
+        # Korte pauzes niet in exclusief_lange_pauze_uren als openingsuren > 6
+        if exclusief_lange_pauze_uren and uur in exclusief_lange_pauze_uren:
+            continue
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
@@ -1480,4 +1487,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
