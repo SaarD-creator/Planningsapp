@@ -1424,6 +1424,8 @@ for s in studenten:
         continue  # deze student heeft al een korte pauze
     naam = s["naam"]
     werk_uren = get_student_work_hours(naam)
+    if not werk_uren:
+        continue  # student werkt niet deze dag, sla over
     if len(werk_uren) > 2:
         verboden_uren = {werk_uren[0], werk_uren[-1]}
     else:
@@ -1532,6 +1534,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
