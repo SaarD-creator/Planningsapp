@@ -653,6 +653,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -748,6 +749,12 @@ output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 
 #DEEL 3
+# -----------------------------
+# Reserveer eerste 3 pauzevlinderuren voor lange pauzes als openingsuren > 6 uur
+exclusief_lange_pauze_uren = []
+if len(open_uren) > 6:
+    pauzeuren = compute_pauze_hours(open_uren)
+    exclusief_lange_pauze_uren = sorted(pauzeuren)[:3]
 #oooooooooooooooooooo
 #oooooooooooooooooooo
 
@@ -1473,5 +1480,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
