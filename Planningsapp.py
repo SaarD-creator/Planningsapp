@@ -1345,11 +1345,17 @@ for pv, pv_row in pv_rows:
         if lengte >= 2:
             lange_blok_einde = start + lengte - 1
             break
-    # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze
+    # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze, NIET in de eerste 12 kwartieren (tenzij <=6u open)
+    def is_toegestaan_pv_col(col):
+        if len(open_uren) <= 6:
+            return True
+        return col not in get_verboden_korte_pauze_kolommen()
     if lange_blok_einde is not None:
         min_kort_idx = lange_blok_einde + 10
         for idx in range(min_kort_idx, len(pauze_cols)):
             col = pauze_cols[idx]
+            if not is_toegestaan_pv_col(col):
+                continue
             cel = ws_pauze.cell(pv_row, col)
             if cel.value in [None, ""]:
                 cel.value = pv["naam"]
@@ -1378,6 +1384,8 @@ for pv, pv_row in pv_rows:
         min_kort_idx = laatste_dubbel_idx + 1 if laatste_dubbel_idx >= 0 else 0
         for idx in range(min_kort_idx, len(pauze_cols)):
             col = pauze_cols[idx]
+            if not is_toegestaan_pv_col(col):
+                continue
             cel = ws_pauze.cell(pv_row, col)
             if cel.value in [None, ""]:
                 cel.value = pv["naam"]
@@ -1516,6 +1524,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
