@@ -653,7 +653,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -794,15 +793,12 @@ for row in ws_planning.iter_rows(min_row=2, values_only=True):
 # Loop door pauzevlinders in Werkblad "Pauzevlinders"
 
 # Pauzevlinders met >6u krijgen dubbele lange pauze (2 blokjes na elkaar)
-
-# --- Nieuwe logica: random verdeling van lange pauzes in eerste 3 uur, korte pauzes in resterende tijd ---
-for row in range(2, ws_pauze.max_row+1, 3):
+for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen + 1 lege rij
     naam_cel = ws_pauze.cell(row + 1, 1).value
     if not naam_cel:
         continue
     totaal_uren = student_totalen.get(naam_cel, 0)
     if totaal_uren > 6:
-        # Zoek alle pauzekolommen en hun uren
         pauze_cols_sorted = sorted(pauze_cols)
         uur_col_pairs = []
         for col in pauze_cols_sorted:
@@ -820,37 +816,32 @@ for row in range(2, ws_pauze.max_row+1, 3):
                 pass
             if col_uur is not None:
                 uur_col_pairs.append((col_uur, col))
-        # Bepaal eerste 3 unieke pauzevlinderuren
-        eerste3uren = sorted(set([u for u, _ in uur_col_pairs]))[:3]
-        # Alleen lange pauzes in de eerste 3 pauzevlinderuren
-        lange_pauze_cols = [col for u, col in uur_col_pairs if u in eerste3uren]
-        korte_pauze_cols = [col for u, col in uur_col_pairs if u not in eerste3uren]
-        # Random verdeling van lange pauzes in eerste 3 uur
-        random.shuffle(lange_pauze_cols)
-        lange_pauze_aantal = 2  # standaard 2 lange pauzes per pauzevlinder
-        geplaatste_lange = 0
-        for col in lange_pauze_cols:
-            cel = ws_pauze.cell(row + 1, col)
-            if cel.value in [None, ""]:
-                cel.value = naam_cel
-                cel.alignment = Alignment(horizontal="center", vertical="center")
-                cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-                geplaatste_lange += 1
-                if geplaatste_lange >= lange_pauze_aantal:
+        # Lange pauzes alleen in exclusief_lange_pauze_uren (indien openingsuren > 6)
+        lange_pauze_cols = [col for u, col in uur_col_pairs if (not exclusief_lange_pauze_uren or u in exclusief_lange_pauze_uren)]
+        korte_pauze_cols = [col for u, col in uur_col_pairs if (not exclusief_lange_pauze_uren or u not in exclusief_lange_pauze_uren)]
+        # Probeer 2 blokjes na elkaar te vinden voor lange pauze
+        geplaatst = False
+        for i in range(len(lange_pauze_cols)-1):
+            col1 = lange_pauze_cols[i]
+            col2 = lange_pauze_cols[i+1]
+            if col2 == col1 + 1:
+                cel1 = ws_pauze.cell(row + 1, col1)
+                cel2 = ws_pauze.cell(row + 1, col2)
+                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                    cel1.value = naam_cel
+                    cel2.value = naam_cel
+                    cel1.alignment = Alignment(horizontal="center", vertical="center")
+                    cel2.alignment = Alignment(horizontal="center", vertical="center")
+                    cel1.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+                    cel2.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+                    geplaatst = True
                     break
-        # Random verdeling van korte pauzes in resterende tijd (buiten eerste 3 uur)
-        random.shuffle(korte_pauze_cols)
-        korte_pauze_aantal = 1  # standaard 1 korte pauze per pauzevlinder
-        geplaatste_korte = 0
-        for col in korte_pauze_cols:
-            cel = ws_pauze.cell(row + 1, col)
-            if cel.value in [None, ""]:
-                cel.value = naam_cel
-                cel.alignment = Alignment(horizontal="center", vertical="center")
-                cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-                geplaatste_korte += 1
-                if geplaatste_korte >= korte_pauze_aantal:
-                    break
+        # Als geen dubbele blokjes mogelijk zijn, vul 1 blokje (oude logica, maar alleen in exclusieve uren)
+        if not geplaatst and lange_pauze_cols:
+            random_col = random.choice(lange_pauze_cols)
+            ws_pauze.cell(row + 1, random_col, naam_cel)
+            ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
+            ws_pauze.cell(row + 1, random_col).border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
 
 # ---- Lege naamcellen inkleuren ----
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
@@ -1408,28 +1399,19 @@ for pv, pv_row in pv_rows:
                 korte_pauze_ontvangers.add(str(cel.value).strip())
 
 for s in studenten:
-
     if s["naam"] in [pv["naam"] for pv in selected]:
         continue  # sla pauzevlinders zelf over
     if s["naam"] in [lw["naam"] for lw in lange_werkers]:
         continue  # sla lange werkers over (die zijn al behandeld)
     if s["naam"] in korte_pauze_ontvangers:
         continue  # deze student heeft al een korte pauze
+    # Probeer een korte pauze toe te wijzen
     naam = s["naam"]
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) > 2:
         verboden_uren = {werk_uren[0], werk_uren[-1]}
     else:
         verboden_uren = set(werk_uren)
-    # Bepaal eerste 3 pauzevlinderuren (zoals bij lange pauzes)
-    alle_pauze_uren = []
-    for col in sorted(pauze_cols):
-        col_header = ws_pauze.cell(1, col).value
-        col_uur = parse_header_uur(col_header)
-        if col_uur is not None:
-            alle_pauze_uren.append(col_uur)
-    eerste3uren = sorted(set(alle_pauze_uren))[:3]
-    # Alleen korte pauzes buiten de eerste 3 pauzevlinderuren
     pauze_cols_sorted = sorted(pauze_cols)
     slot_order_short = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
     random.shuffle(slot_order_short)
@@ -1437,8 +1419,6 @@ for s in studenten:
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
-        if uur in eerste3uren:
-            continue  # geen korte pauze in eerste 3 pauzevlinderuren
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
@@ -1493,17 +1473,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
-
-
-
-
-
-
-
-
-
-
 
 
