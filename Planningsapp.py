@@ -1255,27 +1255,41 @@ def plaats_student(student, harde_mode=False):
     return False
 
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
-niet_geplaatst = []
-# Studenten in willekeurige volgorde proberen om vulling te spreiden
-for s in random.sample(lange_werkers, len(lange_werkers)):
-    if not plaats_student(s, harde_mode=False):
-        niet_geplaatst.append(s)
 
-# ---- Fase 2: iteratief, met gecontroleerd overschrijven van niet-lange-werkers ----
-# we herhalen meerdere passes om iedereen >6u te kunnen plaatsen
-max_passes = 12
-for _ in range(max_passes):
+# ---- Lange pauzes: randomisatie-reset tot alle lange pauzes geplaatst zijn, max 20 pogingen ----
+max_random_attempts = 20
+for attempt in range(max_random_attempts):
+    # Reset alle lange pauzes (dubbel blok) van lange werkers in ws_pauze
+    for pv, pv_row in pv_rows:
+        for col in pauze_cols:
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value and str(cel.value).strip() in lange_werkers_names:
+                cel.value = None
+                cel.fill = naam_leeg_fill
+    # Reset pauze_registry
+    if hasattr(plaats_student, "pauze_registry"):
+        plaats_student.pauze_registry = {}
+    niet_geplaatst = []
+    # Studenten in willekeurige volgorde proberen om vulling te spreiden
+    for s in random.sample(lange_werkers, len(lange_werkers)):
+        if not plaats_student(s, harde_mode=False):
+            niet_geplaatst.append(s)
+    # Fase 2: iteratief, met gecontroleerd overschrijven van niet-lange-werkers
+    max_passes = 12
+    for _ in range(max_passes):
+        if not niet_geplaatst:
+            break
+        rest = []
+        for s in random.sample(niet_geplaatst, len(niet_geplaatst)):
+            if not plaats_student(s, harde_mode=True):
+                rest.append(s)
+        if len(rest) == len(niet_geplaatst):
+            break
+        niet_geplaatst = rest
     if not niet_geplaatst:
-        break
-    rest = []
-    # Ook hier willekeurige volgorde voor extra spreiding
-    for s in random.sample(niet_geplaatst, len(niet_geplaatst)):
-        if not plaats_student(s, harde_mode=True):
-            rest.append(s)
-    # Als niets veranderde in een hele pass, stoppen we
-    if len(rest) == len(niet_geplaatst):
-        break
-    niet_geplaatst = rest
+        break  # gelukt
+else:
+    log_feedback("❌ Niet alle lange pauzes konden worden ingepland na 20 pogingen randomisatie-reset.")
 
 # ---- Lege naamcellen inkleuren (alleen de NAAM-rij; bovenliggende attractie-rij NIET kleuren) ----
 
@@ -1569,6 +1583,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
