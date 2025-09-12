@@ -1474,6 +1474,7 @@ for pv, pv_row in pv_rows:
                 pv_korte_pauze_count[pv["naam"]] += 1
 
 niet_geplaatste_korte_pauze = []
+
 for s in studenten:
     if s["naam"] in korte_pauze_ontvangers:
         continue  # deze student heeft al een korte pauze
@@ -1527,6 +1528,67 @@ for s in studenten:
     if not geplaatst:
         niet_geplaatste_korte_pauze.append(naam)
 
+# Iteratieve optimalisatie: verschuif korte pauzes van "rijke" naar "arme" pauzevlinders
+max_opt_passes = 10
+for _ in range(max_opt_passes):
+    # Zoek max en min aantal korte pauzes
+    if not pv_korte_pauze_count:
+        break
+    max_pv = max(pv_korte_pauze_count, key=lambda k: pv_korte_pauze_count[k])
+    min_pv = min(pv_korte_pauze_count, key=lambda k: pv_korte_pauze_count[k])
+    if pv_korte_pauze_count[max_pv] - pv_korte_pauze_count[min_pv] <= 1:
+        break  # verdeling is al redelijk
+    # Zoek een korte pauze van max_pv die overgezet kan worden naar min_pv
+    found = False
+    for col in pauze_cols:
+        pv_row_max = next((row for pv, row in pv_rows if pv["naam"] == max_pv), None)
+        pv_row_min = next((row for pv, row in pv_rows if pv["naam"] == min_pv), None)
+        if pv_row_max is None or pv_row_min is None:
+            continue
+        cel_max = ws_pauze.cell(pv_row_max, col)
+        naam = cel_max.value
+        if not naam or str(naam).strip() == "":
+            continue
+        # Check of het een korte pauze is (enkel blok, niet dubbel)
+        idx = pauze_cols.index(col)
+        is_lange = False
+        if idx+1 < len(pauze_cols):
+            next_col = pauze_cols[idx+1]
+            cel_next = ws_pauze.cell(pv_row_max, next_col)
+            if cel_next.value == cel_max.value:
+                is_lange = True
+        if idx > 0:
+            prev_col = pauze_cols[idx-1]
+            prev_cel = ws_pauze.cell(pv_row_max, prev_col)
+            if prev_cel.value == cel_max.value:
+                is_lange = True
+        if is_lange:
+            continue
+        # Mag min_pv deze attractie overnemen?
+        attr = ws_pauze.cell(pv_row_max-1, col).value
+        if not pv_kan_attr(next(pv for pv, _ in pv_rows if pv["naam"] == min_pv), attr):
+            continue
+        # Is de cel bij min_pv vrij?
+        cel_min = ws_pauze.cell(pv_row_min, col)
+        if cel_min.value not in [None, ""]:
+            continue
+        # Wissel de korte pauze van max_pv naar min_pv
+        cel_min.value = naam
+        cel_min.alignment = center_align
+        cel_min.border = thin_border
+        cel_min.fill = lichtpaars_fill
+        ws_pauze.cell(pv_row_min-1, col).value = attr
+        ws_pauze.cell(pv_row_min-1, col).alignment = center_align
+        ws_pauze.cell(pv_row_min-1, col).border = thin_border
+        cel_max.value = None
+        ws_pauze.cell(pv_row_max-1, col).value = None
+        pv_korte_pauze_count[max_pv] -= 1
+        pv_korte_pauze_count[min_pv] += 1
+        found = True
+        break
+    if not found:
+        break  # geen verschuiving meer mogelijk
+
 
 
 output = BytesIO()
@@ -1557,8 +1619,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
 
 
 
