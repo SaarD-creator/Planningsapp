@@ -652,6 +652,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -853,33 +855,7 @@ for pv, pv_row in pv_rows:
             ws_pauze.cell(pv_row, col).fill = naam_leeg_fill
 
 
-# -----------------------------
-# Opslaan in uniek bestand
-# -----------------------------
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-planning_bestand = f"Planning_{timestamp}.xlsx"
 
-# Maak in-memory bestand
-output = BytesIO()
-wb_out.save(output)
-output.seek(0)  # Zorg dat lezen vanaf begin kan
-
-
-ws_feedback = wb_out.create_sheet("Feedback")
-def log_feedback(msg):
-    """Voeg een regel toe in het feedback-werkblad."""
-    next_row = ws_feedback.max_row + 1
-    ws_feedback.cell(next_row, 1, msg)
-
-
-log_feedback(f"✅ Alle pauzevlinders die >6u werken kregen een extra pauzeplek (B–G) in {planning_bestand}")
-
-# --- doorschuif debuglog naar feedback sheet ---
-try:
-    for regel in doorschuif_debuglog:
-        log_feedback(regel)
-except Exception as e:
-    log_feedback(f"[DEBUGLOG ERROR] {e}")
 
 
 
@@ -1594,12 +1570,6 @@ for _ in range(max_opt_passes):
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
-if niet_geplaatst:
-    log_feedback(f"⚠️ Nog niet geplaatst (controleer of pv's deze attracties kunnen): {[s['naam'] for s in niet_geplaatst]}")
-if niet_geplaatste_korte_pauze:
-    log_feedback(f"⚠️ Niet voor iedereen kon een korte pauze buiten de eerste 12 kwartieren worden ingepland: {niet_geplaatste_korte_pauze}")
-if not niet_geplaatst and not niet_geplaatste_korte_pauze:
-    log_feedback("✅ Alle studenten kregen een korte pauze buiten de eerste 12 kwartieren (of restrictie was niet van toepassing)")
 
 
 
@@ -1619,7 +1589,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
