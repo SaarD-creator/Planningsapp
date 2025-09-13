@@ -650,7 +650,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -799,7 +798,7 @@ num_runs = 5
 for _run in range(num_runs):
     # Maak een deep copy van de relevante werkbladen en variabelen
     ws_pauze_tmp = wb_out.copy_worksheet(ws_pauze)
-    ws_pauze_tmp.title = f"Pauzevlinders_tmp"
+    ws_pauze_tmp.title = f"Pauzevlinders_tmp_{_run}"
     # Reset alle naamcellen
     for pv, pv_row in pv_rows:
         for col in pauze_cols:
@@ -864,9 +863,15 @@ for _run in range(num_runs):
 
 # Na alle runs: kopieer best_state naar ws_pauze
 if best_state is not None:
+
     for pv, pv_row in pv_rows:
         for col in pauze_cols:
             ws_pauze.cell(pv_row, col).value = best_state.cell(pv_row, col).value
+
+# ---- Verwijder tijdelijke werkbladen ----
+tmp_sheets = [ws for ws in wb_out.worksheets if ws.title.startswith("Pauzevlinders_tmp")]
+for ws in tmp_sheets:
+    wb_out.remove(ws)
 
 # ---- Lege naamcellen inkleuren ----
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
@@ -1699,7 +1704,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
