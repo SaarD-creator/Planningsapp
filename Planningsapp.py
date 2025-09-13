@@ -657,6 +657,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1571,6 +1573,84 @@ for _ in range(max_opt_passes):
 
 
 output = BytesIO()
+
+# --- FEEDBACK SHEET ---
+ws_feedback = wb_out.create_sheet("Feedback")
+row_fb = 1
+
+# 1. Lange werkers (>6u) zonder lange pauze
+lange_werkers_zonder_lange_pauze = []
+for s in lange_werkers:
+    naam = s["naam"]
+    # Zoek in ws_pauze of deze student een dubbele blok (lange pauze) heeft
+    heeft_lange = False
+    for pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols):
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value == naam:
+                # Check of volgende cel ook deze naam heeft (dubbele blok)
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze.cell(pv_row, next_col)
+                    if cel_next.value == naam:
+                        heeft_lange = True
+                        break
+        if heeft_lange:
+            break
+    if not heeft_lange:
+        lange_werkers_zonder_lange_pauze.append(naam)
+
+ws_feedback.cell(row_fb, 1, "Lange werkers (>6u) zonder lange pauze:")
+row_fb += 1
+if lange_werkers_zonder_lange_pauze:
+    for naam in lange_werkers_zonder_lange_pauze:
+        ws_feedback.cell(row_fb, 1, naam)
+        row_fb += 1
+else:
+    ws_feedback.cell(row_fb, 1, "Iedereen heeft een lange pauze gekregen.")
+    row_fb += 1
+
+# 2. Werkende studenten zonder korte pauze
+werkende_studenten = [s for s in studenten if student_totalen.get(s["naam"], 0) > 0]
+studenten_zonder_korte_pauze = []
+for s in werkende_studenten:
+    naam = s["naam"]
+    # Zoek in ws_pauze of deze student een korte pauze heeft (enkel blok, niet dubbel)
+    heeft_korte = False
+    for pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols):
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value == naam:
+                # Check of GEEN dubbele blok (dus geen lange pauze)
+                is_lange = False
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze.cell(pv_row, next_col)
+                    if cel_next.value == naam:
+                        is_lange = True
+                if idx > 0:
+                    prev_col = pauze_cols[idx-1]
+                    prev_cel = ws_pauze.cell(pv_row, prev_col)
+                    if prev_cel.value == naam:
+                        is_lange = True
+                if not is_lange:
+                    heeft_korte = True
+                    break
+        if heeft_korte:
+            break
+    if not heeft_korte:
+        studenten_zonder_korte_pauze.append(naam)
+
+ws_feedback.cell(row_fb, 1, "Werkende studenten zonder korte pauze:")
+row_fb += 1
+if studenten_zonder_korte_pauze:
+    for naam in studenten_zonder_korte_pauze:
+        ws_feedback.cell(row_fb, 1, naam)
+        row_fb += 1
+else:
+    ws_feedback.cell(row_fb, 1, "Iedereen heeft een korte pauze gekregen.")
+    row_fb += 1
+
 wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
 
@@ -1592,7 +1672,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
