@@ -654,6 +654,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1675,6 +1676,12 @@ for _ in range(max_wissel_passes):
             # Mag naam_zonder op deze plek een korte pauze hebben?
             if not kan_student_korte_pauze_op_plek(naam_zonder, pv_row, col):
                 continue
+            # Bepaal attractie voor naam_zonder op deze plek
+            col_header = ws_pauze.cell(1, col).value
+            col_uur = parse_header_uur(col_header)
+            attr_zonder = vind_attractie_op_uur(naam_zonder, col_uur)
+            if not attr_zonder:
+                continue
             # Mag naam_met elders een korte pauze krijgen?
             # Zoek alternatieve plek voor naam_met
             gevonden = False
@@ -1689,20 +1696,33 @@ for _ in range(max_wissel_passes):
                         continue
                     if not kan_student_korte_pauze_op_plek(naam_met, pv_row2, col2):
                         continue
+                    # Bepaal attractie voor naam_met op nieuwe plek
+                    col2_header = ws_pauze.cell(1, col2).value
+                    col2_uur = parse_header_uur(col2_header)
+                    attr_met = vind_attractie_op_uur(naam_met, col2_uur)
+                    if not attr_met:
+                        continue
                     # Wissel uitvoeren
                     # 1. naam_met uit oude plek halen
                     ws_pauze.cell(pv_row, col).value = None
                     ws_pauze.cell(pv_row, col).fill = naam_leeg_fill
+                    ws_pauze.cell(pv_row-1, col).value = None
                     # 2. naam_zonder op deze plek zetten
                     ws_pauze.cell(pv_row, col).value = naam_zonder
                     ws_pauze.cell(pv_row, col).fill = lichtpaars_fill
                     ws_pauze.cell(pv_row, col).alignment = center_align
                     ws_pauze.cell(pv_row, col).border = thin_border
+                    ws_pauze.cell(pv_row-1, col).value = attr_zonder
+                    ws_pauze.cell(pv_row-1, col).alignment = center_align
+                    ws_pauze.cell(pv_row-1, col).border = thin_border
                     # 3. naam_met op nieuwe plek zetten
                     ws_pauze.cell(pv_row2, col2).value = naam_met
                     ws_pauze.cell(pv_row2, col2).fill = lichtpaars_fill
                     ws_pauze.cell(pv_row2, col2).alignment = center_align
                     ws_pauze.cell(pv_row2, col2).border = thin_border
+                    ws_pauze.cell(pv_row2-1, col2).value = attr_met
+                    ws_pauze.cell(pv_row2-1, col2).alignment = center_align
+                    ws_pauze.cell(pv_row2-1, col2).border = thin_border
                     verbeterd = True
                     gevonden = True
                     break
@@ -1997,7 +2017,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
