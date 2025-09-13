@@ -1421,6 +1421,61 @@ for pv, pv_row in pv_rows:
                 cel.border = thin_border
                 break
 
+# ---- Lange pauze voor pauzevlinders die >6u werken ----
+pauzevlinders_zonder_lange_pauze = []
+for pv, pv_row in pv_rows:
+    naam = pv["naam"]
+    werk_uren = get_student_work_hours(naam)
+    if len(werk_uren) <= 6:
+        continue  # alleen voor lange werkers
+    # Zoek bestaande blokken met hun naam (voor korte pauze check)
+    blokken = []
+    idx = 0
+    while idx < len(pauze_cols):
+        col = pauze_cols[idx]
+        cel = ws_pauze.cell(pv_row, col)
+        if cel.value == naam:
+            lengte = 1
+            while idx+lengte < len(pauze_cols) and ws_pauze.cell(pv_row, pauze_cols[idx+lengte]).value == naam:
+                lengte += 1
+            blokken.append((idx, lengte))
+            idx += lengte
+        else:
+            idx += 1
+    # Zoek korte pauze (enkel blok)
+    korte_pauze_idx = None
+    for start, lengte in blokken:
+        if lengte == 1:
+            korte_pauze_idx = start
+            break
+    # Probeer een dubbele blok (lange pauze) te plaatsen, met minimaal 10 blokjes afstand tot korte pauze
+    geplaatst = False
+    for min_afstand in list(range(10, 0, -1)):
+        for idx in range(len(pauze_cols)-1):
+            # mag niet bestaande pauze overschrijven
+            if korte_pauze_idx is not None and abs(idx - korte_pauze_idx) < min_afstand:
+                continue
+            col1 = pauze_cols[idx]
+            col2 = pauze_cols[idx+1]
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                # Plaats dubbele blok, attractie blijft leeg
+                cel1.value = naam
+                cel2.value = naam
+                cel1.fill = lichtgroen_fill
+                cel2.fill = lichtgroen_fill
+                cel1.alignment = center_align
+                cel2.alignment = center_align
+                cel1.border = thin_border
+                cel2.border = thin_border
+                geplaatst = True
+                break
+        if geplaatst:
+            break
+    if not geplaatst:
+        pauzevlinders_zonder_lange_pauze.append(naam)
+
 
 # ---- Korte pauze voor ALLE studenten (ook <=6u, behalve pauzevlinders en lange werkers) ----
 # --- Houd bij wie al een korte pauze heeft gekregen ---
@@ -1966,6 +2021,20 @@ else:
     vinkje_cel.font = Font(bold=True, color="006100")  # donkergroen
     row_fb += 1
 
+# 1b. Pauzevlinders zonder lange pauze
+ws_feedback.cell(row_fb, 1, "Pauzevlinders (>6u) zonder lange pauze:")
+row_fb += 1
+if pauzevlinders_zonder_lange_pauze:
+    for naam in pauzevlinders_zonder_lange_pauze:
+        ws_feedback.cell(row_fb, 1, naam)
+        row_fb += 1
+else:
+    vinkje_cel = ws_feedback.cell(row_fb, 1, "✓")
+    ws_feedback.cell(row_fb, 2, "Alle pauzevlinders met >6u hebben een lange pauze gekregen.")
+    vinkje_cel.fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
+    vinkje_cel.font = Font(bold=True, color="006100")
+    row_fb += 1
+
 # 2. Werkende studenten zonder korte pauze
 werkende_studenten = [s for s in studenten if student_totalen.get(s["naam"], 0) > 0]
 studenten_zonder_korte_pauze = []
@@ -2031,6 +2100,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
