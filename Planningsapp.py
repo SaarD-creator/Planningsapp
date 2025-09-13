@@ -1120,6 +1120,7 @@ def plaats_student(student, harde_mode=False):
                 cel2 = ws_pauze.cell(eigen_pv_row, col2)
                 boven_cel1 = ws_pauze.cell(eigen_pv_row-1, col1)
                 boven_cel2 = ws_pauze.cell(eigen_pv_row-1, col2)
+                # Voor pauzevlinders op eigen rij: altijd toegestaan, geen pv_kan_attr check
                 if cel1.value in [None, ""] and cel2.value in [None, ""]:
                     boven_cel1.value = attr1
                     boven_cel1.alignment = center_align
@@ -1181,7 +1182,10 @@ def plaats_student(student, harde_mode=False):
                 continue
             if not is_korte_pauze_toegestaan_col(col):
                 continue
-            if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+            # Voor pauzevlinders op eigen rij: altijd toegestaan, geen pv_kan_attr check
+            if alleen_eigen_rij and pv_row == eigen_pv_row:
+                pass  # geen check
+            elif not pv_kan_attr(pv, attr) and not is_student_extra(naam):
                 continue
             cel = ws_pauze.cell(pv_row, col)
             boven_cel = ws_pauze.cell(pv_row - 1, col)
@@ -1951,7 +1955,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
