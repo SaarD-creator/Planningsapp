@@ -653,7 +653,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1416,29 +1415,30 @@ for pv, pv_row in pv_rows:
         return col not in get_verboden_korte_pauze_kolommen()
     # Zoek index van lange pauze (dubbele blok)
     if lange_blok_idx is not None:
-        # Plaats de korte pauze zo ver mogelijk van de lange pauze, zonder vaste minimumafstand
-        beste_idx = None
-        max_afstand = -1
-        for idx in range(len(pauze_cols)):
-            # Sla de cellen van de lange pauze zelf over
-            if idx == lange_blok_idx or idx == lange_blok_idx+1:
-                continue
+        # Zoek het eerste vrije kwartier NA de lange pauze, binnen de pauzevlinderuren, niet in het laatste werkuur
+        laatste_uur = max(get_student_work_hours(naam)) if get_student_work_hours(naam) else None
+        for idx in range(lange_blok_idx+2, len(pauze_cols)):
             col = pauze_cols[idx]
             if not is_toegestaan_pv_col(col):
                 continue
+            header = ws_pauze.cell(1, col).value
+            # Check of kwartier binnen de pauzevlinderuren valt
+            if not header or "u" not in str(header):
+                continue
+            try:
+                parts = str(header).replace('u',':').split(':')
+                uur = int(parts[0])
+            except:
+                continue
+            if laatste_uur is not None and uur == laatste_uur:
+                continue  # niet in laatste werkuur
             cel = ws_pauze.cell(pv_row, col)
             if cel.value in [None, ""]:
-                afstand = abs(idx - lange_blok_idx)
-                if afstand > max_afstand:
-                    beste_idx = idx
-                    max_afstand = afstand
-        if beste_idx is not None:
-            col = pauze_cols[beste_idx]
-            cel = ws_pauze.cell(pv_row, col)
-            cel.value = naam
-            cel.fill = lichtpaars_fill
-            cel.alignment = center_align
-            cel.border = thin_border
+                cel.value = naam
+                cel.fill = lichtpaars_fill
+                cel.alignment = center_align
+                cel.border = thin_border
+                break
     else:
         # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
         laatste_dubbel_idx = -1
@@ -2174,6 +2174,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
 
 
 
