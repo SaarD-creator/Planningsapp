@@ -659,6 +659,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1442,15 +1443,9 @@ for pv, pv_row in pv_rows:
             if cel.value in [None, ""]:
                 afstand = idx - (lange_blok_idx+1)
                 opties.append((afstand, idx, col))
-        # Eerst alle >=10, kies de grootste afstand
-        opties_ge10 = [opt for opt in opties if opt[0] >= 10]
-        opties_lt10 = [opt for opt in opties if opt[0] < 10]
-        beste = None
-        if opties_ge10:
-            beste = max(opties_ge10, key=lambda x: x[0])
-        elif opties_lt10:
-            beste = max(opties_lt10, key=lambda x: x[0])
-        if beste:
+        # Kies de plek met de maximale afstand
+        if opties:
+            beste = max(opties, key=lambda x: x[0])
             _, idx, col = beste
             cel = ws_pauze.cell(pv_row, col)
             cel.value = naam
