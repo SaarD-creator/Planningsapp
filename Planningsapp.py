@@ -661,6 +661,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1603,7 +1604,7 @@ for s in werkende_studenten:
         if heeft_korte:
             break
     if not heeft_korte:
-        studenten_zonder_korte_pauze.append(naam)
+        studenten_zonder_korte_pauze.append(s)
 
 max_wissel_passes = 10
 for _ in range(max_wissel_passes):
@@ -1962,7 +1963,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
