@@ -663,6 +663,9 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1356,32 +1359,47 @@ for pv, pv_row in pv_rows:
 # ---- Korte pauze voor pauzevlinders zelf toevoegen ----
 
 # ---- Pauzevlinders: eerst lange pauze, daarna korte pauze met afstand ----
+
 for pv, pv_row in pv_rows:
     naam = pv["naam"]
     werk_uren = get_student_work_hours(naam)
     # --- LANGE PAUZE ---
     lange_blok_idx = None
     if len(werk_uren) > 6:
-        # Probeer dubbele blok te plaatsen (zoals eerder)
-        geplaatst = False
-        for idx in range(len(pauze_cols)-1):
+        # Controleer of er al een dubbele blok (lange pauze) met hun naam staat
+        bestaande_lange_blok = None
+        idx = 0
+        while idx < len(pauze_cols)-1:
             col1 = pauze_cols[idx]
             col2 = pauze_cols[idx+1]
             cel1 = ws_pauze.cell(pv_row, col1)
             cel2 = ws_pauze.cell(pv_row, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                cel1.value = naam
-                cel2.value = naam
-                cel1.fill = lichtgroen_fill
-                cel2.fill = lichtgroen_fill
-                cel1.alignment = center_align
-                cel2.alignment = center_align
-                cel1.border = thin_border
-                cel2.border = thin_border
-                lange_blok_idx = idx
-                geplaatst = True
+            if cel1.value == naam and cel2.value == naam:
+                bestaande_lange_blok = idx
                 break
-        # Als niet geplaatst, lange_blok_idx blijft None
+            idx += 1
+        if bestaande_lange_blok is not None:
+            lange_blok_idx = bestaande_lange_blok
+        else:
+            # Probeer dubbele blok te plaatsen
+            geplaatst = False
+            for idx in range(len(pauze_cols)-1):
+                col1 = pauze_cols[idx]
+                col2 = pauze_cols[idx+1]
+                cel1 = ws_pauze.cell(pv_row, col1)
+                cel2 = ws_pauze.cell(pv_row, col2)
+                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                    cel1.value = naam
+                    cel2.value = naam
+                    cel1.fill = lichtgroen_fill
+                    cel2.fill = lichtgroen_fill
+                    cel1.alignment = center_align
+                    cel2.alignment = center_align
+                    cel1.border = thin_border
+                    cel2.border = thin_border
+                    lange_blok_idx = idx
+                    geplaatst = True
+                    break
     # --- KORTE PAUZE ---
     def is_toegestaan_pv_col(col):
         if len(open_uren) <= 6:
@@ -2136,6 +2154,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
