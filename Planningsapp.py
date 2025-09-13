@@ -661,6 +661,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1424,7 +1425,8 @@ for pv, pv_row in pv_rows:
     # Zoek index van lange pauze (dubbele blok)
     if lange_blok_idx is not None:
         # Zoek alle mogelijke plekken voor de korte pauze na de lange pauze
-        laatste_uur = max(get_student_work_hours(naam)) if get_student_work_hours(naam) else None
+        werk_uren_student = get_student_work_hours(naam)
+        laatste_werkuur = werk_uren_student[-1] if werk_uren_student else None
         opties = []
         for idx in range(lange_blok_idx+2, len(pauze_cols)):
             col = pauze_cols[idx]
@@ -1438,8 +1440,8 @@ for pv, pv_row in pv_rows:
                 uur = int(parts[0])
             except:
                 continue
-            if laatste_uur is not None and uur == laatste_uur:
-                continue  # niet in laatste werkuur
+            if laatste_werkuur is not None and uur == laatste_werkuur:
+                continue  # niet in laatste werkuur van de shift van de student
             cel = ws_pauze.cell(pv_row, col)
             if cel.value in [None, ""]:
                 afstand = idx - (lange_blok_idx+1)
