@@ -652,6 +652,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1070,11 +1071,24 @@ def plaats_student(student, harde_mode=False):
     reg = plaats_student.pauze_registry.setdefault(naam, {"lange": False, "korte": False})
 
     # Eerst: zoek alle mogelijke dubbele blokjes voor de lange pauze
+    # Lange pauze alleen binnen de eerste drie pauzevlinderuren, startend op heel of half uur
     lange_pauze_opties = []
+    # Bepaal de eerste drie pauzevlinderuren (zoals bij pauzevlinders)
+    eerste3_uren = sorted(set([parse_header_uur(ws_pauze.cell(1, col).value) for col in pauze_cols if parse_header_uur(ws_pauze.cell(1, col).value) is not None]))[:3]
     for i in range(len(uur_col_pairs)-1):
         uur1, col1 = uur_col_pairs[i]
         uur2, col2 = uur_col_pairs[i+1]
         if col2 == col1 + 1:
+            # Beide blokken moeten in de eerste 3 pauzeuren vallen
+            if uur1 not in eerste3_uren or uur2 not in eerste3_uren:
+                continue
+            tijd1 = ws_pauze.cell(1, col1).value
+            # Start alleen op heel of half uur
+            if not (str(tijd1).endswith('u') or str(tijd1).endswith('u30')):
+                continue
+            # Vermijd laatste kwartier van de eerste 3 uren
+            if str(tijd1).endswith('u45'):
+                continue
             lange_pauze_opties.append((i, uur1, col1, uur2, col2))
 
     # Probeer een random optie voor de lange pauze (max 1x per student)
@@ -1993,5 +2007,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
