@@ -655,6 +655,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -724,7 +726,17 @@ for pv_idx, pv in enumerate(selected, start=1):
 # -----------------------------
 # Kolombreedte voor overzicht
 # -----------------------------
-for col in range(1, len(uren_rij1) + 2):
+
+# Automatisch de breedte van kolom A instellen op basis van de langste tekst
+max_len_colA = 0
+for row in range(1, ws_pauze.max_row + 1):
+    val = ws_pauze.cell(row, 1).value
+    if val:
+        max_len_colA = max(max_len_colA, len(str(val)))
+# Voeg wat extra ruimte toe
+ws_pauze.column_dimensions['A'].width = max(12, max_len_colA + 2)
+
+for col in range(2, len(uren_rij1) + 2):
     ws_pauze.column_dimensions[get_column_letter(col)].width = 10
 
 # Gebruik exact dezelfde open_uren en headers als in deel 1 voor de pauzeplanning
@@ -2017,10 +2029,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
-
-
 
 
 
