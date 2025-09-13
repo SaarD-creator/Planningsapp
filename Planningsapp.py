@@ -657,6 +657,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1419,38 +1421,42 @@ for pv, pv_row in pv_rows:
         return col not in get_verboden_korte_pauze_kolommen()
     # Zoek index van lange pauze (dubbele blok)
     if lange_blok_idx is not None:
-        # Zoek een korte pauze na de lange pauze, met minimaal 10 kwartierblokken ertussen
+        # Zoek alle mogelijke plekken voor de korte pauze na de lange pauze
         laatste_uur = max(get_student_work_hours(naam)) if get_student_work_hours(naam) else None
-        afstands_lijst = list(range(10, len(pauze_cols)-lange_blok_idx-1)) + list(range(11, len(pauze_cols)-lange_blok_idx-1)) + list(range(9, 0, -1))
-        geplaatst = False
-        for min_afstand in afstands_lijst:
-            for idx in range(lange_blok_idx+2+min_afstand-10, len(pauze_cols)):
+        opties = []
+        for idx in range(lange_blok_idx+2, len(pauze_cols)):
+            col = pauze_cols[idx]
+            if not is_toegestaan_pv_col(col):
+                continue
+            header = ws_pauze.cell(1, col).value
+            if not header or "u" not in str(header):
+                continue
+            try:
+                parts = str(header).replace('u',':').split(':')
+                uur = int(parts[0])
+            except:
+                continue
+            if laatste_uur is not None and uur == laatste_uur:
+                continue  # niet in laatste werkuur
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value in [None, ""]:
                 afstand = idx - (lange_blok_idx+1)
-                if afstand < min_afstand:
-                    continue
-                col = pauze_cols[idx]
-                if not is_toegestaan_pv_col(col):
-                    continue
-                header = ws_pauze.cell(1, col).value
-                if not header or "u" not in str(header):
-                    continue
-                try:
-                    parts = str(header).replace('u',':').split(':')
-                    uur = int(parts[0])
-                except:
-                    continue
-                if laatste_uur is not None and uur == laatste_uur:
-                    continue  # niet in laatste werkuur
-                cel = ws_pauze.cell(pv_row, col)
-                if cel.value in [None, ""]:
-                    cel.value = naam
-                    cel.fill = lichtpaars_fill
-                    cel.alignment = center_align
-                    cel.border = thin_border
-                    geplaatst = True
-                    break
-            if geplaatst:
-                break
+                opties.append((afstand, idx, col))
+        # Eerst alle >=10, kies de grootste afstand
+        opties_ge10 = [opt for opt in opties if opt[0] >= 10]
+        opties_lt10 = [opt for opt in opties if opt[0] < 10]
+        beste = None
+        if opties_ge10:
+            beste = max(opties_ge10, key=lambda x: x[0])
+        elif opties_lt10:
+            beste = max(opties_lt10, key=lambda x: x[0])
+        if beste:
+            _, idx, col = beste
+            cel = ws_pauze.cell(pv_row, col)
+            cel.value = naam
+            cel.fill = lichtpaars_fill
+            cel.alignment = center_align
+            cel.border = thin_border
     else:
         # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
         laatste_dubbel_idx = -1
@@ -2186,6 +2192,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
