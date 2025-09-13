@@ -1484,7 +1484,14 @@ for pv, pv_row in pv_rows:
 
 niet_geplaatste_korte_pauze = []
 
-for s in studenten:
+# Sorteer studenten op hun laatste werkuur (vroegst eerst)
+def laatste_werkuur(student):
+    werk_uren = get_student_work_hours(student["naam"])
+    return werk_uren[-1] if werk_uren else 9999
+
+studenten_korte_pauze_sorted = sorted(studenten, key=laatste_werkuur)
+
+for s in studenten_korte_pauze_sorted:
     if s["naam"] in korte_pauze_ontvangers:
         continue  # deze student heeft al een korte pauze
     naam = s["naam"]
