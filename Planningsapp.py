@@ -651,6 +651,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1669,9 +1670,11 @@ for _ in range(max_opt_passes_lange):
                     ws_pauze.cell(pv_row_min-1, next_col).value = attr2
                     ws_pauze.cell(pv_row_min-1, next_col).alignment = center_align
                     ws_pauze.cell(pv_row_min-1, next_col).border = thin_border
-                    # Verwijder bij max_pv
+                    # Verwijder bij max_pv (ook kleur en bovenliggende attractie-cellen)
                     cel_max.value = None
                     cel_next.value = None
+                    cel_max.fill = naam_leeg_fill
+                    cel_next.fill = naam_leeg_fill
                     ws_pauze.cell(pv_row_max-1, col).value = None
                     ws_pauze.cell(pv_row_max-1, next_col).value = None
                     found = True
@@ -1789,6 +1792,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
