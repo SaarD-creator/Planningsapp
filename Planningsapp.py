@@ -652,6 +652,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1115,11 +1117,13 @@ def plaats_student(student, harde_mode=False):
                 lange_pauze_opties_met_laatste.append((i, uur1, col1, uur2, col2))
             else:
                 lange_pauze_opties_zonder_laatste.append((i, uur1, col1, uur2, col2))
+    random.shuffle(lange_pauze_opties_zonder_laatste)
+    random.shuffle(lange_pauze_opties_met_laatste)
     lange_pauze_opties = lange_pauze_opties_zonder_laatste + lange_pauze_opties_met_laatste
 
     # Probeer alle opties in random volgorde voor de lange pauze (max 1x per student)
     if not reg["lange"] and lange_pauze_opties:
-        random.shuffle(lange_pauze_opties)
+        plaatsing_gelukt = False
         for optie in lange_pauze_opties:
             i, uur1, col1, uur2, col2 = optie
             attr1 = vind_attractie_op_uur(naam, uur1)
@@ -1158,6 +1162,7 @@ def plaats_student(student, harde_mode=False):
                         cel2.alignment = center_align
                         cel2.border = thin_border
                         reg["lange"] = True
+                        plaatsing_gelukt = True
                         # Nu: zoek een korte pauze, eerst 10 t/m 16 blokjes afstand, dan 9 t/m 1
                         if not reg["korte"]:
                             found = False
@@ -1192,7 +1197,7 @@ def plaats_student(student, harde_mode=False):
                                             cel_kort.border = thin_border
                                             reg["korte"] = True
                                             found = True
-                                            return True
+                                            break
                                         elif harde_mode:
                                             occupant = str(cel_kort.value).strip() if cel_kort.value else ""
                                             if occupant not in lange_werkers_names:
@@ -1204,7 +1209,7 @@ def plaats_student(student, harde_mode=False):
                                                 cel_kort.border = thin_border
                                                 reg["korte"] = True
                                                 found = True
-                                                return True
+                                                break
                                     if found:
                                         break
                             if not found:
@@ -1239,7 +1244,7 @@ def plaats_student(student, harde_mode=False):
                                                 cel_kort.border = thin_border
                                                 reg["korte"] = True
                                                 found = True
-                                                return True
+                                                break
                                             elif harde_mode:
                                                 occupant = str(cel_kort.value).strip() if cel_kort.value else ""
                                                 if occupant not in lange_werkers_names:
@@ -1251,10 +1256,12 @@ def plaats_student(student, harde_mode=False):
                                                     cel_kort.border = thin_border
                                                     reg["korte"] = True
                                                     found = True
-                                                    return True
+                                                    break
                                     if found:
                                         break
-                        return True
+                        # Niet stoppen na de eerste succesvolle plaatsing, maar alle opties proberen
+        if plaatsing_gelukt:
+            return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
