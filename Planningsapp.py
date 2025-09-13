@@ -663,9 +663,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1006,12 +1003,14 @@ for pv in selected:
 # Lange werkers: namen-set voor snelle checks
 
 # Iedereen met '-18' in de naam krijgt altijd een halfuurpauze
+# Pauzevlinders uitsluiten van lange_werkers!
+pauzevlinder_namen_set = set(pv["naam"] for pv in selected)
 lange_werkers = [s for s in studenten
     if (
         student_totalen.get(s["naam"], 0) > 6
         or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)
     )
-    and s["naam"] not in [pv["naam"] for pv in selected]
+    and s["naam"] not in pauzevlinder_namen_set
 ]
 lange_werkers_names = {s["naam"] for s in lange_werkers}
 
@@ -2154,6 +2153,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
