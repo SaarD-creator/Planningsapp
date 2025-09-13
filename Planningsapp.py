@@ -1510,9 +1510,10 @@ def korte_pauze_toewijzen(studenten_lijst):
             niet_geplaatste_korte_pauze.append(naam)
 
 korte_pauze_toewijzen(studenten_zonder_lange_pauze)
-# Daarna: de rest
-korte_pauze_toewijzen([s for s in studenten if s not in studenten_zonder_lange_pauze])
-korte_pauze_toewijzen([s for s in studenten if s not in studenten_zonder_lange_pauze])
+# Daarna: de rest (vergelijk op naam, niet op dict)
+studenten_zonder_lange_namen = {x["naam"] for x in studenten_zonder_lange_pauze}
+korte_pauze_toewijzen([s for s in studenten if s["naam"] not in studenten_zonder_lange_namen])
+korte_pauze_toewijzen([s for s in studenten if s["naam"] not in studenten_zonder_lange_namen])
 
 # --- Iteratief wisselen: studenten zonder korte pauze proberen te ruilen met anderen (geen pauzevlinders) ---
 def is_pauzevlinder(naam):
@@ -1961,7 +1962,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
