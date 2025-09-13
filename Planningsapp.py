@@ -657,7 +657,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1507,6 +1506,90 @@ for pv, pv_row in pv_rows:
                     continue
             # Anders: kwartierpauze
             cel.fill = lichtpaars_fill
+
+# --- Geef langwerkende pauzevlinders altijd een lange pauze op hun eigen rij ---
+for pv in selected:
+    naam = pv["naam"]
+    # Check of deze pauzevlinder >6u werkt (of -18 in naam)
+    werk_uren = []
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        uur = None
+        if header:
+            try:
+                if "u" in str(header):
+                    uur = int(str(header).split("u")[0])
+                elif ":" in str(header):
+                    uur = int(str(header).split(":")[0])
+                else:
+                    uur = int(str(header))
+            except:
+                continue
+        if uur is None:
+            continue
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                werk_uren.append(uur)
+                break
+    werk_uren = sorted(set(werk_uren))
+    if (len(werk_uren) > 6 or ("-18" in str(naam) and len(werk_uren) > 0)):
+        # Zoek eigen rij in ws_pauze
+        pv_row = None
+        for pv_obj, row in pv_rows:
+            if pv_obj["naam"] == naam:
+                pv_row = row
+                break
+        if pv_row is None:
+            continue
+        # Controleer of er al een lange pauze staat
+        heeft_lange = False
+        for idx in range(len(pauze_cols)-1):
+            col1 = pauze_cols[idx]
+            col2 = pauze_cols[idx+1]
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            if cel1.value == naam and cel2.value == naam:
+                heeft_lange = True
+                break
+        if heeft_lange:
+            continue
+        # Zoek alle mogelijke dubbele blokken (twee naast elkaar, niet eerste/laatste uur)
+        verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
+        pauze_cols_sorted = sorted(pauze_cols)
+        uur_col_pairs = []
+        for col in pauze_cols_sorted:
+            col_header = ws_pauze.cell(1, col).value
+            col_uur = parse_header_uur(col_header)
+            if col_uur is not None and col_uur in werk_uren and col_uur not in verboden_uren:
+                uur_col_pairs.append((col_uur, col))
+        for i in range(len(uur_col_pairs)-1):
+            uur1, col1 = uur_col_pairs[i]
+            uur2, col2 = uur_col_pairs[i+1]
+            if col2 == col1 + 1:
+                # Check of beide cellen leeg zijn
+                cel1 = ws_pauze.cell(pv_row, col1)
+                cel2 = ws_pauze.cell(pv_row, col2)
+                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                    # Attracties bepalen
+                    attr1 = vind_attractie_op_uur(naam, uur1)
+                    attr2 = vind_attractie_op_uur(naam, uur2)
+                    boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+                    boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+                    boven_cel1.value = attr1
+                    boven_cel1.alignment = center_align
+                    boven_cel1.border = thin_border
+                    boven_cel2.value = attr2
+                    boven_cel2.alignment = center_align
+                    boven_cel2.border = thin_border
+                    cel1.value = naam
+                    cel1.alignment = center_align
+                    cel1.border = thin_border
+                    cel1.fill = lichtgroen_fill
+                    cel2.value = naam
+                    cel2.alignment = center_align
+                    cel2.border = thin_border
+                    cel2.fill = lichtgroen_fill
+                    break
 
 # ---- Korte pauze voor pauzevlinders zelf toevoegen ----
 for pv, pv_row in pv_rows:
