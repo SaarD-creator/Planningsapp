@@ -1087,6 +1087,16 @@ def plaats_student(student, harde_mode=False):
     lange_pauze_opties = []
     # Bepaal de eerste drie pauzevlinderuren (zoals bij pauzevlinders)
     eerste3_uren = sorted(set([parse_header_uur(ws_pauze.cell(1, col).value) for col in pauze_cols if parse_header_uur(ws_pauze.cell(1, col).value) is not None]))[:3]
+    # Bepaal het laatste halve uur van elk van de eerste drie pauzeuren
+    laatste_halve_uren = set()
+    for uur in eerste3_uren:
+        for col in pauze_cols:
+            tijd = ws_pauze.cell(1, col).value
+            if tijd and (str(tijd).endswith('u30')) and parse_header_uur(tijd) == uur:
+                laatste_halve_uren.add(col)
+    # Eerst: opties zonder laatste halve uren
+    lange_pauze_opties_zonder_laatste = []
+    lange_pauze_opties_met_laatste = []
     for i in range(len(uur_col_pairs)-1):
         uur1, col1 = uur_col_pairs[i]
         uur2, col2 = uur_col_pairs[i+1]
@@ -1101,7 +1111,11 @@ def plaats_student(student, harde_mode=False):
             # Vermijd laatste kwartier van de eerste 3 uren
             if str(tijd1).endswith('u45'):
                 continue
-            lange_pauze_opties.append((i, uur1, col1, uur2, col2))
+            if col1 in laatste_halve_uren or col2 in laatste_halve_uren:
+                lange_pauze_opties_met_laatste.append((i, uur1, col1, uur2, col2))
+            else:
+                lange_pauze_opties_zonder_laatste.append((i, uur1, col1, uur2, col2))
+    lange_pauze_opties = lange_pauze_opties_zonder_laatste + lange_pauze_opties_met_laatste
 
     # Probeer alle opties in random volgorde voor de lange pauze (max 1x per student)
     if not reg["lange"] and lange_pauze_opties:
@@ -2005,4 +2019,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
