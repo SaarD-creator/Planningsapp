@@ -654,11 +654,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1607,8 +1602,12 @@ if lange_werkers_zonder_lange_pauze:
         ws_feedback.cell(row_fb, 1, naam)
         row_fb += 1
 else:
-    ws_feedback.cell(row_fb, 1, "Iedereen heeft een lange pauze gekregen.")
-    row_fb += 1
+        ws_feedback.cell(row_fb, 1, "Iedereen heeft een lange pauze gekregen.")
+        vinkje_cel = ws_feedback.cell(row_fb, 2, "✓")
+        from openpyxl.styles import PatternFill, Font
+        vinkje_cel.fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")  # opvallend groen
+        vinkje_cel.font = Font(bold=True, color="006100")  # donkergroen
+        row_fb += 1
 
 # 2. Werkende studenten zonder korte pauze
 werkende_studenten = [s for s in studenten if student_totalen.get(s["naam"], 0) > 0]
@@ -1648,8 +1647,11 @@ if studenten_zonder_korte_pauze:
         ws_feedback.cell(row_fb, 1, naam)
         row_fb += 1
 else:
-    ws_feedback.cell(row_fb, 1, "Iedereen heeft een korte pauze gekregen.")
-    row_fb += 1
+        ws_feedback.cell(row_fb, 1, "Iedereen heeft een korte pauze gekregen.")
+        vinkje_cel = ws_feedback.cell(row_fb, 2, "✓")
+        vinkje_cel.fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
+        vinkje_cel.font = Font(bold=True, color="006100")
+        row_fb += 1
 
 wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
@@ -1672,7 +1674,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
