@@ -659,6 +659,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -805,6 +807,11 @@ for row in ws_planning.iter_rows(min_row=2, values_only=True):
     for naam in row[1:]:
         if naam and str(naam).strip() != "":
             student_totalen[naam] += 1
+# Pauzevlinders altijd als werkend tellen (voor alle open_uren)
+for pv in selected:
+    naam = pv["naam"]
+    if naam not in student_totalen or student_totalen[naam] < len(open_uren):
+        student_totalen[naam] = len(open_uren)
 
 # Loop door pauzevlinders in Werkblad "Pauzevlinders"
 
@@ -1017,6 +1024,9 @@ lange_werkers_names = {s["naam"] for s in lange_werkers}
 
 def get_student_work_hours(naam):
     """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
+    # Speciaal: als naam een pauzevlinder is, neem ALLE open_uren (ze zijn altijd beschikbaar)
+    if any(pv["naam"] == naam for pv in selected):
+        return sorted(open_uren)
     uren = set()
     for col in range(2, ws_planning.max_column + 1):
         header = ws_planning.cell(1, col).value
@@ -1274,7 +1284,7 @@ for pv, pv_row in pv_rows:
             cel.fill = lichtpaars_fill
 
 # ---- Korte pauze voor pauzevlinders zelf toevoegen ----
-for pv, pv_row in pv_rows:
+for pv in selected:
     # Zoek alle blokken met de naam van de pauzevlinder in deze rij
     blokken = []  # lijst van (start_idx, lengte)
     idx = 0
@@ -1428,6 +1438,7 @@ niet_geplaatste_korte_pauze = []
 studenten_zonder_lange_pauze = []
 for s in studenten:
     naam = s["naam"]
+    # Zoek in ws_pauze of deze student een dubbele blok (lange pauze) heeft
     heeft_lange = False
     for pv, pv_row in pv_rows:
         for idx, col in enumerate(pauze_cols):
@@ -1443,7 +1454,7 @@ for s in studenten:
         if heeft_lange:
             break
     if not heeft_lange:
-        studenten_zonder_lange_pauze.append(s)
+        studenten_zonder_lange_pauze.append(naam)
 
 # Eerst: korte pauze toewijzen aan studenten zonder lange pauze
 def korte_pauze_toewijzen(studenten_lijst):
@@ -1848,8 +1859,6 @@ for _ in range(max_opt_passes_lange):
 
 
 
-output = BytesIO()
-
 # --- FEEDBACK SHEET ---
 ws_feedback = wb_out.create_sheet("Feedback")
 row_fb = 1
@@ -1940,10 +1949,7 @@ output.seek(0)  # Zorg dat lezen vanaf begin kan
 
 
 
-#ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
-
-
-# -----------------------------
+#-----------------------------
 # Opslaan in hetzelfde unieke bestand als DEEL 3
 # -----------------------------
 output = BytesIO()
@@ -1955,6 +1961,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
