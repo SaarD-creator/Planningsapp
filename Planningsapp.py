@@ -651,6 +651,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1482,58 +1483,83 @@ for pv, pv_row in pv_rows:
 
 niet_geplaatste_korte_pauze = []
 
+# Bepaal wie geen lange pauze heeft gekregen
+studenten_zonder_lange_pauze = []
 for s in studenten:
-    if s["naam"] in korte_pauze_ontvangers:
-        continue  # deze student heeft al een korte pauze
     naam = s["naam"]
-    werk_uren = get_student_work_hours(naam)
-    if len(werk_uren) > 2:
-        verboden_uren = {werk_uren[0], werk_uren[-1]}
-    else:
-        verboden_uren = set(werk_uren)
-    pauze_cols_sorted = sorted(pauze_cols)
-    geplaatst = False
-    for uur in random.sample(werk_uren, len(werk_uren)):
-        if uur in verboden_uren:
-            continue
-        attr = vind_attractie_op_uur(naam, uur)
-        if not attr:
-            continue
-        # Selecteer alle geldige pauzevlinder-slots voor dit uur en attr
-        geldige_slots = []
-        for (pv, pv_row) in pv_rows:
-            for col in pauze_cols:
-                col_header = ws_pauze.cell(1, col).value
-                col_uur = parse_header_uur(col_header)
-                if col_uur != uur:
-                    continue
-                if not is_korte_pauze_toegestaan_col(col):
-                    continue
-                if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
-                    continue
-                cel = ws_pauze.cell(pv_row, col)
-                if cel.value in [None, ""]:
-                    geldige_slots.append((pv, pv_row, col))
-        # Sorteer geldige slots op aantal korte pauzes van de pauzevlinder (minst eerst)
-        geldige_slots.sort(key=lambda slot: pv_korte_pauze_count[slot[0]["naam"]])
-        for (pv, pv_row, col) in geldige_slots:
-            boven_cel = ws_pauze.cell(pv_row - 1, col)
-            boven_cel.value = attr
-            boven_cel.alignment = center_align
-            boven_cel.border = thin_border
+    heeft_lange = False
+    for pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols):
             cel = ws_pauze.cell(pv_row, col)
-            cel.value = naam
-            cel.alignment = center_align
-            cel.border = thin_border
-            cel.fill = lichtpaars_fill
-            korte_pauze_ontvangers.add(naam)
-            pv_korte_pauze_count[pv["naam"]] += 1
-            geplaatst = True
+            if cel.value == naam:
+                # Check of volgende cel ook deze naam heeft (dubbele blok)
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze.cell(pv_row, next_col)
+                    if cel_next.value == naam:
+                        heeft_lange = True
+                        break
+        if heeft_lange:
             break
-        if geplaatst:
-            break
-    if not geplaatst:
-        niet_geplaatste_korte_pauze.append(naam)
+    if not heeft_lange:
+        studenten_zonder_lange_pauze.append(s)
+
+# Eerst: korte pauze toewijzen aan studenten zonder lange pauze
+def korte_pauze_toewijzen(studenten_lijst):
+    for s in studenten_lijst:
+        if s["naam"] in korte_pauze_ontvangers:
+            continue
+        naam = s["naam"]
+        werk_uren = get_student_work_hours(naam)
+        if len(werk_uren) > 2:
+            verboden_uren = {werk_uren[0], werk_uren[-1]}
+        else:
+            verboden_uren = set(werk_uren)
+        pauze_cols_sorted = sorted(pauze_cols)
+        geplaatst = False
+        for uur in random.sample(werk_uren, len(werk_uren)):
+            if uur in verboden_uren:
+                continue
+            attr = vind_attractie_op_uur(naam, uur)
+            if not attr:
+                continue
+            geldige_slots = []
+            for (pv, pv_row) in pv_rows:
+                for col in pauze_cols:
+                    col_header = ws_pauze.cell(1, col).value
+                    col_uur = parse_header_uur(col_header)
+                    if col_uur != uur:
+                        continue
+                    if not is_korte_pauze_toegestaan_col(col):
+                        continue
+                    if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                        continue
+                    cel = ws_pauze.cell(pv_row, col)
+                    if cel.value in [None, ""]:
+                        geldige_slots.append((pv, pv_row, col))
+            geldige_slots.sort(key=lambda slot: pv_korte_pauze_count[slot[0]["naam"]])
+            for (pv, pv_row, col) in geldige_slots:
+                boven_cel = ws_pauze.cell(pv_row - 1, col)
+                boven_cel.value = attr
+                boven_cel.alignment = center_align
+                boven_cel.border = thin_border
+                cel = ws_pauze.cell(pv_row, col)
+                cel.value = naam
+                cel.alignment = center_align
+                cel.border = thin_border
+                cel.fill = lichtpaars_fill
+                korte_pauze_ontvangers.add(naam)
+                pv_korte_pauze_count[pv["naam"]] += 1
+                geplaatst = True
+                break
+            if geplaatst:
+                break
+        if not geplaatst:
+            niet_geplaatste_korte_pauze.append(naam)
+
+korte_pauze_toewijzen(studenten_zonder_lange_pauze)
+# Daarna: de rest
+korte_pauze_toewijzen([s for s in studenten if s not in studenten_zonder_lange_pauze])
 
 # Iteratieve optimalisatie: verschuif korte pauzes van "rijke" naar "arme" pauzevlinders
 max_opt_passes = 10
