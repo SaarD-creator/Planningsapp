@@ -653,11 +653,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1083,14 +1078,14 @@ def plaats_student(student, harde_mode=False):
         if col2 == col1 + 1:
             lange_pauze_opties.append((i, uur1, col1, uur2, col2))
 
-    # Probeer alle opties voor de lange pauze (max 1x per student)
-    if not reg["lange"]:
-        for optie in lange_pauze_opties:
-            i, uur1, col1, uur2, col2 = optie
-            attr1 = vind_attractie_op_uur(naam, uur1)
-            attr2 = vind_attractie_op_uur(naam, uur2)
-            if not attr1 or not attr2:
-                continue
+    # Probeer een random optie voor de lange pauze (max 1x per student)
+    if not reg["lange"] and lange_pauze_opties:
+        import random
+        optie = random.choice(lange_pauze_opties)
+        i, uur1, col1, uur2, col2 = optie
+        attr1 = vind_attractie_op_uur(naam, uur1)
+        attr2 = vind_attractie_op_uur(naam, uur2)
+        if attr1 and attr2:
             for (pv, pv_row, _) in slot_order:
                 if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
                     continue
