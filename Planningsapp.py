@@ -652,7 +652,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1080,7 +1079,6 @@ def plaats_student(student, harde_mode=False):
 
     # Probeer een random optie voor de lange pauze (max 1x per student)
     if not reg["lange"] and lange_pauze_opties:
-        import random
         optie = random.choice(lange_pauze_opties)
         i, uur1, col1, uur2, col2 = optie
         attr1 = vind_attractie_op_uur(naam, uur1)
@@ -1872,7 +1870,6 @@ for pv, pv_row in pv_rows:
                 blok_opties.append((idx, col1, col2))
         # Kies random uit de opties voor spreiding, of de eerste als geen random gewenst
         if blok_opties:
-            import random
             idx, col1, col2 = random.choice(blok_opties)
             cel1 = ws_pauze.cell(pv_row, col1)
             cel2 = ws_pauze.cell(pv_row, col2)
@@ -1996,4 +1993,5 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
