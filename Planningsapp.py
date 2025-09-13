@@ -650,6 +650,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1592,6 +1593,90 @@ for _ in range(max_opt_passes):
         pv_korte_pauze_count[min_pv] += 1
         found = True
         break
+    if not found:
+        break  # geen verschuiving meer mogelijk
+
+
+# --- Iteratieve optimalisatie: verdeel lange pauzes zo eerlijk mogelijk over pauzevlinders ---
+max_opt_passes_lange = 10
+from collections import Counter
+for _ in range(max_opt_passes_lange):
+    # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
+    pv_lange_pauze_count = Counter()
+    for pv, pv_row in pv_rows:
+        idx = 0
+        while idx < len(pauze_cols):
+            col = pauze_cols[idx]
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value and str(cel.value).strip() != "":
+                # Check of volgende cel ook deze naam heeft (dubbele blok)
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze.cell(pv_row, next_col)
+                    if cel_next.value == cel.value:
+                        pv_lange_pauze_count[pv["naam"]] += 1
+                        idx += 2
+                        continue
+            idx += 1
+    if not pv_lange_pauze_count:
+        break
+    max_pv = max(pv_lange_pauze_count, key=lambda k: pv_lange_pauze_count[k])
+    min_pv = min(pv_lange_pauze_count, key=lambda k: pv_lange_pauze_count[k])
+    if pv_lange_pauze_count[max_pv] - pv_lange_pauze_count[min_pv] <= 1:
+        break  # verdeling is al redelijk
+    # Zoek een lange pauze van max_pv die overgezet kan worden naar min_pv
+    found = False
+    pv_row_max = next((row for pv, row in pv_rows if pv["naam"] == max_pv), None)
+    pv_row_min = next((row for pv, row in pv_rows if pv["naam"] == min_pv), None)
+    if pv_row_max is None or pv_row_min is None:
+        break
+    idx = 0
+    while idx < len(pauze_cols):
+        col = pauze_cols[idx]
+        cel_max = ws_pauze.cell(pv_row_max, col)
+        naam = cel_max.value
+        if naam and str(naam).strip() != "":
+            # Check of volgende cel ook deze naam heeft (dubbele blok)
+            if idx+1 < len(pauze_cols):
+                next_col = pauze_cols[idx+1]
+                cel_next = ws_pauze.cell(pv_row_max, next_col)
+                if cel_next.value == naam:
+                    # Mag min_pv deze attracties overnemen?
+                    attr1 = ws_pauze.cell(pv_row_max-1, col).value
+                    attr2 = ws_pauze.cell(pv_row_max-1, next_col).value
+                    min_pv_obj = next(pv for pv, _ in pv_rows if pv["naam"] == min_pv)
+                    if not pv_kan_attr(min_pv_obj, attr1) or not pv_kan_attr(min_pv_obj, attr2):
+                        idx += 2
+                        continue
+                    # Zijn de cellen bij min_pv vrij?
+                    cel_min1 = ws_pauze.cell(pv_row_min, col)
+                    cel_min2 = ws_pauze.cell(pv_row_min, next_col)
+                    if cel_min1.value not in [None, ""] or cel_min2.value not in [None, ""]:
+                        idx += 2
+                        continue
+                    # Wissel de lange pauze van max_pv naar min_pv
+                    cel_min1.value = naam
+                    cel_min2.value = naam
+                    cel_min1.alignment = center_align
+                    cel_min2.alignment = center_align
+                    cel_min1.border = thin_border
+                    cel_min2.border = thin_border
+                    cel_min1.fill = lichtgroen_fill
+                    cel_min2.fill = lichtgroen_fill
+                    ws_pauze.cell(pv_row_min-1, col).value = attr1
+                    ws_pauze.cell(pv_row_min-1, col).alignment = center_align
+                    ws_pauze.cell(pv_row_min-1, col).border = thin_border
+                    ws_pauze.cell(pv_row_min-1, next_col).value = attr2
+                    ws_pauze.cell(pv_row_min-1, next_col).alignment = center_align
+                    ws_pauze.cell(pv_row_min-1, next_col).border = thin_border
+                    # Verwijder bij max_pv
+                    cel_max.value = None
+                    cel_next.value = None
+                    ws_pauze.cell(pv_row_max-1, col).value = None
+                    ws_pauze.cell(pv_row_max-1, next_col).value = None
+                    found = True
+                    break
+        idx += 1
     if not found:
         break  # geen verschuiving meer mogelijk
 
