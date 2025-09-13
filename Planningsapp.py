@@ -653,6 +653,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1415,32 +1416,22 @@ for pv, pv_row in pv_rows:
         return col not in get_verboden_korte_pauze_kolommen()
     # Zoek index van lange pauze (dubbele blok)
     if lange_blok_idx is not None:
-        # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze
-        min_kort_idx = lange_blok_idx + 10
+        # Plaats de korte pauze zo ver mogelijk van de lange pauze, zonder vaste minimumafstand
         beste_idx = None
         max_afstand = -1
-        for idx in range(min_kort_idx, len(pauze_cols)):
+        for idx in range(len(pauze_cols)):
+            # Sla de cellen van de lange pauze zelf over
+            if idx == lange_blok_idx or idx == lange_blok_idx+1:
+                continue
             col = pauze_cols[idx]
             if not is_toegestaan_pv_col(col):
                 continue
             cel = ws_pauze.cell(pv_row, col)
             if cel.value in [None, ""]:
-                afstand = idx - (lange_blok_idx+1)
+                afstand = abs(idx - lange_blok_idx)
                 if afstand > max_afstand:
                     beste_idx = idx
                     max_afstand = afstand
-        # Als geen plek na 10 blokjes, zoek zo ver mogelijk na de lange pauze
-        if beste_idx is None:
-            for idx in range(lange_blok_idx+2, len(pauze_cols)):
-                col = pauze_cols[idx]
-                if not is_toegestaan_pv_col(col):
-                    continue
-                cel = ws_pauze.cell(pv_row, col)
-                if cel.value in [None, ""]:
-                    afstand = idx - (lange_blok_idx+1)
-                    if afstand > max_afstand:
-                        beste_idx = idx
-                        max_afstand = afstand
         if beste_idx is not None:
             col = pauze_cols[beste_idx]
             cel = ws_pauze.cell(pv_row, col)
@@ -2183,7 +2174,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
