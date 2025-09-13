@@ -661,6 +661,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1078,6 +1079,8 @@ def plaats_student(student, harde_mode=False):
             if pv["naam"] == naam:
                 eigen_pv_row = pv_row
                 break
+        # Pauzevlinders met alleen_eigen_rij mogen alleen op hun eigen rij een lange pauze krijgen
+        # en we skippen de attractie-check volledig voor deze studenten
 
     # Sorteer alle pauzekolommen op volgorde
     pauze_cols_sorted = sorted(pauze_cols)
@@ -1104,6 +1107,7 @@ def plaats_student(student, harde_mode=False):
         uur2, col2, pv_row2 = uur_col_pairs[i+1]
         if col2 == col1 + 1:
             if alleen_eigen_rij:
+                # Alleen als beide blokken op de eigen rij zijn
                 if pv_row1 == eigen_pv_row and pv_row2 == eigen_pv_row:
                     lange_pauze_opties.append((i, uur1, col1, uur2, col2, eigen_pv_row))
             else:
@@ -1134,6 +1138,85 @@ def plaats_student(student, harde_mode=False):
                     cel2.border = thin_border
                     reg["lange"] = True
                     return True
+            else:
+                # Voor niet-pauzevlinders: normale logica met attractie-check
+                i, uur1, col1, uur2, col2, _ = optie
+                attr1 = vind_attractie_op_uur(naam, uur1)
+                attr2 = vind_attractie_op_uur(naam, uur2)
+                if not attr1 or not attr2:
+                    continue
+                for (pv, pv_row, _) in slot_order:
+                    if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+                        continue
+                    cel1 = ws_pauze.cell(pv_row, col1)
+                    cel2 = ws_pauze.cell(pv_row, col2)
+                    boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+                    boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+                    if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                        boven_cel1.value = attr1
+                        boven_cel1.alignment = center_align
+                        boven_cel1.border = thin_border
+                        boven_cel2.value = attr2
+                        boven_cel2.alignment = center_align
+                        boven_cel2.border = thin_border
+                        cel1.value = naam
+                        cel1.alignment = center_align
+                        cel1.border = thin_border
+                        cel2.value = naam
+                        cel2.alignment = center_align
+                        cel2.border = thin_border
+                        reg["lange"] = True
+                        return True
+                if harde_mode:
+                    occupant1 = str(cel1.value).strip() if cel1.value else ""
+                    occupant2 = str(cel2.value).strip() if cel2.value else ""
+                    if (occupant1 not in lange_werkers_names) and (occupant2 not in lange_werkers_names):
+                        boven_cel1.value = attr1
+                        boven_cel1.alignment = center_align
+                        boven_cel1.border = thin_border
+                        boven_cel2.value = attr2
+                        boven_cel2.alignment = center_align
+                        boven_cel2.border = thin_border
+                        cel1.value = naam
+                        cel1.alignment = center_align
+                        cel1.border = thin_border
+                        cel2.value = naam
+                        cel2.alignment = center_align
+                        cel2.border = thin_border
+                        reg["lange"] = True
+                        # Nu: zoek een korte pauze minstens 6 blokjes verderop
+                        if not reg["korte"]:
+                            for j in range(i+6, len(uur_col_pairs)):
+                                uur_kort, col_kort = uur_col_pairs[j][:2]
+                                attr_kort = vind_attractie_op_uur(naam, uur_kort)
+                                if not attr_kort:
+                                    continue
+                                for (pv2, pv_row2, _) in slot_order:
+                                    if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
+                                        continue
+                                    cel_kort = ws_pauze.cell(pv_row2, col_kort)
+                                    boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
+                                    if cel_kort.value in [None, ""]:
+                                        boven_cel_kort.value = attr_kort
+                                        boven_cel_kort.alignment = center_align
+                                        boven_cel_kort.border = thin_border
+                                        cel_kort.value = naam
+                                        cel_kort.alignment = center_align
+                                        cel_kort.border = thin_border
+                                        reg["korte"] = True
+                                        return True
+                                    elif harde_mode:
+                                        occupant = str(cel_kort.value).strip() if cel_kort.value else ""
+                                        if occupant not in lange_werkers_names:
+                                            boven_cel_kort.value = attr_kort
+                                            boven_cel_kort.alignment = center_align
+                                            boven_cel_kort.border = thin_border
+                                            cel_kort.value = naam
+                                            cel_kort.alignment = center_align
+                                            cel_kort.border = thin_border
+                                            reg["korte"] = True
+                                            return True
+                        return True
             else:
                 i, uur1, col1, uur2, col2, _ = optie
                 attr1 = vind_attractie_op_uur(naam, uur1)
@@ -1997,6 +2080,9 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
+
 
 
 
