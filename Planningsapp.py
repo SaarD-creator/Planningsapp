@@ -656,6 +656,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1849,25 +1851,45 @@ for pv, pv_row in pv_rows:
     naam = pv["naam"]
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) > 6:
-        # Zoek een vrij dubbel blok (twee naast elkaar liggende cellen) in hun eigen rij
-        geplaatst = False
+        # Zoek alle pauze-uren (headers) van de eerste 3 pauzevlinderuren
+        eerste3_uren = sorted(set([parse_header_uur(ws_pauze.cell(1, col).value) for col in pauze_cols if parse_header_uur(ws_pauze.cell(1, col).value) is not None]))[:3]
+        # Verzamel alle (idx, col1, col2, tijd1, tijd2) van dubbele blokken binnen deze uren, startend op heel of half uur, niet laatste kwartier
+        blok_opties = []
         for idx in range(len(pauze_cols)-1):
             col1 = pauze_cols[idx]
             col2 = pauze_cols[idx+1]
+            tijd1 = ws_pauze.cell(1, col1).value
+            tijd2 = ws_pauze.cell(1, col2).value
+            # Check of beide blokken in de eerste 3 pauzeuren vallen
+            uur1 = parse_header_uur(tijd1)
+            uur2 = parse_header_uur(tijd2)
+            if uur1 not in eerste3_uren or uur2 not in eerste3_uren:
+                continue
+            # Start alleen op heel of half uur
+            if not (str(tijd1).endswith('u') or str(tijd1).endswith('u30')):
+                continue
+            # Vermijd laatste kwartier van de eerste 3 uren (dus blokken die starten op bv. 12u45)
+            if str(tijd1).endswith('u45'):
+                continue
             cel1 = ws_pauze.cell(pv_row, col1)
             cel2 = ws_pauze.cell(pv_row, col2)
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                cel1.value = naam
-                cel2.value = naam
-                cel1.alignment = center_align
-                cel2.alignment = center_align
-                cel1.border = thin_border
-                cel2.border = thin_border
-                cel1.fill = lichtgroen_fill
-                cel2.fill = lichtgroen_fill
-                # Cel erboven mag leeg blijven
-                geplaatst = True
-                break
+                blok_opties.append((idx, col1, col2))
+        # Kies random uit de opties voor spreiding, of de eerste als geen random gewenst
+        if blok_opties:
+            import random
+            idx, col1, col2 = random.choice(blok_opties)
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            cel1.value = naam
+            cel2.value = naam
+            cel1.alignment = center_align
+            cel2.alignment = center_align
+            cel1.border = thin_border
+            cel2.border = thin_border
+            cel1.fill = lichtgroen_fill
+            cel2.fill = lichtgroen_fill
+            # Cel erboven mag leeg blijven
         # Indien geen plek gevonden, doe niets (komt zelden voor)
 
 
@@ -1979,3 +2001,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
