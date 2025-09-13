@@ -654,9 +654,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1374,14 +1371,31 @@ for pv, pv_row in pv_rows:
         if bestaande_lange_blok is not None:
             lange_blok_idx = bestaande_lange_blok
         else:
-            # Probeer dubbele blok te plaatsen
+            # Probeer dubbele blok te plaatsen, alleen als beide kwartieren binnen de werkuren vallen
             geplaatst = False
             for idx in range(len(pauze_cols)-1):
                 col1 = pauze_cols[idx]
                 col2 = pauze_cols[idx+1]
                 cel1 = ws_pauze.cell(pv_row, col1)
                 cel2 = ws_pauze.cell(pv_row, col2)
-                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                # Haal de tijd van beide kwartieren op
+                header1 = ws_pauze.cell(1, col1).value
+                header2 = ws_pauze.cell(1, col2).value
+                # Beide kwartieren moeten binnen de werkuren vallen
+                def kwartier_in_werkuren(header):
+                    if not header:
+                        return False
+                    if "u" in str(header):
+                        try:
+                            parts = str(header).replace('u',':').split(':')
+                            uur = int(parts[0])
+                            minuut = int(parts[1]) if len(parts)>1 else 0
+                            return uur in werk_uren
+                        except:
+                            return False
+                    return False
+                if (cel1.value in [None, ""] and cel2.value in [None, ""]
+                    and kwartier_in_werkuren(header1) and kwartier_in_werkuren(header2)):
                     cel1.value = naam
                     cel2.value = naam
                     cel1.fill = lichtgroen_fill
@@ -2151,6 +2165,8 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
 
 
 
