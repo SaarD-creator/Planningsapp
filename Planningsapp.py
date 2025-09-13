@@ -652,7 +652,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1074,12 +1073,13 @@ def plaats_student(student, harde_mode=False):
     def get_pv_pauze_count():
         counts = {}
         for pv, pv_row, _ in slot_order:
+            key = pv["naam"]
             count = 0
             for col in pauze_cols:
                 val = ws_pauze.cell(pv_row, col).value
                 if val and str(val).strip() != "":
                     count += 1
-            counts[(pv, pv_row)] = count
+            counts[key] = count
         return counts
 
     # Eerst: zoek alle mogelijke dubbele blokjes voor de lange pauze
@@ -1116,7 +1116,13 @@ def plaats_student(student, harde_mode=False):
                 min_count = min(pv_counts.values())
                 minst_belast = [k for k, v in pv_counts.items() if v == min_count]
                 random.shuffle(minst_belast)
-                for (pv, pv_row) in [x[0:2] for x in minst_belast]:
+                for pv_naam in minst_belast:
+                    # Zoek bijbehorende pv_row
+                    for (pv, pv_row, _) in slot_order:
+                        if pv["naam"] == pv_naam:
+                            break
+                    else:
+                        continue
                     if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
                         continue
                     cel1 = ws_pauze.cell(pv_row, col1)
@@ -1149,12 +1155,16 @@ def plaats_student(student, harde_mode=False):
                                     attr_kort = vind_attractie_op_uur(naam, uur_kort)
                                     if not attr_kort:
                                         continue
-                                    # Kies weer de minst belaste pauzevlinder voor korte pauze
                                     pv_counts2 = get_pv_pauze_count()
                                     min_count2 = min(pv_counts2.values())
                                     minst_belast2 = [k for k, v in pv_counts2.items() if v == min_count2]
                                     random.shuffle(minst_belast2)
-                                    for (pv2, pv_row2) in [x[0:2] for x in minst_belast2]:
+                                    for pv2_naam in minst_belast2:
+                                        for (pv2, pv_row2, _) in slot_order:
+                                            if pv2["naam"] == pv2_naam:
+                                                break
+                                        else:
+                                            continue
                                         if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
                                             continue
                                         cel_kort = ws_pauze.cell(pv_row2, col_kort)
@@ -1196,7 +1206,12 @@ def plaats_student(student, harde_mode=False):
                                         min_count2 = min(pv_counts2.values())
                                         minst_belast2 = [k for k, v in pv_counts2.items() if v == min_count2]
                                         random.shuffle(minst_belast2)
-                                        for (pv2, pv_row2) in [x[0:2] for x in minst_belast2]:
+                                        for pv2_naam in minst_belast2:
+                                            for (pv2, pv_row2, _) in slot_order:
+                                                if pv2["naam"] == pv2_naam:
+                                                    break
+                                            else:
+                                                continue
                                             if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
                                                 continue
                                             cel_kort = ws_pauze.cell(pv_row2, col_kort)
@@ -1233,12 +1248,16 @@ def plaats_student(student, harde_mode=False):
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
-        # Kies de minst belaste pauzevlinder voor deze korte pauze
         pv_counts = get_pv_pauze_count()
         min_count = min(pv_counts.values())
         minst_belast = [k for k, v in pv_counts.items() if v == min_count]
         random.shuffle(minst_belast)
-        for (pv, pv_row) in [x[0:2] for x in minst_belast]:
+        for pv_naam in minst_belast:
+            for (pv, pv_row, _) in slot_order:
+                if pv["naam"] == pv_naam:
+                    break
+            else:
+                continue
             for col in pauze_cols:
                 col_header = ws_pauze.cell(1, col).value
                 col_uur = parse_header_uur(col_header)
@@ -1986,5 +2005,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
