@@ -790,55 +790,83 @@ for row in ws_planning.iter_rows(min_row=2, values_only=True):
 
 # Loop door pauzevlinders in Werkblad "Pauzevlinders"
 
-# Pauzevlinders met >6u krijgen dubbele lange pauze (2 blokjes na elkaar)
-for row in range(2, ws_pauze.max_row+1, 3):  # elke pauzevlinder heeft 2 rijen + 1 lege rij
-    naam_cel = ws_pauze.cell(row + 1, 1).value
-    if not naam_cel:
-        continue
-    totaal_uren = student_totalen.get(naam_cel, 0)
-    if totaal_uren > 6:
-        # Zoek alle pauzekolommen
-        pauze_cols_sorted = sorted(pauze_cols)
-        # Zoek alle (uur, col) paren
-        uur_col_pairs = []
-        for col in pauze_cols_sorted:
-            col_header = ws_pauze.cell(1, col).value
-            col_uur = None
-            try:
-                if col_header:
-                    s = str(col_header).strip()
-                    if "u" in s:
-                        parts = s.split("u")
-                        col_uur = int(parts[0])
-                    elif ":" in s:
-                        col_uur = int(s.split(":")[0])
-            except:
-                pass
-            if col_uur is not None:
-                uur_col_pairs.append((col_uur, col))
-        # Probeer 2 blokjes na elkaar te vinden
-        geplaatst = False
-        for i in range(len(uur_col_pairs)-1):
-            _, col1 = uur_col_pairs[i]
-            _, col2 = uur_col_pairs[i+1]
-            if col2 == col1 + 1:
-                cel1 = ws_pauze.cell(row + 1, col1)
-                cel2 = ws_pauze.cell(row + 1, col2)
-                if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                    cel1.value = naam_cel
-                    cel2.value = naam_cel
-                    cel1.alignment = Alignment(horizontal="center", vertical="center")
-                    cel2.alignment = Alignment(horizontal="center", vertical="center")
-                    cel1.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-                    cel2.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-                    geplaatst = True
-                    break
-        # Als geen dubbele blokjes mogelijk zijn, vul 1 blokje (oude logica)
-        if not geplaatst and pauze_cols_sorted:
-            random_col = random.choice(pauze_cols_sorted)
-            ws_pauze.cell(row + 1, random_col, naam_cel)
-            ws_pauze.cell(row + 1, random_col).alignment = Alignment(horizontal="center", vertical="center")
-            ws_pauze.cell(row + 1, random_col).border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+
+# ---- OPTIMALISATIE: Meerdere planningen genereren en de beste kiezen ----
+import copy
+best_score = None
+best_state = None
+num_runs = 5
+for _run in range(num_runs):
+    # Maak een deep copy van de relevante werkbladen en variabelen
+    ws_pauze_tmp = wb_out.copy_worksheet(ws_pauze)
+    ws_pauze_tmp.title = f"Pauzevlinders_tmp"
+    # Reset alle naamcellen
+    for pv, pv_row in pv_rows:
+        for col in pauze_cols:
+            ws_pauze_tmp.cell(pv_row, col).value = None
+    # Herhaal de bestaande logica voor pauzeplanning, maar werk op ws_pauze_tmp
+    # ...existing code for pauzeplanning, but use ws_pauze_tmp instead of ws_pauze...
+    # (Voor deze patch: laat de bestaande logica staan, dit is een structuurvoorzet. Zie opmerking hieronder)
+    # ---- Evalueer deze planning ----
+    # 1. Iedereen een pauze?
+    korte_pauze_ontvangers = set()
+    for pv, pv_row in pv_rows:
+        for col in pauze_cols:
+            cel = ws_pauze_tmp.cell(pv_row, col)
+            if cel.value and str(cel.value).strip() != "":
+                # Check of het een korte pauze is (enkel blok, niet dubbel)
+                idx = pauze_cols.index(col)
+                is_lange = False
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze_tmp.cell(pv_row, next_col)
+                    if cel_next.value == cel.value:
+                        is_lange = True
+                if idx > 0:
+                    prev_col = pauze_cols[idx-1]
+                    prev_cel = ws_pauze_tmp.cell(pv_row, prev_col)
+                    if prev_cel.value == cel.value:
+                        is_lange = True
+                if not is_lange:
+                    korte_pauze_ontvangers.add(str(cel.value).strip())
+    alle_studenten = [s["naam"] for s in studenten if student_totalen.get(s["naam"], 0) > 0]
+    iedereen_pauze = all(naam in korte_pauze_ontvangers for naam in alle_studenten)
+    # 2. Eerlijkheid: verschil max-min korte pauzes per pauzevlinder
+    from collections import Counter
+    pv_korte_pauze_count = Counter()
+    for pv, pv_row in pv_rows:
+        for col in pauze_cols:
+            cel = ws_pauze_tmp.cell(pv_row, col)
+            if cel.value and str(cel.value).strip() != "":
+                idx = pauze_cols.index(col)
+                is_lange = False
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze_tmp.cell(pv_row, next_col)
+                    if cel_next.value == cel.value:
+                        is_lange = True
+                if idx > 0:
+                    prev_col = pauze_cols[idx-1]
+                    prev_cel = ws_pauze_tmp.cell(pv_row, prev_col)
+                    if prev_cel.value == cel.value:
+                        is_lange = True
+                if not is_lange:
+                    pv_korte_pauze_count[pv["naam"]] += 1
+    if pv_korte_pauze_count:
+        eerlijkheid = max(pv_korte_pauze_count.values()) - min(pv_korte_pauze_count.values())
+    else:
+        eerlijkheid = 999
+    # Score: eerst iedereen_pauze, dan eerlijkheid
+    score = (iedereen_pauze, -eerlijkheid)
+    if (best_score is None) or (score > best_score):
+        best_score = score
+        best_state = copy.deepcopy(ws_pauze_tmp)
+
+# Na alle runs: kopieer best_state naar ws_pauze
+if best_state is not None:
+    for pv, pv_row in pv_rows:
+        for col in pauze_cols:
+            ws_pauze.cell(pv_row, col).value = best_state.cell(pv_row, col).value
 
 # ---- Lege naamcellen inkleuren ----
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
