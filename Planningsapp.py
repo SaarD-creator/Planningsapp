@@ -656,8 +656,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -707,6 +705,7 @@ a1.border = thin_border
 # -----------------------------
 # Pauzevlinders en namen
 # -----------------------------
+
 rij_out = 2
 for pv_idx, pv in enumerate(selected, start=1):
     # Titel: Pauzevlinder X
@@ -2135,7 +2134,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
