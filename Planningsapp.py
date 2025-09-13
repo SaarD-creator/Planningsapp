@@ -652,6 +652,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1560,6 +1562,186 @@ def korte_pauze_toewijzen(studenten_lijst):
 korte_pauze_toewijzen(studenten_zonder_lange_pauze)
 # Daarna: de rest
 korte_pauze_toewijzen([s for s in studenten if s not in studenten_zonder_lange_pauze])
+korte_pauze_toewijzen([s for s in studenten if s not in studenten_zonder_lange_pauze])
+
+# --- Iteratief wisselen: studenten zonder korte pauze proberen te ruilen met anderen (geen pauzevlinders) ---
+def is_pauzevlinder(naam):
+    return any(pv["naam"] == naam for pv in selected)
+
+def vind_korte_pauze_cell(naam):
+    """Vind (pv_row, col) van de korte pauze van deze student, of None."""
+    for pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols):
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value == naam:
+                # Check of het een korte pauze is (enkel blok, niet dubbel)
+                is_lange = False
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze.cell(pv_row, next_col)
+                    if cel_next.value == naam:
+                        is_lange = True
+                if idx > 0:
+                    prev_col = pauze_cols[idx-1]
+                    prev_cel = ws_pauze.cell(pv_row, prev_col)
+                    if prev_cel.value == naam:
+                        is_lange = True
+                if not is_lange:
+                    return (pv_row, col)
+    return None
+
+def kan_student_korte_pauze_op_plek(naam, pv_row, col):
+    """Check of student naam op deze plek een korte pauze mag hebben."""
+    # Mag niet op pauzevlinder-rij
+    if is_pauzevlinder(naam):
+        return False
+    # Moet werken op dit uur
+    col_header = ws_pauze.cell(1, col).value
+    col_uur = parse_header_uur(col_header)
+    werk_uren = get_student_work_hours(naam)
+    if col_uur not in werk_uren:
+        return False
+    # Niet in eerste/laatste werkuur
+    if len(werk_uren) > 2:
+        if col_uur == werk_uren[0] or col_uur == werk_uren[-1]:
+            return False
+    # Attractie moet kloppen
+    attr = vind_attractie_op_uur(naam, col_uur)
+    if not attr:
+        return False
+    # Pauzevlinder moet deze attractie kunnen
+    pv = None
+    for pv_obj, row in pv_rows:
+        if row == pv_row:
+            pv = pv_obj
+            break
+    if not pv:
+        return False
+    if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+        return False
+    # Kolom moet korte pauze toestaan
+    if not is_korte_pauze_toegestaan_col(col):
+        return False
+    return True
+
+# Verzamel actuele lijst van studenten zonder korte pauze
+werkende_studenten = [s for s in studenten if student_totalen.get(s["naam"], 0) > 0 and not is_pauzevlinder(s["naam"])]
+studenten_zonder_korte_pauze = []
+for s in werkende_studenten:
+    naam = s["naam"]
+    heeft_korte = False
+    for pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols):
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value == naam:
+                # Check of GEEN dubbele blok (dus geen lange pauze)
+                is_lange = False
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze.cell(pv_row, next_col)
+                    if cel_next.value == naam:
+                        is_lange = True
+                if idx > 0:
+                    prev_col = pauze_cols[idx-1]
+                    prev_cel = ws_pauze.cell(pv_row, prev_col)
+                    if prev_cel.value == naam:
+                        is_lange = True
+                if not is_lange:
+                    heeft_korte = True
+                    break
+        if heeft_korte:
+            break
+    if not heeft_korte:
+        studenten_zonder_korte_pauze.append(naam)
+
+max_wissel_passes = 10
+for _ in range(max_wissel_passes):
+    if not studenten_zonder_korte_pauze:
+        break
+    verbeterd = False
+    for naam_zonder in studenten_zonder_korte_pauze:
+        # Probeer te ruilen met een student die wél een korte pauze heeft (geen pauzevlinder)
+        for s in werkende_studenten:
+            naam_met = s["naam"]
+            if naam_met == naam_zonder:
+                continue
+            if naam_met in studenten_zonder_korte_pauze:
+                continue
+            # Vind de korte pauze van deze student
+            plek = vind_korte_pauze_cell(naam_met)
+            if not plek:
+                continue
+            pv_row, col = plek
+            # Mag naam_zonder op deze plek een korte pauze hebben?
+            if not kan_student_korte_pauze_op_plek(naam_zonder, pv_row, col):
+                continue
+            # Mag naam_met elders een korte pauze krijgen?
+            # Zoek alternatieve plek voor naam_met
+            gevonden = False
+            for pv2, pv_row2 in pv_rows:
+                if is_pauzevlinder(naam_met):
+                    continue
+                for col2 in pauze_cols:
+                    if (pv_row2, col2) == (pv_row, col):
+                        continue
+                    cel2 = ws_pauze.cell(pv_row2, col2)
+                    if cel2.value not in [None, ""]:
+                        continue
+                    if not kan_student_korte_pauze_op_plek(naam_met, pv_row2, col2):
+                        continue
+                    # Wissel uitvoeren
+                    # 1. naam_met uit oude plek halen
+                    ws_pauze.cell(pv_row, col).value = None
+                    ws_pauze.cell(pv_row, col).fill = naam_leeg_fill
+                    # 2. naam_zonder op deze plek zetten
+                    ws_pauze.cell(pv_row, col).value = naam_zonder
+                    ws_pauze.cell(pv_row, col).fill = lichtpaars_fill
+                    ws_pauze.cell(pv_row, col).alignment = center_align
+                    ws_pauze.cell(pv_row, col).border = thin_border
+                    # 3. naam_met op nieuwe plek zetten
+                    ws_pauze.cell(pv_row2, col2).value = naam_met
+                    ws_pauze.cell(pv_row2, col2).fill = lichtpaars_fill
+                    ws_pauze.cell(pv_row2, col2).alignment = center_align
+                    ws_pauze.cell(pv_row2, col2).border = thin_border
+                    verbeterd = True
+                    gevonden = True
+                    break
+                if gevonden:
+                    break
+            if verbeterd:
+                break
+        if verbeterd:
+            break
+    # Update lijst van studenten zonder korte pauze
+    studenten_zonder_korte_pauze = []
+    for s in werkende_studenten:
+        naam = s["naam"]
+        heeft_korte = False
+        for pv, pv_row in pv_rows:
+            for idx, col in enumerate(pauze_cols):
+                cel = ws_pauze.cell(pv_row, col)
+                if cel.value == naam:
+                    # Check of GEEN dubbele blok (dus geen lange pauze)
+                    is_lange = False
+                    if idx+1 < len(pauze_cols):
+                        next_col = pauze_cols[idx+1]
+                        cel_next = ws_pauze.cell(pv_row, next_col)
+                        if cel_next.value == naam:
+                            is_lange = True
+                    if idx > 0:
+                        prev_col = pauze_cols[idx-1]
+                        prev_cel = ws_pauze.cell(pv_row, prev_col)
+                        if prev_cel.value == naam:
+                            is_lange = True
+                    if not is_lange:
+                        heeft_korte = True
+                        break
+            if heeft_korte:
+                break
+        if not heeft_korte:
+            studenten_zonder_korte_pauze.append(naam)
+    if not verbeterd:
+        break  # geen verbetering meer mogelijk
 
 # Iteratieve optimalisatie: verschuif korte pauzes van "rijke" naar "arme" pauzevlinders
 max_opt_passes = 10
@@ -1815,6 +1997,11 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
+
+
+
+
 
 
 
