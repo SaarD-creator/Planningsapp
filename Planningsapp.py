@@ -660,8 +660,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1217,7 +1215,7 @@ def plaats_student(student, harde_mode=False):
                                             reg["korte"] = True
                                             return True
                         return True
-            else:
+            # else: is overbodig en veroorzaakt een syntax error
                 i, uur1, col1, uur2, col2, _ = optie
                 attr1 = vind_attractie_op_uur(naam, uur1)
                 attr2 = vind_attractie_op_uur(naam, uur2)
@@ -2080,7 +2078,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
