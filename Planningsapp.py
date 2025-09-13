@@ -650,6 +650,76 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+# --- HULPFUNCTIES (bovenaan plaatsen zodat ze overal beschikbaar zijn) ---
+def parse_header_uur(header):
+    if not header:
+        return None
+    s = str(header).strip()
+    try:
+        if "u" in s:
+            return int(s.split("u")[0])
+        if ":" in s:
+            uur, _min = s.split(":")
+            return int(uur)
+        return int(s)
+    except:
+        return None
+
+def is_korte_pauze_toegestaan_col(col):
+    if len(open_uren) <= 6:
+        return True
+    return col not in list(range(2, 14))
+
+def is_student_extra(naam):
+    for row in range(2, ws_planning.max_row + 1):
+        if ws_planning.cell(row, 1).value:
+            for col in range(2, ws_planning.max_column + 1):
+                if str(ws_planning.cell(row, col).value).strip().lower() == str(naam).strip().lower():
+                    header = str(ws_planning.cell(1, col).value).strip().lower()
+                    if "extra" in header:
+                        return True
+    return False
+
+def get_student_work_hours(naam):
+    uren = set()
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur is None:
+            continue
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                uren.add(uur)
+                break
+    return sorted(uren)
+
+def vind_attractie_op_uur(naam, uur):
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        col_uur = parse_header_uur(header)
+        if col_uur != uur:
+            continue
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                return ws_planning.cell(row, 1).value
+    return None
+
+def normalize_attr(name):
+    if not name:
+        return ""
+    s = str(name).strip()
+    parts = s.rsplit(" ", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        s = parts[0]
+    return s.strip().lower()
+
+def pv_kan_attr(pv, attr):
+    base = normalize_attr(attr)
+    if base == "extra":
+        return True
+    return base in pv_cap_set.get(pv["naam"], set())
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
