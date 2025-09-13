@@ -654,6 +654,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -2086,11 +2087,28 @@ else:
     vinkje_cel.font = Font(bold=True, color="006100")  # donkergroen
     row_fb += 1
 
-# 1b. Pauzevlinders zonder lange pauze
+# 1b. Pauzevlinders zonder lange pauze (controle: 2 kwartieren naast elkaar met hun naam)
 ws_feedback.cell(row_fb, 1, "Pauzevlinders (>6u) zonder lange pauze:")
 row_fb += 1
-if pauzevlinders_zonder_lange_pauze:
-    for naam in pauzevlinders_zonder_lange_pauze:
+pauzevlinders_zonder_lange_pauze_feedback = []
+for pv, pv_row in pv_rows:
+    naam = pv["naam"]
+    werk_uren = get_student_work_hours(naam)
+    if len(werk_uren) <= 6:
+        continue
+    heeft_lange = False
+    for idx in range(len(pauze_cols)-1):
+        col1 = pauze_cols[idx]
+        col2 = pauze_cols[idx+1]
+        cel1 = ws_pauze.cell(pv_row, col1)
+        cel2 = ws_pauze.cell(pv_row, col2)
+        if cel1.value == naam and cel2.value == naam:
+            heeft_lange = True
+            break
+    if not heeft_lange:
+        pauzevlinders_zonder_lange_pauze_feedback.append(naam)
+if pauzevlinders_zonder_lange_pauze_feedback:
+    for naam in pauzevlinders_zonder_lange_pauze_feedback:
         ws_feedback.cell(row_fb, 1, naam)
         row_fb += 1
 else:
@@ -2165,6 +2183,7 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
+
 
 
 
