@@ -1375,6 +1375,12 @@ for pv, pv_row in pv_rows:
         if len(open_uren) <= 6:
             return True
         return col not in get_verboden_korte_pauze_kolommen()
+    # Voeg alleen een korte pauze toe als er nog geen is, en overschrijf nooit een bestaande lange pauze
+    heeft_korte = False
+    for start, lengte in blokken:
+        if lengte == 1:
+            heeft_korte = True
+            break
     if lange_blok_einde is not None:
         min_kort_idx = lange_blok_einde + 10
         for idx in range(min_kort_idx, len(pauze_cols)):
@@ -1382,12 +1388,25 @@ for pv, pv_row in pv_rows:
             if not is_toegestaan_pv_col(col):
                 continue
             cel = ws_pauze.cell(pv_row, col)
+            # Voeg alleen toe als cel leeg is en niet deel uitmaakt van een bestaande lange pauze
             if cel.value in [None, ""]:
-                cel.value = pv["naam"]
-                cel.fill = lichtpaars_fill
-                cel.alignment = center_align
-                cel.border = thin_border
-                break
+                # Check of de cellen ervoor/erna niet samen een dubbele blok vormen
+                is_deel_lange = False
+                if idx > 0:
+                    prev_col = pauze_cols[idx-1]
+                    if ws_pauze.cell(pv_row, prev_col).value == pv["naam"]:
+                        is_deel_lange = True
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    if ws_pauze.cell(pv_row, next_col).value == pv["naam"]:
+                        is_deel_lange = True
+                if not is_deel_lange and not heeft_korte:
+                    cel.value = pv["naam"]
+                    cel.fill = lichtpaars_fill
+                    cel.alignment = center_align
+                    cel.border = thin_border
+                    heeft_korte = True
+                    break
     else:
         # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
         # Zoek globaal het laatste dubbele blok in de sheet (over alle pauzevlinders)
@@ -1412,12 +1431,24 @@ for pv, pv_row in pv_rows:
             if not is_toegestaan_pv_col(col):
                 continue
             cel = ws_pauze.cell(pv_row, col)
+            # Voeg alleen toe als cel leeg is en niet deel uitmaakt van een bestaande lange pauze
             if cel.value in [None, ""]:
-                cel.value = pv["naam"]
-                cel.fill = lichtpaars_fill
-                cel.alignment = center_align
-                cel.border = thin_border
-                break
+                is_deel_lange = False
+                if idx > 0:
+                    prev_col = pauze_cols[idx-1]
+                    if ws_pauze.cell(pv_row, prev_col).value == pv["naam"]:
+                        is_deel_lange = True
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    if ws_pauze.cell(pv_row, next_col).value == pv["naam"]:
+                        is_deel_lange = True
+                if not is_deel_lange and not heeft_korte:
+                    cel.value = pv["naam"]
+                    cel.fill = lichtpaars_fill
+                    cel.alignment = center_align
+                    cel.border = thin_border
+                    heeft_korte = True
+                    break
 
 
 # ---- Korte pauze voor ALLE studenten (ook <=6u, behalve pauzevlinders en lange werkers) ----
@@ -2029,7 +2060,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
