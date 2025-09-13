@@ -654,6 +654,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1123,7 +1124,6 @@ def plaats_student(student, harde_mode=False):
 
     # Probeer alle opties in random volgorde voor de lange pauze (max 1x per student)
     if not reg["lange"] and lange_pauze_opties:
-        plaatsing_gelukt = False
         for optie in lange_pauze_opties:
             i, uur1, col1, uur2, col2 = optie
             attr1 = vind_attractie_op_uur(naam, uur1)
@@ -1162,7 +1162,6 @@ def plaats_student(student, harde_mode=False):
                         cel2.alignment = center_align
                         cel2.border = thin_border
                         reg["lange"] = True
-                        plaatsing_gelukt = True
                         # Nu: zoek een korte pauze, eerst 10 t/m 16 blokjes afstand, dan 9 t/m 1
                         if not reg["korte"]:
                             found = False
@@ -1259,9 +1258,7 @@ def plaats_student(student, harde_mode=False):
                                                     break
                                     if found:
                                         break
-                        # Niet stoppen na de eerste succesvolle plaatsing, maar alle opties proberen
-        if plaatsing_gelukt:
-            return True
+                        return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
@@ -2026,5 +2023,4 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
