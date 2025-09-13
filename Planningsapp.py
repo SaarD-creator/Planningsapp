@@ -653,8 +653,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1372,17 +1370,19 @@ for pv, pv_row in pv_rows:
         if bestaande_lange_blok is not None:
             lange_blok_idx = bestaande_lange_blok
         else:
-            # Probeer dubbele blok te plaatsen, alleen als beide kwartieren binnen de werkuren vallen
+            # Bepaal de eerste drie pauzevlinderuren (kolommen)
+            eerste_drie_idx = list(range(min(3, len(pauze_cols))))
+            # Probeer dubbele blok te plaatsen binnen deze kolommen
             geplaatst = False
-            for idx in range(len(pauze_cols)-1):
+            for idx in eerste_drie_idx:
+                if idx+1 >= len(pauze_cols):
+                    continue
                 col1 = pauze_cols[idx]
                 col2 = pauze_cols[idx+1]
                 cel1 = ws_pauze.cell(pv_row, col1)
                 cel2 = ws_pauze.cell(pv_row, col2)
-                # Haal de tijd van beide kwartieren op
                 header1 = ws_pauze.cell(1, col1).value
                 header2 = ws_pauze.cell(1, col2).value
-                # Beide kwartieren moeten binnen de werkuren vallen
                 def kwartier_in_werkuren(header):
                     if not header:
                         return False
