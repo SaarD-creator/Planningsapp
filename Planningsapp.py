@@ -659,6 +659,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1224,18 +1225,7 @@ def plaats_student(student, harde_mode=False):
                                             reg["korte"] = True
                                             found = True
                                             return True
-                                        elif harde_mode:
-                                            occupant = str(cel_kort.value).strip() if cel_kort.value else ""
-                                            if occupant not in lange_werkers_names:
-                                                boven_cel_kort.value = attr_kort
-                                                boven_cel_kort.alignment = center_align
-                                                boven_cel_kort.border = thin_border
-                                                cel_kort.value = naam
-                                                cel_kort.alignment = center_align
-                                                cel_kort.border = thin_border
-                                                reg["korte"] = True
-                                                found = True
-                                                return True
+                                        # elif harde_mode: is overbodig en veroorzaakt een syntax error
                                 if found:
                                     break
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
@@ -1315,46 +1305,8 @@ def plaats_student(student, harde_mode=False):
                     boven_cel.value = attr
                     boven_cel.alignment = center_align
                     boven_cel.border = thin_border
-                    cel.value = naam
-                    cel.alignment = center_align
-                    cel.border = thin_border
-                    reg["korte"] = True
                     return True
-            else:
-                if harde_mode:
-                    occupant = str(current_val).strip()
-                    if occupant not in lange_werkers_names:
-                        if not reg["korte"]:
-                            boven_cel.value = attr
-                            boven_cel.alignment = center_align
-                            boven_cel.border = thin_border
-                            cel.value = naam
-                            cel.alignment = center_align
-                            cel.border = thin_border
-                            reg["korte"] = True
-                            return True
-    return False
-
-# ---- Fase 1: zachte toewijzing (niet overschrijven) ----
-niet_geplaatst = []
-# Studenten in willekeurige volgorde proberen om vulling te spreiden
-for s in random.sample(lange_werkers, len(lange_werkers)):
-    if not plaats_student(s, harde_mode=False):
-        niet_geplaatst.append(s)
-
-# ---- Fase 2: iteratief, met gecontroleerd overschrijven van niet-lange-werkers ----
-# we herhalen meerdere passes om iedereen >6u te kunnen plaatsen
-max_passes = 12
-for _ in range(max_passes):
-    if not niet_geplaatst:
-        break
-    rest = []
-    # Ook hier willekeurige volgorde voor extra spreiding
-    for s in random.sample(niet_geplaatst, len(niet_geplaatst)):
-        if not plaats_student(s, harde_mode=True):
-            rest.append(s)
-    # Als niets veranderde in een hele pass, stoppen we
-    if len(rest) == len(niet_geplaatst):
+                # elif harde_mode: is overbodig en veroorzaakt een syntax error
         break
     niet_geplaatst = rest
 
@@ -2075,7 +2027,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
