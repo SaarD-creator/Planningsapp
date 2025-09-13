@@ -660,6 +660,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1443,15 +1444,40 @@ for pv, pv_row in pv_rows:
             if cel.value in [None, ""]:
                 afstand = idx - (lange_blok_idx+1)
                 opties.append((afstand, idx, col))
-        # Kies de plek met de maximale afstand
+        # Zoek afstand eerst 10, dan 11, 12, ... tot max, daarna 9, 8, ... tot 1
         if opties:
-            beste = max(opties, key=lambda x: x[0])
-            _, idx, col = beste
-            cel = ws_pauze.cell(pv_row, col)
-            cel.value = naam
-            cel.fill = lichtpaars_fill
-            cel.alignment = center_align
-            cel.border = thin_border
+            afstanden = [optie[0] for optie in opties]
+            min_afstand = 10
+            max_afstand = max(afstanden)
+            # Eerst 10, 11, 12, ... max
+            for afstand in range(min_afstand, max_afstand+1):
+                for optie in opties:
+                    if optie[0] == afstand:
+                        _, idx, col = optie
+                        cel = ws_pauze.cell(pv_row, col)
+                        cel.value = naam
+                        cel.fill = lichtpaars_fill
+                        cel.alignment = center_align
+                        cel.border = thin_border
+                        break
+                else:
+                    continue
+                break
+            else:
+                # Daarna 9, 8, ... 1
+                for afstand in range(9, 0, -1):
+                    for optie in opties:
+                        if optie[0] == afstand:
+                            _, idx, col = optie
+                            cel = ws_pauze.cell(pv_row, col)
+                            cel.value = naam
+                            cel.fill = lichtpaars_fill
+                            cel.alignment = center_align
+                            cel.border = thin_border
+                            break
+                    else:
+                        continue
+                    break
     else:
         # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
         laatste_dubbel_idx = -1
@@ -2187,7 +2213,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
