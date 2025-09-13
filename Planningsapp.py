@@ -659,9 +659,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1457,9 +1454,11 @@ for s in studenten:
     if not heeft_lange:
         studenten_zonder_lange_pauze.append(naam)
 
-# Eerst: korte pauze toewijzen aan studenten zonder lange pauze
+ # Eerst: korte pauze toewijzen aan studenten zonder lange pauze
 def korte_pauze_toewijzen(studenten_lijst):
+    # Assertie: alle elementen moeten dicts zijn met een 'naam'-key
     for s in studenten_lijst:
+        assert isinstance(s, dict) and "naam" in s, f"Element in studenten_lijst is geen dict met 'naam': {s}"
         if s["naam"] in korte_pauze_ontvangers:
             continue
         naam = s["naam"]
@@ -1963,7 +1962,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
 
 
 
