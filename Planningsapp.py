@@ -659,6 +659,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1376,11 +1378,10 @@ for pv, pv_row in pv_rows:
         if bestaande_lange_blok is not None:
             lange_blok_idx = bestaande_lange_blok
         else:
-            # Bepaal de eerste drie pauzevlinderuren (kolommen)
-            eerste_drie_idx = list(range(min(3, len(pauze_cols))))
-            # Probeer dubbele blok te plaatsen binnen deze kolommen
+            # Bepaal de eerste 12 kwartieren (eerste 3 uur) in de pauzeplanning
+            eerste_twaalf_idx = list(range(min(12, len(pauze_cols))))
             geplaatst = False
-            for idx in eerste_drie_idx:
+            for idx in eerste_twaalf_idx:
                 if idx+1 >= len(pauze_cols):
                     continue
                 col1 = pauze_cols[idx]
@@ -2201,10 +2202,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
-
-
 
 
 
