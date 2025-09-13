@@ -660,6 +660,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1203,17 +1205,7 @@ def plaats_student(student, harde_mode=False):
                                         cel_kort.border = thin_border
                                         reg["korte"] = True
                                         return True
-                                    elif harde_mode:
-                                        occupant = str(cel_kort.value).strip() if cel_kort.value else ""
-                                        if occupant not in lange_werkers_names:
-                                            boven_cel_kort.value = attr_kort
-                                            boven_cel_kort.alignment = center_align
-                                            boven_cel_kort.border = thin_border
-                                            cel_kort.value = naam
-                                            cel_kort.alignment = center_align
-                                            cel_kort.border = thin_border
-                                            reg["korte"] = True
-                                            return True
+                                    # elif harde_mode: is overbodig en veroorzaakt een syntax error
                         return True
             # else: is overbodig en veroorzaakt een syntax error
                 i, uur1, col1, uur2, col2, _ = optie
