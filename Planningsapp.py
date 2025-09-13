@@ -657,12 +657,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1950,6 +1944,7 @@ for _ in range(max_opt_passes):
 # --- Iteratieve optimalisatie: verdeel lange pauzes zo eerlijk mogelijk over pauzevlinders ---
 max_opt_passes_lange = 10
 from collections import Counter
+
 for _ in range(max_opt_passes_lange):
     # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
     pv_lange_pauze_count = Counter()
@@ -1974,6 +1969,9 @@ for _ in range(max_opt_passes_lange):
     min_pv = min(pv_lange_pauze_count, key=lambda k: pv_lange_pauze_count[k])
     if pv_lange_pauze_count[max_pv] - pv_lange_pauze_count[min_pv] <= 1:
         break  # verdeling is al redelijk
+    # Controle: mag min_pv nog een lange pauze krijgen?
+    if pv_lange_pauze_count[min_pv] >= 1:
+        break  # min_pv heeft al een lange pauze, dus geen tweede toewijzen
     # Zoek een lange pauze van max_pv die overgezet kan worden naar min_pv
     found = False
     pv_row_max = next((row for pv, row in pv_rows if pv["naam"] == max_pv), None)
@@ -2153,8 +2151,6 @@ st.download_button(
     data=output.getvalue(),
     file_name=f"Planning_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 )
-
-
 
 
 
