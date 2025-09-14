@@ -1079,28 +1079,30 @@ def plaats_student(student, harde_mode=False):
     # --- AANGEPAST: lange pauzes deels links, deels rechts ---
     lange_pauze_opties = []
     if len(uur_col_pairs) > 1:
+        eerste_uur = uur_col_pairs[0][0]
+        # 2,5 uur: bv. 10, 11, 12 (dus tot en met eerste_uur+2)
+        grens_uur_2_5 = eerste_uur + 2
+        grens_uur_3 = eerste_uur + 3
+        # Eerst: alleen blokken in de eerste 2,5 uur
         for i in range(len(uur_col_pairs)-1):
             uur1, col1 = uur_col_pairs[i]
             uur2, col2 = uur_col_pairs[i+1]
-            if col2 == col1 + 1:
+            if col2 == col1 + 1 and uur1 >= eerste_uur and uur2 <= grens_uur_2_5:
                 lange_pauze_opties.append((i, uur1, col1, uur2, col2))
-        # Verdeel opties in links (begin) en rechts (eind)
-        mid = len(lange_pauze_opties) // 2
-        # Bepaal of deze student in de eerste of tweede helft zit (op basis van alfabet of random)
-        lange_werkers_lijst = getattr(plaats_student, "_lange_werkers_lijst", None)
-        if lange_werkers_lijst is None:
-            # Verzamel alle lange werkers (namen) in vaste volgorde
-            from collections import OrderedDict
-            lange_werkers_lijst = [s["naam"] for s in studenten if (student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)) and s["naam"] not in [pv["naam"] for pv in selected]]
-            plaats_student._lange_werkers_lijst = lange_werkers_lijst
-        idx_in_lijst = plaats_student._lange_werkers_lijst.index(student["naam"]) if student["naam"] in plaats_student._lange_werkers_lijst else 0
-        if idx_in_lijst < len(plaats_student._lange_werkers_lijst) // 2:
-            # Links: kies uit eerste helft
-            lange_pauze_opties = lange_pauze_opties[:mid+1]
-        else:
-            # Rechts: kies uit tweede helft (omgekeerd voor spreiding)
-            lange_pauze_opties = lange_pauze_opties[mid:][::-1]
-    # Anders: geen opties
+        # Als er te weinig blokken zijn, voeg blokken toe uit de eerste 3 uur
+        if len(lange_pauze_opties) < 1:
+            for i in range(len(uur_col_pairs)-1):
+                uur1, col1 = uur_col_pairs[i]
+                uur2, col2 = uur_col_pairs[i+1]
+                if col2 == col1 + 1 and uur1 >= eerste_uur and uur2 <= grens_uur_3:
+                    lange_pauze_opties.append((i, uur1, col1, uur2, col2))
+        # Als er nog steeds te weinig zijn, neem alle blokken
+        if len(lange_pauze_opties) < 1:
+            for i in range(len(uur_col_pairs)-1):
+                uur1, col1 = uur_col_pairs[i]
+                uur2, col2 = uur_col_pairs[i+1]
+                if col2 == col1 + 1:
+                    lange_pauze_opties.append((i, uur1, col1, uur2, col2))
 
     # Probeer alle opties voor de lange pauze (max 1x per student)
     if not reg["lange"]:
