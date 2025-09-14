@@ -666,27 +666,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-    for col in range(2, ws_out.max_column + 1):
-        header = ws_out.cell(1, col).value
-        if header and str(header).startswith(str(uur)):
-            uren_rij1.append(header)
-            break
-
-# Opslaan met dezelfde unieke naam
-
-# Maak in-memory bestand
-output = BytesIO()
-
-
-
-
-
-
-
-
-
-
-
 
 #DEEL 2
 #oooooooooooooooooooo
@@ -773,12 +752,15 @@ for col in range(2, len(uren_rij1) + 2):
 # Gebruik exact dezelfde open_uren en headers als in deel 1 voor de pauzeplanning
 uren_rij1 = []
 for uur in sorted(open_uren):
-    # Zoek de originele header uit ws_out (de hoofdplanning)
+    gevonden = False
     for col in range(2, ws_out.max_column + 1):
         header = ws_out.cell(1, col).value
         if header and str(header).startswith(str(uur)):
             uren_rij1.append(header)
+            gevonden = True
             break
+    if not gevonden:
+        uren_rij1.append(f"{uur}u")
 
 # Opslaan met dezelfde unieke naam
 
