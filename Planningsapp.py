@@ -653,6 +653,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -965,7 +967,7 @@ lw_lange = [s for s in studenten if (student_totalen.get(s['naam'], 0) > 6 or ('
 
 # Bepaal slots per uur, markeer laatste halfuur van derde uur apart
 # Sorteer de uren (eerste drie pauzeuren)
-uren_sorted = sorted([u for u in slots_per_uur if u in eerste3_uren])
+# (deze regel moet na het vullen van slots_per_uur komen)
 slots_per_uur = {}  # uur -> lijst van (pv_row, col1, col2)
 laatste_halfuur_slots = []
 if len(uren_sorted) >= 3:
