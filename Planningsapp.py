@@ -1108,12 +1108,14 @@ def plaats_student(student, harde_mode=False):
         idx_in_lijst = plaats_student._lange_werkers_lijst.index(student["naam"]) if student["naam"] in plaats_student._lange_werkers_lijst else 0
         # Wissel: even index = eerste_uur, oneven = grens_uur_2_5
         volgorde = []
-        n = max(len(blokken_start.get(eerste_uur, [])), len(blokken_start.get(grens_uur_2_5, [])))
-        for k in range(n):
-            if k < len(blokken_start.get(eerste_uur, [])):
-                volgorde.append(blokken_start[eerste_uur][k])
-            if k < len(blokken_start.get(grens_uur_2_5, [])):
-                volgorde.append(blokken_start[grens_uur_2_5][k])
+        left = list(blokken_start.get(eerste_uur, []))
+        right = list(blokken_start.get(grens_uur_2_5, []))
+        # Afwisselend links en rechts vullen
+        while left or right:
+            if left:
+                volgorde.append(left.pop(0))
+            if right:
+                volgorde.append(right.pop(0))
         lange_pauze_opties = volgorde
         # Als er te weinig blokken zijn, voeg blokken toe uit het laatste halfuur
         if len(lange_pauze_opties) < 1:
