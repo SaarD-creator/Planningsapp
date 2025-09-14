@@ -1299,6 +1299,14 @@ naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type
 niet_geplaatst = []
 for s in random.sample(lange_werkers, len(lange_werkers)):
     naam = s["naam"]
+    # Houd bij wie al een lange pauze heeft gekregen
+    if not hasattr(for s in random.sample, "lange_pauze_ontvangers"):
+        for s in random.sample.lange_pauze_ontvangers = set()
+    lange_pauze_ontvangers = for s in random.sample.lange_pauze_ontvangers
+    if naam in lange_pauze_ontvangers:
+        if not plaats_student(s, harde_mode=False):
+            niet_geplaatst.append(s)
+        continue
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) <= 6:
         if not plaats_student(s, harde_mode=False):
@@ -1358,6 +1366,7 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
             cel2.alignment = center_align
             cel2.border = thin_border
             cel2.fill = lichtgroen_fill
+            lange_pauze_ontvangers.add(naam)
             geplaatst = True
             break
     if not geplaatst:
