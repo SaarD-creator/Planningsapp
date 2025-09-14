@@ -33,6 +33,43 @@ ws = wb["Blad1"]
 # -----------------------------
 
 # Hulpfuncties
+def get_student_work_hours(naam):
+    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
+    uren = set()
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur is None:
+            continue
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                uren.add(uur)
+                break
+    return sorted(uren)
+
+def vind_attractie_op_uur(naam, uur):
+    """Geef attractienaam (exact zoals in Planning-kolom A) waar student staat op dit uur; None als niet gevonden."""
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        col_uur = parse_header_uur(header)
+        if col_uur != uur:
+            continue
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                return ws_planning.cell(row, 1).value
+    return None
+
+def pv_kan_attr(pv, attr):
+    base = normalize_attr(attr)
+    if base == "extra":
+        return True
+    return base in {normalize_attr(a) for a in pv.get("attracties", [])}
+
+def is_toegestaan_pv_col(col):
+    if len(open_uren) <= 6:
+        return True
+    return col not in list(range(2, 14))
+
 # -----------------------------
 def max_consecutive_hours(urenlijst):
     if not urenlijst:
@@ -998,55 +1035,39 @@ def is_korte_pauze_toegestaan_col(col):
 
     # 5. Voor elke lange werker: wijs het eerstvolgende vrije slot toe waar de student op beide uren werkt
 
-    def parse_header_uur(header):
-        if not header:
-            return None
-        s = str(header).strip()
-        try:
-            if "u" in s:
-                return int(s.split("u")[0])
-            if ":" in s:
-                uur, _min = s.split(":")
-                return int(uur)
-            return int(s)
-        except:
-            return None
 
-    lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lange pauze
-    lichtpaars_fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # kwartierpauze
-
-    for s in lange_werkers:
-        naam = s["naam"]
-        werk_uren = get_student_work_hours(naam)
-        # Pauze mag niet in eerste of laatste werkuur vallen
-        if len(werk_uren) > 2:
-            verboden_uren = {werk_uren[0], werk_uren[-1]}
-        else:
-            verboden_uren = set(werk_uren)
-        toegewezen = False
-        for idx, (pv_row, col1, col2) in enumerate(mogelijke_lange_pauze_slots):
-            # Bepaal de uren van deze kolommen
-            header1 = ws_pauze.cell(1, col1).value
-            header2 = ws_pauze.cell(1, col2).value
-            uur1 = parse_header_uur(header1)
-            uur2 = parse_header_uur(header2)
-            if uur1 is None or uur2 is None:
-                continue
-            # Student moet op beide uren werken, en niet in verboden uren
-            if uur1 in werk_uren and uur2 in werk_uren and uur1 not in verboden_uren and uur2 not in verboden_uren:
-                # Vul beide cellen
-                ws_pauze.cell(pv_row, col1).value = naam
-                ws_pauze.cell(pv_row, col2).value = naam
-                ws_pauze.cell(pv_row, col1).alignment = center_align
-                ws_pauze.cell(pv_row, col2).alignment = center_align
-                ws_pauze.cell(pv_row, col1).border = thin_border
-                ws_pauze.cell(pv_row, col2).border = thin_border
-                ws_pauze.cell(pv_row, col1).fill = lichtgroen_fill
-                ws_pauze.cell(pv_row, col2).fill = lichtgroen_fill
-                toegewezen = True
-                # Verwijder dit slot zodat het niet dubbel gebruikt wordt
-                mogelijke_lange_pauze_slots.pop(idx)
-                break
+for s in lange_werkers:
+    naam = s["naam"]
+    werk_uren = get_student_work_hours(naam)
+    # Pauze mag niet in eerste of laatste werkuur vallen
+    if len(werk_uren) > 2:
+        verboden_uren = {werk_uren[0], werk_uren[-1]}
+    else:
+        verboden_uren = set(werk_uren)
+    toegewezen = False
+    for idx, (pv_row, col1, col2) in enumerate(mogelijke_lange_pauze_slots):
+        # Bepaal de uren van deze kolommen
+        header1 = ws_pauze.cell(1, col1).value
+        header2 = ws_pauze.cell(1, col2).value
+        uur1 = parse_header_uur(header1)
+        uur2 = parse_header_uur(header2)
+        if uur1 is None or uur2 is None:
+            continue
+        # Student moet op beide uren werken, en niet in verboden uren
+        if uur1 in werk_uren and uur2 in werk_uren and uur1 not in verboden_uren and uur2 not in verboden_uren:
+            # Vul beide cellen
+            ws_pauze.cell(pv_row, col1).value = naam
+            ws_pauze.cell(pv_row, col2).value = naam
+            ws_pauze.cell(pv_row, col1).alignment = center_align
+            ws_pauze.cell(pv_row, col2).alignment = center_align
+            ws_pauze.cell(pv_row, col1).border = thin_border
+            ws_pauze.cell(pv_row, col2).border = thin_border
+            ws_pauze.cell(pv_row, col1).fill = lichtgroen_fill
+            ws_pauze.cell(pv_row, col2).fill = lichtgroen_fill
+            toegewezen = True
+            # Verwijder dit slot zodat het niet dubbel gebruikt wordt
+            mogelijke_lange_pauze_slots.pop(idx)
+            break
 
     # Overige cellen kleuren zoals voorheen (naam_leeg_fill, lichtpaars_fill)
     for pv, pv_row in pv_rows:
