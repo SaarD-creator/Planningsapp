@@ -1012,6 +1012,7 @@ lange_werkers_names = {s["naam"] for s in lange_werkers}
         werkuren_pv = float(werkuren_pv)
     except Exception:
         werkuren_pv = 0
+
     if werkuren_pv > 6:
         # Verzamel alleen plekken in de eigen rij van deze pauzevlinder
         alle_halve_uren = []  # lijst van (pv, pv_row, idx, col1, col2)
