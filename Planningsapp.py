@@ -912,7 +912,7 @@ for pv, pv_row in pv_rows:
 # --- LANGE PAUZE TOEWIJZING: gespreid, eerste drie pauzevlinderuren, heel/half uur ---
 def wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols):
 
-    # 1. Verzamel alle mogelijke dubbele blokken (col, col+1) in de eerste 3 pauzevlinderuren (6 kwartieren)
+    # 1. Maak niet-overlappende dubbele blokken (1-2, 3-4, 5-6) in de eerste 3 pauzevlinderuren (6 kwartieren)
     pauzeuren = []
     for col in sorted(pauze_cols):
         header = ws_pauze.cell(1, col).value
@@ -923,8 +923,9 @@ def wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols):
         if len(pauzeuren) >= 6:
             break
     blokken = []
-    for i in range(len(pauzeuren)-1):
-        blokken.append((pauzeuren[i], pauzeuren[i+1]))
+    for i in range(0, len(pauzeuren)-1, 2):
+        if i+1 < len(pauzeuren):
+            blokken.append((pauzeuren[i], pauzeuren[i+1]))
 
     # 2. Maak een lijst van alle (student, blok) combinaties die geldig zijn
     opties = []
@@ -956,70 +957,57 @@ def wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols):
                 "attrs": (attr1, attr2)
             })
 
-    # 3. Maximale spreiding: wijs blokken toe zodat de afstand tussen de gekozen blokken maximaal is
-    #    - Sorteer blokken
-    blokken_sorted = sorted(set([optie["blok"] for optie in opties]))
+    # 3. Wijs studenten toe aan niet-overlappende blokken, van buiten naar binnen (maximale spreiding)
     studenten_sorted = sorted(lange_werkers, key=lambda s: s["naam"])
-    toegewezen_blokken = []
+    blokken_sorted = blokken  # al gesorteerd van begin naar eind
+    # Maak een volgorde: begin, eind, midden, ...
+    blok_volgorde = []
+    left = 0
+    right = len(blokken_sorted) - 1
+    while left <= right:
+        if left == right:
+            blok_volgorde.append(blokken_sorted[left])
+        else:
+            blok_volgorde.append(blokken_sorted[left])
+            blok_volgorde.append(blokken_sorted[right])
+        left += 1
+        right -= 1
     toegewezen_studenten = set()
-    opties_per_student = {s["naam"]: [o for o in opties if o["student"]["naam"] == s["naam"]] for s in studenten_sorted}
-
-    def blok_afstand_score(blok, gekozen_blokken):
-        # Score = kleinste afstand tot een al gekozen blok (hoe groter, hoe beter)
-        if not gekozen_blokken:
-            return float('inf')
-        idx = blokken_sorted.index(blok)
-        return min(abs(idx - blokken_sorted.index(b)) for b in gekozen_blokken)
-
-    for _ in range(min(len(studenten_sorted), len(blokken_sorted))):
-        # Kies de student die nog niet is toegewezen
-        beste_score = -1
-        beste_optie = None
-        for s in studenten_sorted:
-            naam = s["naam"]
-            if naam in toegewezen_studenten:
+    for blok, s in zip(blok_volgorde, studenten_sorted):
+        naam = s["naam"]
+        # Vind een optie voor deze student op dit blok
+        opties_blok_student = [o for o in opties if o["blok"] == blok and o["student"]["naam"] == naam]
+        if not opties_blok_student:
+            continue
+        optie = opties_blok_student[0]
+        col1, col2 = blok
+        uur1, uur2 = optie["uren"]
+        attr1, attr2 = optie["attrs"]
+        # Zoek een pauzevlinder die deze attractie kan overnemen
+        for pv, pv_row in pv_rows:
+            if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
                 continue
-            # Kies het blok met de grootste afstand tot de al gekozen blokken
-            opties_student = [o for o in opties_per_student[naam] if o["blok"] not in toegewezen_blokken]
-            if not opties_student:
-                continue
-            opties_student.sort(key=lambda o: -blok_afstand_score(o["blok"], toegewezen_blokken))
-            optie = opties_student[0]
-            score = blok_afstand_score(optie["blok"], toegewezen_blokken)
-            if score > beste_score:
-                beste_score = score
-                beste_optie = optie
-        if beste_optie:
-            naam = beste_optie["student"]["naam"]
-            col1, col2 = beste_optie["blok"]
-            uur1, uur2 = beste_optie["uren"]
-            attr1, attr2 = beste_optie["attrs"]
-            # Zoek een pauzevlinder die deze attractie kan overnemen
-            for pv, pv_row in pv_rows:
-                if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
-                    continue
-                cel1 = ws_pauze.cell(pv_row, col1)
-                cel2 = ws_pauze.cell(pv_row, col2)
-                boven_cel1 = ws_pauze.cell(pv_row-1, col1)
-                boven_cel2 = ws_pauze.cell(pv_row-1, col2)
-                if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                    boven_cel1.value = attr1
-                    boven_cel1.alignment = center_align
-                    boven_cel1.border = thin_border
-                    boven_cel2.value = attr2
-                    boven_cel2.alignment = center_align
-                    boven_cel2.border = thin_border
-                    cel1.value = naam
-                    cel1.alignment = center_align
-                    cel1.border = thin_border
-                    cel2.value = naam
-                    cel2.alignment = center_align
-                    cel2.border = thin_border
-                    cel1.fill = lichtgroen_fill
-                    cel2.fill = lichtgroen_fill
-                    toegewezen_blokken.append(beste_optie["blok"])
-                    toegewezen_studenten.add(naam)
-                    break
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+            boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                boven_cel1.value = attr1
+                boven_cel1.alignment = center_align
+                boven_cel1.border = thin_border
+                boven_cel2.value = attr2
+                boven_cel2.alignment = center_align
+                boven_cel2.border = thin_border
+                cel1.value = naam
+                cel1.alignment = center_align
+                cel1.border = thin_border
+                cel2.value = naam
+                cel2.alignment = center_align
+                cel2.border = thin_border
+                cel1.fill = lichtgroen_fill
+                cel2.fill = lichtgroen_fill
+                toegewezen_studenten.add(naam)
+                break
 
 # --- Roep deze functie aan ná de definitie van lange_werkers ---
 
