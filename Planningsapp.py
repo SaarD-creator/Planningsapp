@@ -110,25 +110,25 @@ def partition_run_lengths(L):
             if 'pauzevlinders_zonder_lange_pauze' not in locals():
                 pauzevlinders_zonder_lange_pauze = []
             pauzevlinders_zonder_lange_pauze.append(pv["naam"])
+
     naam = ws.cell(rij,12).value
-    if not naam:
-        continue
-    uren_beschikbaar=[10+(kol-3) for kol in range(3,12) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
-    attracties=[ws.cell(1,kol).value for kol in range(14,32) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
-    try:
-        aantal_attracties=int(ws[f'AG{rij}'].value) if ws[f'AG{rij}'].value else len(attracties)
-    except:
-        aantal_attracties=len(attracties)
-    studenten.append({
-        "naam": naam,
-        "uren_beschikbaar": sorted(uren_beschikbaar),
-        "attracties":[a for a in attracties if a],
-        "aantal_attracties":aantal_attracties,
-        "is_pauzevlinder":False,
-        "pv_number":None,
-        "assigned_attracties":set(),
-        "assigned_hours":[]
-    })
+    if naam:
+        uren_beschikbaar=[10+(kol-3) for kol in range(3,12) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
+        attracties=[ws.cell(1,kol).value for kol in range(14,32) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
+        try:
+            aantal_attracties=int(ws[f'AG{rij}'].value) if ws[f'AG{rij}'].value else len(attracties)
+        except:
+            aantal_attracties=len(attracties)
+        studenten.append({
+            "naam": naam,
+            "uren_beschikbaar": sorted(uren_beschikbaar),
+            "attracties":[a for a in attracties if a],
+            "aantal_attracties":aantal_attracties,
+            "is_pauzevlinder":False,
+            "pv_number":None,
+            "assigned_attracties":set(),
+            "assigned_hours":[]
+        })
 
 # -----------------------------
 # Openingsuren
