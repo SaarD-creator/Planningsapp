@@ -914,6 +914,21 @@ for pv, pv_row in pv_rows:
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
 # DEEL 4: Lange werkers (>6 uur) pauze inplannen – gegarandeerd
+# --- Helper: werkuren ophalen vóór gebruik ---
+def get_student_work_hours(naam):
+    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
+    uren = set()
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur is None:
+            continue
+        # check of student in deze kolom ergens staat
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                uren.add(uur)
+                break
+    return sorted(uren)
 # --- Eerlijke, gespreide verdeling van lange pauzes (pauzevlinders en lange werkers) ---
 def vind_heel_half_slots(ws_pauze, pauze_cols, eerste3_uren):
     """Vind alle dubbele blokken (heel/half uur) in de eerste drie pauzeuren per rij."""
