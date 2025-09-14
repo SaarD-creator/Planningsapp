@@ -658,6 +658,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -922,8 +923,24 @@ center_align = Alignment(horizontal="center", vertical="center")
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
 
 
+
 # --- Nieuwe logica: eerlijke verdeling van lange pauzes over de eerste drie pauzevlinderuren ---
-# Verzamel alle pauze-kolommen met heel/half uur in de eerste drie pauzeuren
+# Zet get_student_work_hours eerst zodat deze beschikbaar is
+def get_student_work_hours(naam):
+    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
+    uren = set()
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur is None:
+            continue
+        # check of student in deze kolom ergens staat
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                uren.add(uur)
+                break
+    return sorted(uren)
+
 from datetime import datetime, timedelta
 pauze_cols = []
 pauze_col_times = []  # (col, tijd as datetime.time)
