@@ -662,6 +662,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -965,35 +966,49 @@ eerste3_uren = sorted(list(set([parse_header_uur(ws_pauze.cell(1, col).value) fo
 slots_per_row = vind_heel_half_slots(ws_pauze, pauze_cols, eerste3_uren)
 
 # Pauzevlinders met >6u: prioriteit, altijd in eigen rij
+
+# --- Nieuwe, betere spreiding van lange pauzes ---
 pv_lange = [pv for pv in selected if len(get_student_work_hours(pv['naam'])) > 6]
 lw_lange = [s for s in studenten if (student_totalen.get(s['naam'], 0) > 6 or ('-18' in str(s['naam']) and student_totalen.get(s['naam'], 0) > 0)) and s['naam'] not in [pv['naam'] for pv in selected]]
 
-# 1. Pauzevlinders met >6u: verdeel zo eerlijk mogelijk over hun eigen rij
-gebruikte_slots = set()
-for pv in pv_lange:
-    pv_row = next((row for p, row in pv_rows if p['naam']==pv['naam']), None)
-    if not pv_row or not slots_per_row[pv_row]:
-        continue
-    # Kies het slot dat het best verspreid is (middelste slot)
-    idx = len(slots_per_row[pv_row])//2
-    col1, col2 = slots_per_row[pv_row][idx]
-    cel1 = ws_pauze.cell(pv_row, col1)
-    cel2 = ws_pauze.cell(pv_row, col2)
-    if cel1.value in [None, ""] and cel2.value in [None, ""]:
-        cel1.value = pv['naam']
-        cel2.value = pv['naam']
-        cel1.alignment = center_align
-        cel2.alignment = center_align
-        cel1.border = thin_border
-        cel2.border = thin_border
-        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-        gebruikte_slots.add((pv_row, col1, col2))
-
-# 2. Overige lange werkers: verdeel over resterende vrije slots (alle rijen)
-all_free_slots = []
+# Verzamel alle mogelijke slots per uur (per rij)
+slots_per_uur = {}  # uur -> lijst van (pv_row, col1, col2)
 for pv, pv_row in pv_rows:
     for (col1, col2) in slots_per_row[pv_row]:
+        tijd1 = ws_pauze.cell(1, col1).value
+        if tijd1 and 'u' in tijd1:
+            uur = int(tijd1.split('u')[0])
+            slots_per_uur.setdefault(uur, []).append((pv_row, col1, col2))
+
+# Sorteer de uren (eerste drie pauzeuren)
+uren_sorted = sorted([u for u in slots_per_uur if u in eerste3_uren])
+
+# 1. Pauzevlinders met >6u: cyclisch over de uren
+gebruikte_slots = set()
+pv_lange_cycle = pv_lange.copy()
+for i, uur in enumerate(uren_sorted):
+    for pv in pv_lange_cycle:
+        pv_row = next((row for p, row in pv_rows if p['naam']==pv['naam']), None)
+        slot = next(((r, c1, c2) for (r, c1, c2) in slots_per_uur[uur] if r == pv_row and (r, c1, c2) not in gebruikte_slots), None)
+        if slot:
+            _, col1, col2 = slot
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                cel1.value = pv['naam']
+                cel2.value = pv['naam']
+                cel1.alignment = center_align
+                cel2.alignment = center_align
+                cel1.border = thin_border
+                cel2.border = thin_border
+                cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+                cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+                gebruikte_slots.add(slot)
+
+# 2. Overige lange werkers: cyclisch over de uren, over alle rijen
+all_free_slots = []
+for uur in uren_sorted:
+    for (pv_row, col1, col2) in slots_per_uur[uur]:
         if (pv_row, col1, col2) in gebruikte_slots:
             continue
         cel1 = ws_pauze.cell(pv_row, col1)
@@ -1012,6 +1027,8 @@ for idx, s in enumerate(lw_lange):
         cel2.alignment = center_align
         cel1.border = thin_border
         cel2.border = thin_border
+        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
         cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
         cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
 # -----------------------------
