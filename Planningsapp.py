@@ -662,7 +662,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -947,7 +946,7 @@ def vind_heel_half_slots(ws_pauze, pauze_cols, eerste3_uren):
     return slots_per_row
 
 # Bepaal eerste drie pauzeuren
-eerste3_uren = sorted(list(set([parse_header_uur(ws_pauze.cell(1, col).value) for col in pauze_cols if parse_header_uur(ws_pauze.cell(1, col).value) is not None])))[:3])
+eerste3_uren = sorted(list(set([parse_header_uur(ws_pauze.cell(1, col).value) for col in pauze_cols if parse_header_uur(ws_pauze.cell(1, col).value) is not None])))[:3]
 slots_per_row = vind_heel_half_slots(ws_pauze, pauze_cols, eerste3_uren)
 
 # Pauzevlinders met >6u: prioriteit, altijd in eigen rij
