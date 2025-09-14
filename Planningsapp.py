@@ -1967,7 +1967,10 @@ for pv, pv_row in pv_rows:
         max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
     # Alleen pauzevlinders die langer dan zes uur werken krijgen een lange pauze
     werkuren_pv = get_student_work_hours(pv["naam"])
-    if werkuren_pv <= 6:
+    try:
+        if werkuren_pv is None or float(werkuren_pv) <= 6:
+            continue
+    except Exception:
         continue
     # Verzamel alleen plekken in de eigen rij van deze pauzevlinder
     alle_halve_uren = []  # lijst van (pv, pv_row, idx, col1, col2)
