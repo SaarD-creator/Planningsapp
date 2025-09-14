@@ -997,27 +997,6 @@ def is_korte_pauze_toegestaan_col(col):
     ]
 
     # 5. Voor elke lange werker: wijs het eerstvolgende vrije slot toe waar de student op beide uren werkt
-    def get_student_work_hours(naam):
-        uren = set()
-        for col in range(2, ws_planning.max_column + 1):
-            header = ws_planning.cell(1, col).value
-            uur = None
-            s = str(header).strip() if header else ""
-            try:
-                if "u" in s:
-                    uur = int(s.split("u")[0])
-                elif ":" in s:
-                    uur, _min = s.split(":")
-                    uur = int(uur)
-                else:
-                    uur = int(s)
-            except:
-                continue
-            for row in range(2, ws_planning.max_row + 1):
-                if ws_planning.cell(row, col).value == naam:
-                    uren.add(uur)
-                    break
-        return sorted(uren)
 
     def parse_header_uur(header):
         if not header:
