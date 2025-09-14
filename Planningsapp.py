@@ -1982,7 +1982,7 @@ for pv, pv_row in pv_rows:
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
                 halve_uren.append((idx, col1, col2))
         # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
-        from collections import Counter
+        from collections import Counter, defaultdict
         pv_lange_count = Counter()
         for pv2, pv_row2 in pv_rows:
             for idx2, col in enumerate(pauze_cols[:-1]):
@@ -1991,10 +1991,19 @@ for pv, pv_row in pv_rows:
                 cel_next = ws_pauze.cell(pv_row2, next_col)
                 if cel.value and cel.value == cel_next.value:
                     pv_lange_count[pv2["naam"]] += 1
-        # Sorteer halve_uren zodat de pauzevlinder met het minste lange pauzes eerst komt
-        halve_uren.sort(key=lambda tup: pv_lange_count[pv["naam"]])
+        # Groepeer halve_uren per tijdslot (idx)
+        halve_uren_per_idx = defaultdict(list)
+        for tup in halve_uren:
+            halve_uren_per_idx[tup[0]].append(tup)
+        # Shuffle per tijdslot voor spreiding
+        gespreid_halve_uren = []
+        for idx in sorted(halve_uren_per_idx.keys()):
+            random.shuffle(halve_uren_per_idx[idx])
+            gespreid_halve_uren.extend(halve_uren_per_idx[idx])
+        # Sorteer op aantal lange pauzes per pauzevlinder
+        gespreid_halve_uren.sort(key=lambda tup: pv_lange_count[pv["naam"]])
         geplaatst = False
-        for idx, col1, col2 in halve_uren:
+        for idx, col1, col2 in gespreid_halve_uren:
             cel1 = ws_pauze.cell(pv_row, col1)
             cel2 = ws_pauze.cell(pv_row, col2)
             if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
