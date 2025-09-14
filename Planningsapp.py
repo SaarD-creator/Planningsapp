@@ -1081,30 +1081,32 @@ def plaats_student(student, harde_mode=False):
         plaats_student._lr_toggle = 0
     plaats_student._lr_toggle += 1
     # Vind alle mogelijke dubbele blokjes (lange pauzes)
-    lange_pauze_opties_lr = []  # links naar rechts
-    lange_pauze_opties_rl = []  # rechts naar links
-    for i in range(len(uur_col_pairs)-1):
-        uur1, col1 = uur_col_pairs[i]
-        uur2, col2 = uur_col_pairs[i+1]
+    # Alleen lange pauzes in de eerste drie pauzevlinderuren (dus max blok 1-2, 2-3, 3-4, 4-5)
+    # Bepaal de kolommen van de eerste vijf halfuren (voor links-rechts en rechts-links)
+    eerste_vijf = uur_col_pairs[:5] if len(uur_col_pairs) >= 5 else uur_col_pairs
+    # Links naar rechts: blokken 0-1, 1-2, 2-3, 3-4
+    lange_pauze_opties_lr = []
+    for i in range(0, min(4, len(eerste_vijf)-1)):
+        uur1, col1 = eerste_vijf[i]
+        uur2, col2 = eerste_vijf[i+1]
         if col2 == col1 + 1:
             lange_pauze_opties_lr.append((i, uur1, col1, uur2, col2))
-    for i in range(len(uur_col_pairs)-1, 0, -1):
-        uur1, col1 = uur_col_pairs[i-1]
-        uur2, col2 = uur_col_pairs[i]
+    # Rechts naar links: begin bij blok 4-5 (vijfde en vierde halfuur), dan 3-4, 2-3, 1-2, 0-1
+    lange_pauze_opties_rl = []
+    for i in range(4, 0, -1):
+        if i >= len(eerste_vijf):
+            continue
+        uur1, col1 = eerste_vijf[i-1]
+        uur2, col2 = eerste_vijf[i]
         if col2 == col1 + 1:
             lange_pauze_opties_rl.append((i-1, uur1, col1, uur2, col2))
-    # Sla het zesde halfuur (meestal laatste blokje) over in de eerste ronde
-    def filter_zesde_halfuur(opties):
-        # Bepaal het zesde halfuur (laatste blokje)
-        if len(opties) <= 5:
-            return opties, []
-        # Neem alle opties behalve de laatste
-        return opties[:-1], [opties[-1]]
+    # Sla het zesde halfuur (en alles na het vijfde) altijd over
     # Kies de richting
     if plaats_student._lr_toggle % 2 == 1:
-        opties, last_optie = filter_zesde_halfuur(lange_pauze_opties_lr)
+        opties = lange_pauze_opties_lr
     else:
-        opties, last_optie = filter_zesde_halfuur(lange_pauze_opties_rl)
+        opties = lange_pauze_opties_rl
+    last_optie = []
     # Probeer alle opties voor de lange pauze (max 1x per student)
     if not reg["lange"]:
         for optie in opties + last_optie:
