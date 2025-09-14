@@ -915,6 +915,91 @@ for pv, pv_row in pv_rows:
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
 # DEEL 4: Lange werkers (>6 uur) pauze inplannen – gegarandeerd
+# --- Eerlijke, gespreide verdeling van lange pauzes (pauzevlinders en lange werkers) ---
+def vind_heel_half_slots(ws_pauze, pauze_cols, eerste3_uren):
+    """Vind alle dubbele blokken (heel/half uur) in de eerste drie pauzeuren per rij."""
+    slots_per_row = defaultdict(list)  # pv_row -> [(col1, col2)]
+    for pv, pv_row in pv_rows:
+        for idx in range(len(pauze_cols)-1):
+            col1 = pauze_cols[idx]
+            col2 = pauze_cols[idx+1]
+            tijd1 = ws_pauze.cell(1, col1).value
+            tijd2 = ws_pauze.cell(1, col2).value
+            # Alleen heel/half uur, geen kwartieren
+            if not (tijd1 and tijd2):
+                continue
+            try:
+                h1, m1 = int(tijd1.split('u')[0]), int(tijd1.split('u')[1] or 0) if 'u' in tijd1 and len(tijd1.split('u'))>1 else 0
+                h2, m2 = int(tijd2.split('u')[0]), int(tijd2.split('u')[1] or 0) if 'u' in tijd2 and len(tijd2.split('u'))>1 else 0
+            except:
+                continue
+            if (m1 not in (0,30)) or (m2 not in (0,30)):
+                continue
+            # Alleen in eerste drie pauzeuren
+            if h1 not in eerste3_uren or h2 not in eerste3_uren:
+                continue
+            # Vermijd laatste halfuur indien mogelijk
+            if max(h1,h2)==max(eerste3_uren) and (m1==30 or m2==30):
+                continue
+            # Dubbele blokken (naast elkaar)
+            if col2 == col1+1:
+                slots_per_row[pv_row].append((col1, col2))
+    return slots_per_row
+
+# Bepaal eerste drie pauzeuren
+eerste3_uren = sorted(list(set([parse_header_uur(ws_pauze.cell(1, col).value) for col in pauze_cols if parse_header_uur(ws_pauze.cell(1, col).value) is not None])))[:3])
+slots_per_row = vind_heel_half_slots(ws_pauze, pauze_cols, eerste3_uren)
+
+# Pauzevlinders met >6u: prioriteit, altijd in eigen rij
+pv_lange = [pv for pv in selected if len(get_student_work_hours(pv['naam'])) > 6]
+lw_lange = [s for s in studenten if (student_totalen.get(s['naam'], 0) > 6 or ('-18' in str(s['naam']) and student_totalen.get(s['naam'], 0) > 0)) and s['naam'] not in [pv['naam'] for pv in selected]]
+
+# 1. Pauzevlinders met >6u: verdeel zo eerlijk mogelijk over hun eigen rij
+gebruikte_slots = set()
+for pv in pv_lange:
+    pv_row = next((row for p, row in pv_rows if p['naam']==pv['naam']), None)
+    if not pv_row or not slots_per_row[pv_row]:
+        continue
+    # Kies het slot dat het best verspreid is (middelste slot)
+    idx = len(slots_per_row[pv_row])//2
+    col1, col2 = slots_per_row[pv_row][idx]
+    cel1 = ws_pauze.cell(pv_row, col1)
+    cel2 = ws_pauze.cell(pv_row, col2)
+    if cel1.value in [None, ""] and cel2.value in [None, ""]:
+        cel1.value = pv['naam']
+        cel2.value = pv['naam']
+        cel1.alignment = center_align
+        cel2.alignment = center_align
+        cel1.border = thin_border
+        cel2.border = thin_border
+        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+        gebruikte_slots.add((pv_row, col1, col2))
+
+# 2. Overige lange werkers: verdeel over resterende vrije slots (alle rijen)
+all_free_slots = []
+for pv, pv_row in pv_rows:
+    for (col1, col2) in slots_per_row[pv_row]:
+        if (pv_row, col1, col2) in gebruikte_slots:
+            continue
+        cel1 = ws_pauze.cell(pv_row, col1)
+        cel2 = ws_pauze.cell(pv_row, col2)
+        if cel1.value in [None, ""] and cel2.value in [None, ""]:
+            all_free_slots.append((pv_row, col1, col2))
+
+for idx, s in enumerate(lw_lange):
+    if idx < len(all_free_slots):
+        pv_row, col1, col2 = all_free_slots[idx]
+        cel1 = ws_pauze.cell(pv_row, col1)
+        cel2 = ws_pauze.cell(pv_row, col2)
+        cel1.value = s['naam']
+        cel2.value = s['naam']
+        cel1.alignment = center_align
+        cel2.alignment = center_align
+        cel1.border = thin_border
+        cel2.border = thin_border
+        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
 # -----------------------------
 
 from openpyxl.styles import Alignment, Border, Side, PatternFill
@@ -926,154 +1011,13 @@ center_align = Alignment(horizontal="center", vertical="center")
 # Zachtblauw, anders dan je titelkleuren; alleen voor naamcellen
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
 
-
-
-# --- Nieuwe logica: eerlijke verdeling van lange pauzes over de eerste drie pauzevlinderuren ---
-# Zet get_student_work_hours eerst zodat deze beschikbaar is
-def get_student_work_hours(naam):
-    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
-    uren = set()
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
-        uur = parse_header_uur(header)
-        if uur is None:
-            continue
-        # check of student in deze kolom ergens staat
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                uren.add(uur)
-                break
-    return sorted(uren)
-
-from datetime import datetime, timedelta
+# Alleen kolommen B..G
+# Dynamisch: alle kolommen waar in rij 1 een uur staat (bv. '13u45', '14u', ...)
 pauze_cols = []
-pauze_col_times = []  # (col, tijd as datetime.time)
-pauze_start = None
-pauze_end = None
 for col in range(2, ws_pauze.max_column + 1):
     header = ws_pauze.cell(1, col).value
     if header and ("u" in str(header)):
-        # Parse tijd
-        s = str(header).replace('u', ':').replace(' ', '')
-        if ':' not in s:
-            s += '00'
-        if s.count(':') == 1:
-            s += '00' if len(s.split(':')[1]) == 0 else ''
-        try:
-            tijd = datetime.strptime(s, '%H:%M').time()
-        except:
-            try:
-                tijd = datetime.strptime(s, '%H%M').time()
-            except:
-                tijd = None
-        if tijd:
-            pauze_cols.append(col)
-            pauze_col_times.append((col, tijd))
-            if pauze_start is None or tijd < pauze_start:
-                pauze_start = tijd
-            if pauze_end is None or tijd > pauze_end:
-                pauze_end = tijd
-
-# Bepaal de eerste drie pauzeuren (op basis van tijd)
-if pauze_start:
-    eerste3_start = pauze_start
-    # 3 uur verder
-    dt = datetime.combine(datetime.today(), pauze_start) + timedelta(hours=3)
-    eerste3_end = dt.time()
-else:
-    eerste3_start = None
-    eerste3_end = None
-
-# Selecteer alleen heel/half uur slots binnen de eerste drie uur, vermijd laatste halfuur indien mogelijk
-def is_heel_of_half(t):
-    return t.minute in (0, 30)
-
-eerste3_slots = [(col, t) for (col, t) in pauze_col_times if eerste3_start and eerste3_end and eerste3_start <= t < eerste3_end and is_heel_of_half(t)]
-
-# Vermijd laatste halfuur indien mogelijk
-if eerste3_slots:
-    laatste_halfuur = max([t for (col, t) in eerste3_slots if t.minute == 30], default=None)
-    slots_zonder_laatste = [(col, t) for (col, t) in eerste3_slots if t != laatste_halfuur]
-    if len(slots_zonder_laatste) >= len(eerste3_slots) - 1:
-        eerste3_slots = slots_zonder_laatste
-
-# Pauzevlinders met >6u werk: prioriteit, altijd in eigen rij
-pv_lange = [pv for pv in selected if len(get_student_work_hours(pv['naam'])) > 6]
-lw_lange = [s for s in studenten if (student_totalen.get(s['naam'], 0) > 6 or ('-18' in str(s['naam']) and student_totalen.get(s['naam'], 0) > 0)) and s['naam'] not in [pv['naam'] for pv in selected]]
-
-# Maak slots per pauzevlinder-rij (alleen in eigen rij)
-pv_rows = []
-for pv in selected:
-    row_found = None
-    for r in range(2, ws_pauze.max_row + 1):
-        if str(ws_pauze.cell(r, 1).value).strip() == str(pv["naam"]).strip():
-            row_found = r
-            break
-    if row_found is not None:
-        pv_rows.append((pv, row_found))
-
-# Verdeel slots zo eerlijk mogelijk over pauzevlinders en lange werkers
-slots_per_pv = {pv["naam"]: [] for pv in selected}
-slots_over = []
-for (pv, pv_row) in pv_rows:
-    # Alle slots in eigen rij
-    for (col, t) in eerste3_slots:
-        slots_per_pv[pv["naam"]].append((pv_row, col, t))
-
-# 1. Pauzevlinders met >6u: eerst verdelen
-pv_lange_namen = [pv["naam"] for pv in pv_lange]
-pv_lange_slots = []
-for naam in pv_lange_namen:
-    pv_slots = slots_per_pv.get(naam, [])
-    pv_slots_copy = list(pv_slots)  # iterate over a copy to avoid ValueError
-    if pv_slots_copy:
-        # Kies het slot dat het best verspreid is (middelste slot)
-        idx = len(pv_slots_copy) // 2
-        pv_row, col, t = pv_slots_copy[idx]
-        cel1 = ws_pauze.cell(pv_row, col)
-        cel2 = ws_pauze.cell(pv_row, col+1) if (col+1, (t.hour, (t.minute+15)%60)) in [(c, (tt.hour, tt.minute)) for (c,tt) in eerste3_slots] else None
-        if cel1.value in [None, ""] and cel2 and cel2.value in [None, ""]:
-            cel1.value = naam
-            cel2.value = naam
-            cel1.alignment = center_align
-            cel2.alignment = center_align
-            cel1.border = thin_border
-            cel2.border = thin_border
-            cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-            cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-            # Markeer deze slots als bezet
-            slots_per_pv[naam] = [s for s in pv_slots_copy if s[1] != col and s[1] != col+1]
-
-# 2. Overige lange werkers: verdeel over resterende slots (alle rijen)
-lw_lange_namen = [s["naam"] for s in lw_lange]
-all_free_slots = []
-for pv, pv_row in pv_rows:
-    slots_copy = list(slots_per_pv[pv["naam"]])
-    used_indices = []
-    for idx, (col, t) in enumerate(slots_copy):
-        cel1 = ws_pauze.cell(pv_row, col)
-        cel2 = ws_pauze.cell(pv_row, col+1) if (col+1, (t.hour, (t.minute+15)%60)) in [(c, (tt.hour, tt.minute)) for (c,tt) in eerste3_slots] else None
-        if cel1.value in [None, ""] and cel2 and cel2.value in [None, ""]:
-            all_free_slots.append((pv_row, col, cel1, cel2))
-            used_indices.append(idx)
-    # Verwijder gebruikte slots NA de loop, niet tijdens iteratie
-    slots_per_pv[pv["naam"]] = [s for i, s in enumerate(slots_copy) if i not in used_indices]
-
-# Eerlijk verdelen over lange werkers
-for idx, naam in enumerate(lw_lange_namen):
-    if idx < len(all_free_slots):
-        pv_row, col, cel1, cel2 = all_free_slots[idx]
-        cel1.value = naam
-        cel2.value = naam
-        cel1.alignment = center_align
-        cel2.alignment = center_align
-        cel1.border = thin_border
-        cel2.border = thin_border
-        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-
-# Pauze_cols blijft voor de rest van de code gelijk
-pauze_cols = [col for (col, t) in pauze_col_times]
+        pauze_cols.append(col)
 
 
 def is_student_extra(naam):
