@@ -1295,14 +1295,11 @@ def plaats_student(student, harde_mode=False):
 lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lange pauze
 lichtpaars_fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # kwartierpauze
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
+lange_pauze_ontvangers = set()
 # --- Verspreid lange pauzes van lange werkers net als bij pauzevlinders ---
 niet_geplaatst = []
 for s in random.sample(lange_werkers, len(lange_werkers)):
     naam = s["naam"]
-    # Houd bij wie al een lange pauze heeft gekregen
-    if not hasattr(for s in random.sample, "lange_pauze_ontvangers"):
-        for s in random.sample.lange_pauze_ontvangers = set()
-    lange_pauze_ontvangers = for s in random.sample.lange_pauze_ontvangers
     if naam in lange_pauze_ontvangers:
         if not plaats_student(s, harde_mode=False):
             niet_geplaatst.append(s)
