@@ -998,6 +998,53 @@ for pv in selected:
 # Lange werkers: namen-set voor snelle checks
 # Zorg dat deze helpers boven de random verdeling staan
 def get_student_work_hours(naam):
+
+# --- Controle: in de eerste drie pauzeuren alleen lange pauzes, in de rest alleen korte pauzes ---
+
+    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
+    uren = set()
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur is None:
+            continue
+        # check of student in deze kolom ergens staat
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                uren.add(uur)
+                break
+    return sorted(uren)
+
+# --- Controle: in de eerste drie pauzeuren alleen lange pauzes, in de rest alleen korte pauzes ---
+eerste_drie_cols = pauze_cols[:6] if len(pauze_cols) >= 6 else pauze_cols[:]
+lange_pauze_namen = set()
+for pv, pv_row in pv_rows:
+    for i in range(len(eerste_drie_cols)-1):
+        col1 = eerste_drie_cols[i]
+        col2 = eerste_drie_cols[i+1]
+        naam = ws_pauze.cell(pv_row, col1).value
+        if naam and ws_pauze.cell(pv_row, col2).value == naam:
+            lange_pauze_namen.add(naam)
+
+# In de eerste drie pauzeuren: geen enkele korte pauze (dus geen enkele cel met naam die niet in een dubbel blok zit)
+for pv, pv_row in pv_rows:
+    for i in range(len(eerste_drie_cols)):
+        col = eerste_drie_cols[i]
+        naam = ws_pauze.cell(pv_row, col).value
+        if naam and naam not in lange_pauze_namen:
+            ws_pauze.cell(pv_row, col).value = None  # Verwijder korte pauze uit eerste drie pauzeuren
+
+# In de overige pauzeuren: geen enkele lange pauze (dus geen dubbele blokken)
+overige_cols = pauze_cols[6:] if len(pauze_cols) > 6 else []
+for pv, pv_row in pv_rows:
+    for i in range(len(overige_cols)-1):
+        col1 = overige_cols[i]
+        col2 = overige_cols[i+1]
+        naam = ws_pauze.cell(pv_row, col1).value
+        if naam and ws_pauze.cell(pv_row, col2).value == naam:
+            # Verwijder de tweede helft van een ongeldige lange pauze
+            ws_pauze.cell(pv_row, col2).value = None
+
 # --- Controle: in de eerste drie pauzeuren alleen lange pauzes, in de rest alleen korte pauzes ---
 lange_pauze_namen = set()
 for pv, pv_row in pv_rows:
@@ -1026,19 +1073,6 @@ for pv, pv_row in pv_rows:
         if naam and ws_pauze.cell(pv_row, col2).value == naam:
             # Verwijder de tweede helft van een ongeldige lange pauze
             ws_pauze.cell(pv_row, col2).value = None
-    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
-    uren = set()
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
-        uur = parse_header_uur(header)
-        if uur is None:
-            continue
-        # check of student in deze kolom ergens staat
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                uren.add(uur)
-                break
-    return sorted(uren)
 
 lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lange pauze
 
