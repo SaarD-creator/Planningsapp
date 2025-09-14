@@ -1291,6 +1291,19 @@ def plaats_student(student, harde_mode=False):
     return False
 
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
+def heeft_al_lange_pauze(naam):
+    # Check of student al een dubbele blok (lange pauze) heeft in het pauzeoverzicht
+    for pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols):
+            cel = ws_pauze.cell(pv_row, col)
+            if cel.value == naam:
+                # Check of volgende cel ook deze naam heeft (dubbele blok)
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze.cell(pv_row, next_col)
+                    if cel_next.value == naam:
+                        return True
+    return False
 
 lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lange pauze
 lichtpaars_fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # kwartierpauze
@@ -1300,7 +1313,7 @@ lange_pauze_ontvangers = set()
 niet_geplaatst = []
 for s in random.sample(lange_werkers, len(lange_werkers)):
     naam = s["naam"]
-    if naam in lange_pauze_ontvangers:
+    if naam in lange_pauze_ontvangers or heeft_al_lange_pauze(naam):
         if not plaats_student(s, harde_mode=False):
             niet_geplaatst.append(s)
         continue
@@ -1348,7 +1361,7 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
         boven_cel2 = ws_pauze.cell(pv_row-1, col2)
         attr1 = vind_attractie_op_uur(naam, uur1)
         attr2 = vind_attractie_op_uur(naam, uur2)
-        if cel1.value in [None, ""] and cel2.value in [None, ""]:
+        if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
             boven_cel1.value = attr1
             boven_cel1.alignment = center_align
             boven_cel1.border = thin_border
@@ -1927,6 +1940,8 @@ for pv, pv_row in pv_rows:
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) > 6:
         # Alleen de eerste 11 kwartieren (indices 0 t/m 10) zijn toegestaan voor lange pauzes
+        if heeft_al_lange_pauze(naam):
+            continue
         halve_uren = []  # lijst van (idx, col1, col2)
         max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
         for idx in range(max_start_idx+1):
@@ -1943,7 +1958,7 @@ for pv, pv_row in pv_rows:
         for idx, col1, col2 in halve_uren:
             cel1 = ws_pauze.cell(pv_row, col1)
             cel2 = ws_pauze.cell(pv_row, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+            if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
                 cel1.value = naam
                 cel2.value = naam
                 cel1.alignment = center_align
