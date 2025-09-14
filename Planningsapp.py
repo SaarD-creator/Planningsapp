@@ -660,9 +660,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -972,24 +969,40 @@ pv_lange = [pv for pv in selected if len(get_student_work_hours(pv['naam'])) > 6
 lw_lange = [s for s in studenten if (student_totalen.get(s['naam'], 0) > 6 or ('-18' in str(s['naam']) and student_totalen.get(s['naam'], 0) > 0)) and s['naam'] not in [pv['naam'] for pv in selected]]
 
 # Verzamel alle mogelijke slots per uur (per rij)
+
+# Bepaal slots per uur, markeer laatste halfuur van derde uur apart
 slots_per_uur = {}  # uur -> lijst van (pv_row, col1, col2)
+laatste_halfuur_slots = []
+if len(uren_sorted) >= 3:
+    derde_uur = uren_sorted[2]
+else:
+    derde_uur = None
 for pv, pv_row in pv_rows:
     for (col1, col2) in slots_per_row[pv_row]:
         tijd1 = ws_pauze.cell(1, col1).value
+        tijd2 = ws_pauze.cell(1, col2).value
         if tijd1 and 'u' in tijd1:
             uur = int(tijd1.split('u')[0])
-            slots_per_uur.setdefault(uur, []).append((pv_row, col1, col2))
+            min1 = int(tijd1.split('u')[1]) if 'u' in tijd1 and len(tijd1.split('u'))>1 and tijd1.split('u')[1] else 0
+            min2 = int(tijd2.split('u')[1]) if tijd2 and 'u' in tijd2 and len(tijd2.split('u'))>1 and tijd2.split('u')[1] else 0
+            # Markeer laatste halfuur van derde uur apart
+            if derde_uur is not None and uur == derde_uur and (min1 == 30 or min2 == 30):
+                laatste_halfuur_slots.append((pv_row, col1, col2))
+            else:
+                slots_per_uur.setdefault(uur, []).append((pv_row, col1, col2))
 
 # Sorteer de uren (eerste drie pauzeuren)
 uren_sorted = sorted([u for u in slots_per_uur if u in eerste3_uren])
 
 # 1. Pauzevlinders met >6u: cyclisch over de uren
+
+# Eerst alle slots behalve laatste halfuur van derde uur
 gebruikte_slots = set()
 pv_lange_cycle = pv_lange.copy()
 for i, uur in enumerate(uren_sorted):
     for pv in pv_lange_cycle:
         pv_row = next((row for p, row in pv_rows if p['naam']==pv['naam']), None)
-        slot = next(((r, c1, c2) for (r, c1, c2) in slots_per_uur[uur] if r == pv_row and (r, c1, c2) not in gebruikte_slots), None)
+        slot = next(((r, c1, c2) for (r, c1, c2) in slots_per_uur.get(uur, []) if r == pv_row and (r, c1, c2) not in gebruikte_slots), None)
         if slot:
             _, col1, col2 = slot
             cel1 = ws_pauze.cell(pv_row, col1)
@@ -1004,17 +1017,42 @@ for i, uur in enumerate(uren_sorted):
                 cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
                 cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
                 gebruikte_slots.add(slot)
+# Daarna, indien nodig, het laatste halfuur van derde uur
+for pv in pv_lange_cycle:
+    slot = next(((r, c1, c2) for (r, c1, c2) in laatste_halfuur_slots if r == next((row for p, row in pv_rows if p['naam']==pv['naam']), None) and (r, c1, c2) not in gebruikte_slots), None)
+    if slot:
+        pv_row, col1, col2 = slot
+        cel1 = ws_pauze.cell(pv_row, col1)
+        cel2 = ws_pauze.cell(pv_row, col2)
+        if cel1.value in [None, ""] and cel2.value in [None, ""]:
+            cel1.value = pv['naam']
+            cel2.value = pv['naam']
+            cel1.alignment = center_align
+            cel2.alignment = center_align
+            cel1.border = thin_border
+            cel2.border = thin_border
+            cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+            cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+            gebruikte_slots.add(slot)
 
 # 2. Overige lange werkers: cyclisch over de uren, over alle rijen
 all_free_slots = []
 for uur in uren_sorted:
-    for (pv_row, col1, col2) in slots_per_uur[uur]:
+    for (pv_row, col1, col2) in slots_per_uur.get(uur, []):
         if (pv_row, col1, col2) in gebruikte_slots:
             continue
         cel1 = ws_pauze.cell(pv_row, col1)
         cel2 = ws_pauze.cell(pv_row, col2)
         if cel1.value in [None, ""] and cel2.value in [None, ""]:
             all_free_slots.append((pv_row, col1, col2))
+# Daarna, indien nodig, het laatste halfuur van derde uur
+for (pv_row, col1, col2) in laatste_halfuur_slots:
+    if (pv_row, col1, col2) in gebruikte_slots:
+        continue
+    cel1 = ws_pauze.cell(pv_row, col1)
+    cel2 = ws_pauze.cell(pv_row, col2)
+    if cel1.value in [None, ""] and cel2.value in [None, ""]:
+        all_free_slots.append((pv_row, col1, col2))
 
 for idx, s in enumerate(lw_lange):
     if idx < len(all_free_slots):
@@ -1027,6 +1065,8 @@ for idx, s in enumerate(lw_lange):
         cel2.alignment = center_align
         cel1.border = thin_border
         cel2.border = thin_border
+        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
         cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
         cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
         cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
