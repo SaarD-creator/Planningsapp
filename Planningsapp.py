@@ -1081,27 +1081,20 @@ def plaats_student(student, harde_mode=False):
         plaats_student._lr_toggle = 0
     plaats_student._lr_toggle += 1
     # Vind alle mogelijke dubbele blokjes (lange pauzes)
-    # Alleen lange pauzes in de eerste drie pauzevlinderuren (dus max blok 1-2, 2-3, 3-4, 4-5)
-    # Bepaal de kolommen van de eerste vijf halfuren (voor links-rechts en rechts-links)
-    eerste_vijf = uur_col_pairs[:5] if len(uur_col_pairs) >= 5 else uur_col_pairs
-    # Links naar rechts: blokken 0-1, 1-2, 2-3, 3-4
+    # Alleen lange pauzes in de eerste 12 kwartieren (dus eerste drie volledige uren)
+    eerste_twaalf = uur_col_pairs[:12] if len(uur_col_pairs) >= 12 else uur_col_pairs
     lange_pauze_opties_lr = []
-    for i in range(0, min(4, len(eerste_vijf)-1)):
-        uur1, col1 = eerste_vijf[i]
-        uur2, col2 = eerste_vijf[i+1]
+    for i in range(len(eerste_twaalf)-1):
+        uur1, col1 = eerste_twaalf[i]
+        uur2, col2 = eerste_twaalf[i+1]
         if col2 == col1 + 1:
             lange_pauze_opties_lr.append((i, uur1, col1, uur2, col2))
-    # Rechts naar links: begin bij blok 4-5 (vijfde en vierde halfuur), dan 3-4, 2-3, 1-2, 0-1
     lange_pauze_opties_rl = []
-    for i in range(4, 0, -1):
-        if i >= len(eerste_vijf):
-            continue
-        uur1, col1 = eerste_vijf[i-1]
-        uur2, col2 = eerste_vijf[i]
+    for i in range(len(eerste_twaalf)-1, 0, -1):
+        uur1, col1 = eerste_twaalf[i-1]
+        uur2, col2 = eerste_twaalf[i]
         if col2 == col1 + 1:
             lange_pauze_opties_rl.append((i-1, uur1, col1, uur2, col2))
-    # Sla het zesde halfuur (en alles na het vijfde) altijd over
-    # Kies de richting
     if plaats_student._lr_toggle % 2 == 1:
         opties = lange_pauze_opties_lr
     else:
