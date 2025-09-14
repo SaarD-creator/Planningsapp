@@ -1292,6 +1292,9 @@ def plaats_student(student, harde_mode=False):
 
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
 
+lichtgroen_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lange pauze
+lichtpaars_fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # kwartierpauze
+naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
 # --- Verspreid lange pauzes van lange werkers net als bij pauzevlinders ---
 niet_geplaatst = []
 for s in random.sample(lange_werkers, len(lange_werkers)):
