@@ -660,6 +660,10 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1045,7 +1049,8 @@ for naam in pv_lange_namen:
 lw_lange_namen = [s["naam"] for s in lw_lange]
 all_free_slots = []
 for pv, pv_row in pv_rows:
-    for (col, t) in slots_per_pv[pv["naam"]]:
+    slots_copy = list(slots_per_pv[pv["naam"]])
+    for (col, t) in slots_copy:
         cel1 = ws_pauze.cell(pv_row, col)
         cel2 = ws_pauze.cell(pv_row, col+1) if (col+1, (t.hour, (t.minute+15)%60)) in [(c, (tt.hour, tt.minute)) for (c,tt) in eerste3_slots] else None
         if cel1.value in [None, ""] and cel2 and cel2.value in [None, ""]:
