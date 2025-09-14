@@ -663,7 +663,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1050,11 +1049,15 @@ lw_lange_namen = [s["naam"] for s in lw_lange]
 all_free_slots = []
 for pv, pv_row in pv_rows:
     slots_copy = list(slots_per_pv[pv["naam"]])
-    for (col, t) in slots_copy:
+    used_indices = []
+    for idx, (col, t) in enumerate(slots_copy):
         cel1 = ws_pauze.cell(pv_row, col)
         cel2 = ws_pauze.cell(pv_row, col+1) if (col+1, (t.hour, (t.minute+15)%60)) in [(c, (tt.hour, tt.minute)) for (c,tt) in eerste3_slots] else None
         if cel1.value in [None, ""] and cel2 and cel2.value in [None, ""]:
             all_free_slots.append((pv_row, col, cel1, cel2))
+            used_indices.append(idx)
+    # Verwijder gebruikte slots NA de loop, niet tijdens iteratie
+    slots_per_pv[pv["naam"]] = [s for i, s in enumerate(slots_copy) if i not in used_indices]
 
 # Eerlijk verdelen over lange werkers
 for idx, naam in enumerate(lw_lange_namen):
