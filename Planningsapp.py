@@ -1333,6 +1333,13 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
             col2 = pauze_cols[idx+1]
             col1_header = ws_pauze.cell(1, col1).value
             col2_header = ws_pauze.cell(1, col2).value
+            # Alleen starten op heel of half uur
+            try:
+                min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
+            except:
+                min1 = 0
+            if min1 not in (0, 30):
+                continue
             uur1 = parse_header_uur(col1_header)
             uur2 = parse_header_uur(col2_header)
             if uur1 is None or uur2 is None:
@@ -1947,6 +1954,14 @@ for pv, pv_row in pv_rows:
         for idx in range(max_start_idx+1):
             col1 = pauze_cols[idx]
             col2 = pauze_cols[idx+1]
+            col1_header = ws_pauze.cell(1, col1).value
+            # Alleen starten op heel of half uur
+            try:
+                min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
+            except:
+                min1 = 0
+            if min1 not in (0, 30):
+                continue
             cel1 = ws_pauze.cell(pv_row, col1)
             cel2 = ws_pauze.cell(pv_row, col2)
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
