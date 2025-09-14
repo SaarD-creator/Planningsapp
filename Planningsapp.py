@@ -50,64 +50,66 @@ def partition_run_lengths(L):
     blocks = [3,2,4,1]
     dp = [(10**9, [])]*(L+1)
     dp[0] = (0, [])
-    for i in range(1, L+1):
-        best = (10**9, [])
-        for b in blocks:
-            if i-b < 0:
+
+    # Plaats lange pauzes voor pauzevlinders vóór de andere lange werkers
+    for pv, pv_row in pv_rows:
+        werkuren_pv = get_student_work_hours(pv["naam"])
+        try:
+            werkuren_pv = float(werkuren_pv)
+        except Exception:
+            werkuren_pv = 0
+        if werkuren_pv <= 6:
+            continue
+        # Verzamel alleen plekken in de eigen rij van deze pauzevlinder
+        alle_halve_uren = []  # lijst van (pv, pv_row, idx, col1, col2)
+        for idx in range(max_start_idx+1):
+            col1 = pauze_cols[idx]
+            col2 = pauze_cols[idx+1]
+            col1_header = ws_pauze.cell(1, col1).value
+            # Alleen starten op heel of half uur
+            try:
+                min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
+            except:
+                min1 = 0
+            if min1 not in (0, 30):
                 continue
-            prev_ones, prev_blocks = dp[i-b]
-            new_blocks = prev_blocks + [b]
-            ones = prev_ones + (1 if b==1 else 0)
-            if ones < best[0]:
-                best = (ones, new_blocks)
-        dp[i] = best
-    return dp[L][1]
-
-def contiguous_runs(sorted_hours):
-    runs=[]
-    if not sorted_hours:
-        return runs
-    run=[sorted_hours[0]]
-    for h in sorted_hours[1:]:
-        if h==run[-1]+1:
-            run.append(h)
-        else:
-            runs.append(run)
-            run=[h]
-    runs.append(run)
-    return runs
-
-# Helpers die in meerdere delen gebruikt worden
-def normalize_attr(name):
-    """Normaliseer attractienaam zodat 'X 2' telt als 'X'; trim & lower-case voor vergelijking."""
-    if not name:
-        return ""
-    s = str(name).strip()
-    parts = s.rsplit(" ", 1)
-    if len(parts) == 2 and parts[1].isdigit():
-        s = parts[0]
-    return s.strip().lower()
-
-def parse_header_uur(header):
-    """Map headertekst (bv. '14u', '14:00', '14:30') naar het hele uur (14)."""
-    if not header:
-        return None
-    s = str(header).strip()
-    try:
-        if "u" in s:
-            return int(s.split("u")[0])
-        if ":" in s:
-            uur, _min = s.split(":")
-            return int(uur)
-        return int(s)
-    except:
-        return None
-
-# -----------------------------
-# Studenten inlezen
-# -----------------------------
-studenten=[]
-for rij in range(2,500):
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                alle_halve_uren.append((pv, pv_row, idx, col1, col2))
+        # Shuffle voor spreiding
+        random.shuffle(alle_halve_uren)
+        # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
+        from collections import Counter
+        pv_lange_count = Counter()
+        for pv2, pv_row2 in pv_rows:
+            for idx2, col in enumerate(pauze_cols[:-1]):
+                cel = ws_pauze.cell(pv_row2, col)
+                next_col = pauze_cols[idx2+1]
+                cel_next = ws_pauze.cell(pv_row2, next_col)
+                if cel.value and cel.value == cel_next.value:
+                    pv_lange_count[pv2["naam"]] += 1
+        # Sorteer bij het plaatsen op aantal lange pauzes per pauzevlinder
+        geplaatst = False
+        for pv2, pv_row2, idx, col1, col2 in sorted(alle_halve_uren, key=lambda tup: pv_lange_count[tup[0]["naam"]]):
+            cel1 = ws_pauze.cell(pv_row2, col1)
+            cel2 = ws_pauze.cell(pv_row2, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(pv["naam"]):
+                cel1.value = pv["naam"]
+                cel2.value = pv["naam"]
+                cel1.alignment = center_align
+                cel2.alignment = center_align
+                cel1.border = thin_border
+                cel2.border = thin_border
+                cel1.fill = lichtgroen_fill
+                cel2.fill = lichtgroen_fill
+                geplaatst = True
+                break
+        # Markeer pauzevlinders die recht hadden op een lange pauze maar die niet gekregen hebben
+        if not geplaatst:
+            if 'pauzevlinders_zonder_lange_pauze' not in locals():
+                pauzevlinders_zonder_lange_pauze = []
+            pauzevlinders_zonder_lange_pauze.append(pv["naam"])
     naam = ws.cell(rij,12).value
     if not naam:
         continue
