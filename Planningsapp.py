@@ -657,6 +657,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1075,28 +1076,31 @@ def plaats_student(student, harde_mode=False):
     reg = plaats_student.pauze_registry.setdefault(naam, {"lange": False, "korte": False})
 
 
-    # --- NIEUW: lange pauzes spreiden over eerste 2,5 uur ---
-    # Bepaal de tijdsgrenzen van de eerste 2,5 uur pauzevlinderuren
-    if len(uur_col_pairs) > 0:
-        eerste_uur = uur_col_pairs[0][0]
-        grens_uur = eerste_uur + 2
-        # Verzamel alle dubbele blokken die binnen de eerste 2,5 uur vallen
-        lange_pauze_opties = []
+    # --- AANGEPAST: lange pauzes deels links, deels rechts ---
+    lange_pauze_opties = []
+    if len(uur_col_pairs) > 1:
         for i in range(len(uur_col_pairs)-1):
             uur1, col1 = uur_col_pairs[i]
             uur2, col2 = uur_col_pairs[i+1]
-            # Beide blokken moeten binnen de eerste 2,5 uur vallen
-            if col2 == col1 + 1 and uur1 >= eerste_uur and uur2 <= grens_uur:
+            if col2 == col1 + 1:
                 lange_pauze_opties.append((i, uur1, col1, uur2, col2))
-        # Als er te weinig blokken zijn, vul aan met blokken buiten de grens
-        if len(lange_pauze_opties) < 1:
-            for i in range(len(uur_col_pairs)-1):
-                uur1, col1 = uur_col_pairs[i]
-                uur2, col2 = uur_col_pairs[i+1]
-                if col2 == col1 + 1:
-                    lange_pauze_opties.append((i, uur1, col1, uur2, col2))
-    else:
-        lange_pauze_opties = []
+        # Verdeel opties in links (begin) en rechts (eind)
+        mid = len(lange_pauze_opties) // 2
+        # Bepaal of deze student in de eerste of tweede helft zit (op basis van alfabet of random)
+        lange_werkers_lijst = getattr(plaats_student, "_lange_werkers_lijst", None)
+        if lange_werkers_lijst is None:
+            # Verzamel alle lange werkers (namen) in vaste volgorde
+            from collections import OrderedDict
+            lange_werkers_lijst = [s["naam"] for s in studenten if (student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)) and s["naam"] not in [pv["naam"] for pv in selected]]
+            plaats_student._lange_werkers_lijst = lange_werkers_lijst
+        idx_in_lijst = plaats_student._lange_werkers_lijst.index(student["naam"]) if student["naam"] in plaats_student._lange_werkers_lijst else 0
+        if idx_in_lijst < len(plaats_student._lange_werkers_lijst) // 2:
+            # Links: kies uit eerste helft
+            lange_pauze_opties = lange_pauze_opties[:mid+1]
+        else:
+            # Rechts: kies uit tweede helft (omgekeerd voor spreiding)
+            lange_pauze_opties = lange_pauze_opties[mid:][::-1]
+    # Anders: geen opties
 
     # Probeer alle opties voor de lange pauze (max 1x per student)
     if not reg["lange"]:
