@@ -1291,11 +1291,74 @@ def plaats_student(student, harde_mode=False):
     return False
 
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
+
+# --- Verspreid lange pauzes van lange werkers net als bij pauzevlinders ---
 niet_geplaatst = []
-# Studenten in willekeurige volgorde proberen om vulling te spreiden
 for s in random.sample(lange_werkers, len(lange_werkers)):
-    if not plaats_student(s, harde_mode=False):
-        niet_geplaatst.append(s)
+    naam = s["naam"]
+    werk_uren = get_student_work_hours(naam)
+    if len(werk_uren) <= 6:
+        if not plaats_student(s, harde_mode=False):
+            niet_geplaatst.append(s)
+        continue
+    # Verzamel alle mogelijke halve uren (twee aaneengesloten kwartieren) waarop deze student werkt en een pauze mag hebben
+    halve_uren = []  # lijst van (col1, col2, uur1, uur2, pv, pv_row)
+    werk_uren_set = set(werk_uren)
+    verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
+    for pv, pv_row in pv_rows:
+        for idx in range(len(pauze_cols)-1):
+            col1 = pauze_cols[idx]
+            col2 = pauze_cols[idx+1]
+            col1_header = ws_pauze.cell(1, col1).value
+            col2_header = ws_pauze.cell(1, col2).value
+            uur1 = parse_header_uur(col1_header)
+            uur2 = parse_header_uur(col2_header)
+            if uur1 is None or uur2 is None:
+                continue
+            if uur1 not in werk_uren_set or uur2 not in werk_uren_set:
+                continue
+            if uur1 in verboden_uren or uur2 in verboden_uren:
+                continue
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            # Attractie moet kloppen
+            attr1 = vind_attractie_op_uur(naam, uur1)
+            attr2 = vind_attractie_op_uur(naam, uur2)
+            if not attr1 or not attr2:
+                continue
+            if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+                continue
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                halve_uren.append((col1, col2, uur1, uur2, pv, pv_row))
+    random.shuffle(halve_uren)
+    geplaatst = False
+    for col1, col2, uur1, uur2, pv, pv_row in halve_uren:
+        cel1 = ws_pauze.cell(pv_row, col1)
+        cel2 = ws_pauze.cell(pv_row, col2)
+        boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+        boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+        attr1 = vind_attractie_op_uur(naam, uur1)
+        attr2 = vind_attractie_op_uur(naam, uur2)
+        if cel1.value in [None, ""] and cel2.value in [None, ""]:
+            boven_cel1.value = attr1
+            boven_cel1.alignment = center_align
+            boven_cel1.border = thin_border
+            boven_cel2.value = attr2
+            boven_cel2.alignment = center_align
+            boven_cel2.border = thin_border
+            cel1.value = naam
+            cel1.alignment = center_align
+            cel1.border = thin_border
+            cel1.fill = lichtgroen_fill
+            cel2.value = naam
+            cel2.alignment = center_align
+            cel2.border = thin_border
+            cel2.fill = lichtgroen_fill
+            geplaatst = True
+            break
+    if not geplaatst:
+        if not plaats_student(s, harde_mode=False):
+            niet_geplaatst.append(s)
 
 # ---- Fase 2: iteratief, met gecontroleerd overschrijven van niet-lange-werkers ----
 # we herhalen meerdere passes om iedereen >6u te kunnen plaatsen
