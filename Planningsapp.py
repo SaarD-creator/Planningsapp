@@ -658,9 +658,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
