@@ -1082,41 +1082,50 @@ def plaats_student(student, harde_mode=False):
         eerste_uur = uur_col_pairs[0][0]
         grens_uur_2_5 = eerste_uur + 2
         grens_uur_3 = eerste_uur + 3
-        # Verzamel blokken in de eerste 2,5 uur
+        # Verzamel blokken in de eerste 2,5 uur, maar markeer het laatste halfuur apart
         blokken_links = []
+        blokken_links_laatste_halfuur = []
         blokken_rechts = []
+        blokken_rechts_laatste_halfuur = []
         for i in range(len(uur_col_pairs)-1):
             uur1, col1 = uur_col_pairs[i]
             uur2, col2 = uur_col_pairs[i+1]
             if col2 == col1 + 1:
-                if uur1 >= eerste_uur and uur2 <= grens_uur_2_5:
+                # Normale blokken in eerste 2,5 uur
+                if uur1 >= eerste_uur and uur2 < grens_uur_2_5:
                     blokken_links.append((i, uur1, col1, uur2, col2))
-        # Blokken van rechts: vanaf het 2de pauzevlinderuur terug naar links
+                # Blokken die eindigen in het laatste halfuur van de 2,5 uur
+                elif uur2 == grens_uur_2_5:
+                    blokken_links_laatste_halfuur.append((i, uur1, col1, uur2, col2))
         for i in reversed(range(len(uur_col_pairs)-1)):
             uur1, col1 = uur_col_pairs[i]
             uur2, col2 = uur_col_pairs[i+1]
             if col2 == col1 + 1:
-                if uur1 >= eerste_uur and uur2 <= grens_uur_2_5:
+                if uur1 >= eerste_uur and uur2 < grens_uur_2_5:
                     blokken_rechts.append((i, uur1, col1, uur2, col2))
-        # Bepaal of deze student links of rechts moet krijgen
+                elif uur2 == grens_uur_2_5:
+                    blokken_rechts_laatste_halfuur.append((i, uur1, col1, uur2, col2))
         lange_werkers_lijst = getattr(plaats_student, "_lange_werkers_lijst", None)
         if lange_werkers_lijst is None:
             lange_werkers_lijst = [s["naam"] for s in studenten if (student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)) and s["naam"] not in [pv["naam"] for pv in selected]]
             plaats_student._lange_werkers_lijst = lange_werkers_lijst
         idx_in_lijst = plaats_student._lange_werkers_lijst.index(student["naam"]) if student["naam"] in plaats_student._lange_werkers_lijst else 0
         if idx_in_lijst % 2 == 0:
-            lange_pauze_opties = blokken_links
+            lange_pauze_opties = blokken_links + blokken_links_laatste_halfuur
         else:
-            lange_pauze_opties = blokken_rechts
-        # Als er te weinig blokken zijn, voeg blokken toe uit de eerste 3 uur
+            lange_pauze_opties = blokken_rechts + blokken_rechts_laatste_halfuur
+        # Als er te weinig blokken zijn, voeg blokken toe uit de eerste 3 uur, maar laatste halfuur weer apart
         if len(lange_pauze_opties) < 1:
             blokken_3u = []
+            blokken_3u_laatste_halfuur = []
             for i in range(len(uur_col_pairs)-1):
                 uur1, col1 = uur_col_pairs[i]
                 uur2, col2 = uur_col_pairs[i+1]
-                if col2 == col1 + 1 and uur1 >= eerste_uur and uur2 <= grens_uur_3:
+                if col2 == col1 + 1 and uur1 >= eerste_uur and uur2 < grens_uur_3:
                     blokken_3u.append((i, uur1, col1, uur2, col2))
-            lange_pauze_opties = blokken_3u
+                elif col2 == col1 + 1 and uur2 == grens_uur_3:
+                    blokken_3u_laatste_halfuur.append((i, uur1, col1, uur2, col2))
+            lange_pauze_opties = blokken_3u + blokken_3u_laatste_halfuur
         # Als er nog steeds te weinig zijn, neem alle blokken
         if len(lange_pauze_opties) < 1:
             for i in range(len(uur_col_pairs)-1):
