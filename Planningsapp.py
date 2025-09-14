@@ -997,6 +997,32 @@ for pv in selected:
 # Lange werkers: namen-set voor snelle checks
 
 
+
+# --- HULPFUNCTIES VOOR LANGE PAUZE RANDOMISATIE ---
+def get_student_work_hours(naam):
+    uren = set()
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur is None:
+            continue
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                uren.add(uur)
+                break
+    return sorted(uren)
+
+def vind_attractie_op_uur(naam, uur):
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        col_uur = parse_header_uur(header)
+        if col_uur != uur:
+            continue
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                return ws_planning.cell(row, 1).value
+    return None
+
 # Iedereen met '-18' in de naam krijgt altijd een lange pauze (dubbel blok), net als >6u werkers
 lange_werkers = [s for s in studenten if (
     student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)
