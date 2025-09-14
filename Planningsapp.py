@@ -1864,6 +1864,23 @@ eerste_drie_uren = vind_uren_in_eerste_drie_pauzevlinderuren()
 # Vind alle mogelijke dubbele blokken (start_col, pv_row) in de eerste drie pauzevlinderuren
 def vind_mogelijke_lange_pauze_blokken(pv_row):
     blokken = []
+    def parse_minutes(header):
+        s = str(header).strip()
+        if 'u' in s:
+            parts = s.split('u')
+            if len(parts) == 2 and parts[1]:
+                try:
+                    return int(parts[1])
+                except:
+                    return 0
+            else:
+                return 0
+        if ':' in s:
+            try:
+                return int(s.split(':')[1])
+            except:
+                return 0
+        return 0
     for idx in range(len(pauze_cols)-1):
         col1 = pauze_cols[idx]
         col2 = pauze_cols[idx+1]
@@ -1873,8 +1890,8 @@ def vind_mogelijke_lange_pauze_blokken(pv_row):
         if col1_uur not in eerste_drie_uren or col2_uur not in eerste_drie_uren:
             continue
         # Alleen blokken op heel of half uur (dus bv. 13u00/13u15 of 13u30/13u45)
-        min1 = int(ws_pauze.cell(1, col1).value[-2:]) if 'u' in ws_pauze.cell(1, col1).value else 0
-        min2 = int(ws_pauze.cell(1, col2).value[-2:]) if 'u' in ws_pauze.cell(1, col2).value else 0
+        min1 = parse_minutes(ws_pauze.cell(1, col1).value)
+        min2 = parse_minutes(ws_pauze.cell(1, col2).value)
         if not ((min1 in [0,30]) and (min2 in [15,45])):
             continue
         cel1 = ws_pauze.cell(pv_row, col1)
