@@ -1085,46 +1085,39 @@ def plaats_student(student, harde_mode=False):
         eerste_uur = uur_col_pairs[0][0]
         grens_uur_2_5 = eerste_uur + 2
         grens_uur_3 = eerste_uur + 3
-        # Blokken die eindigen vóór het laatste halfuur van de eerste 3 uur
-        blokken_links = []
-        blokken_links_laatste_halfuur = []
-        blokken_rechts = []
-        blokken_rechts_laatste_halfuur = []
+        # Verzamel blokken per starttijd
+        blokken_start = {}
+        blokken_laatste_halfuur = []
         for i in range(len(uur_col_pairs)-1):
             uur1, col1 = uur_col_pairs[i]
             uur2, col2 = uur_col_pairs[i+1]
             if col2 == col1 + 1:
-                header = ws_pauze.cell(1, col2).value if 'ws_pauze' in globals() else None
-                # Blokken die eindigen vóór het laatste halfuur van de eerste 3 uur
-                if uur2 < grens_uur_3 or (uur2 == grens_uur_3 and header and (':00' in str(header) or 'u00' in str(header))):
-                    blokken_links.append((i, uur1, col1, uur2, col2))
-                # Blokken die eindigen in het laatste halfuur van de eerste 3 uur (bv. 12:30-13:00)
-                elif uur2 == grens_uur_3 and header and (':30' in str(header) or 'u30' in str(header)):
-                    blokken_links_laatste_halfuur.append((i, uur1, col1, uur2, col2))
-        for i in reversed(range(len(uur_col_pairs)-1)):
-            uur1, col1 = uur_col_pairs[i]
-            uur2, col2 = uur_col_pairs[i+1]
-            if col2 == col1 + 1:
-                header = ws_pauze.cell(1, col2).value if 'ws_pauze' in globals() else None
-                if uur2 < grens_uur_3 or (uur2 == grens_uur_3 and header and (':00' in str(header) or 'u00' in str(header))):
-                    blokken_rechts.append((i, uur1, col1, uur2, col2))
-                elif uur2 == grens_uur_3 and header and (':30' in str(header) or 'u30' in str(header)):
-                    blokken_rechts_laatste_halfuur.append((i, uur1, col1, uur2, col2))
+                header_start = ws_pauze.cell(1, col1).value if 'ws_pauze' in globals() else None
+                header_end = ws_pauze.cell(1, col2).value if 'ws_pauze' in globals() else None
+                # Blokken die starten op eerste uur of laatste uur vóór laatste halfuur
+                if uur1 == eerste_uur or uur1 == grens_uur_2_5:
+                    blokken_start.setdefault(uur1, []).append((i, uur1, col1, uur2, col2))
+                # Blokken die starten in het laatste halfuur van de eerste 3 uur
+                elif uur1 == grens_uur_2_5 + 0.5 or (header_start and (':30' in str(header_start) or 'u30' in str(header_start)) and uur1 == grens_uur_2_5):
+                    blokken_laatste_halfuur.append((i, uur1, col1, uur2, col2))
+        # Wissel buitenkant-in: eerst begin, dan eind, dan pas laatste halfuur
         lange_werkers_lijst = getattr(plaats_student, "_lange_werkers_lijst", None)
         if lange_werkers_lijst is None:
             lange_werkers_lijst = [s["naam"] for s in studenten if (student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)) and s["naam"] not in [pv["naam"] for pv in selected]]
             plaats_student._lange_werkers_lijst = lange_werkers_lijst
         idx_in_lijst = plaats_student._lange_werkers_lijst.index(student["naam"]) if student["naam"] in plaats_student._lange_werkers_lijst else 0
-        if idx_in_lijst % 2 == 0:
-            lange_pauze_opties = blokken_links
-        else:
-            lange_pauze_opties = blokken_rechts
-        # Als er te weinig blokken zijn, voeg blokken toe uit het laatste halfuur van de eerste 3 uur
+        # Wissel: even index = eerste_uur, oneven = grens_uur_2_5
+        volgorde = []
+        n = max(len(blokken_start.get(eerste_uur, [])), len(blokken_start.get(grens_uur_2_5, [])))
+        for k in range(n):
+            if k < len(blokken_start.get(eerste_uur, [])):
+                volgorde.append(blokken_start[eerste_uur][k])
+            if k < len(blokken_start.get(grens_uur_2_5, [])):
+                volgorde.append(blokken_start[grens_uur_2_5][k])
+        lange_pauze_opties = volgorde
+        # Als er te weinig blokken zijn, voeg blokken toe uit het laatste halfuur
         if len(lange_pauze_opties) < 1:
-            if idx_in_lijst % 2 == 0:
-                lange_pauze_opties = blokken_links_laatste_halfuur
-            else:
-                lange_pauze_opties = blokken_rechts_laatste_halfuur
+            lange_pauze_opties = blokken_laatste_halfuur
         # Als er nog steeds te weinig zijn, neem alle blokken
         if len(lange_pauze_opties) < 1:
             for i in range(len(uur_col_pairs)-1):
