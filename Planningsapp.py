@@ -1327,8 +1327,8 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
     werk_uren_set = set(werk_uren)
     verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
     max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
-    # Verzamel alle mogelijke plekken per pauzevlinder
-    halve_uren = []  # lijst van (col1, col2, uur1, uur2, pv, pv_row)
+    # Zelfde aanpak als bij pauzevlinders, maar nu voor lange werkers die geen pauzevlinder zijn
+    alle_halve_uren = []  # lijst van (pv, pv_row, col1, col2, uur1, uur2)
     for pv, pv_row in pv_rows:
         for idx in range(max_start_idx+1):
             col1 = pauze_cols[idx]
@@ -1360,21 +1360,22 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
             if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
                 continue
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                halve_uren.append((col1, col2, uur1, uur2, pv, pv_row))
-    # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
+                alle_halve_uren.append((pv, pv_row, col1, col2, uur1, uur2))
+    # Shuffle voor spreiding
+    random.shuffle(alle_halve_uren)
+    # Tel per lange werker het aantal lange pauzes (dubbele blokken)
     from collections import Counter
-    pv_lange_count = Counter()
+    lange_count = Counter()
     for pv, pv_row in pv_rows:
         for idx, col in enumerate(pauze_cols[:-1]):
             cel = ws_pauze.cell(pv_row, col)
             next_col = pauze_cols[idx+1]
             cel_next = ws_pauze.cell(pv_row, next_col)
             if cel.value and cel.value == cel_next.value:
-                pv_lange_count[pv["naam"]] += 1
-    # Sorteer halve_uren zodat de pauzevlinder met het minste lange pauzes eerst komt
-    halve_uren.sort(key=lambda tup: pv_lange_count[tup[4]["naam"]])
+                lange_count[pv["naam"]] += 1
+    # Sorteer bij het plaatsen op aantal lange pauzes per werker
     geplaatst = False
-    for col1, col2, uur1, uur2, pv, pv_row in halve_uren:
+    for pv, pv_row, col1, col2, uur1, uur2 in sorted(alle_halve_uren, key=lambda tup: lange_count[tup[0]["naam"]]):
         cel1 = ws_pauze.cell(pv_row, col1)
         cel2 = ws_pauze.cell(pv_row, col2)
         boven_cel1 = ws_pauze.cell(pv_row-1, col1)
