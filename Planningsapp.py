@@ -927,6 +927,60 @@ def wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols):
         if i+1 < len(pauzeuren):
             blokken.append((pauzeuren[i], pauzeuren[i+1]))
 
+    # 2. Shuffle blokken en studenten random
+    import random
+    blokken_shuffled = blokken[:]
+    random.shuffle(blokken_shuffled)
+    studenten_shuffled = lange_werkers[:]
+    random.shuffle(studenten_shuffled)
+
+    # 3. Wijs elke student een uniek blok toe (geen overlap, random spreiding)
+    for s, blok in zip(studenten_shuffled, blokken_shuffled):
+        naam = s["naam"]
+        werk_uren = get_student_work_hours(naam)
+        werk_uren_set = set(werk_uren)
+        if len(werk_uren) > 2:
+            verboden_uren = {werk_uren[0], werk_uren[-1]}
+        else:
+            verboden_uren = set(werk_uren)
+        col1, col2 = blok
+        header1 = ws_pauze.cell(1, col1).value
+        header2 = ws_pauze.cell(1, col2).value
+        uur1 = parse_header_uur(header1)
+        uur2 = parse_header_uur(header2)
+        if uur1 not in werk_uren_set or uur2 not in werk_uren_set:
+            continue
+        if uur1 in verboden_uren or uur2 in verboden_uren:
+            continue
+        attr1 = vind_attractie_op_uur(naam, uur1)
+        attr2 = vind_attractie_op_uur(naam, uur2)
+        if not attr1 or not attr2:
+            continue
+        # Zoek een pauzevlinder die deze attractie kan overnemen
+        for pv, pv_row in pv_rows:
+            if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+                continue
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+            boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                boven_cel1.value = attr1
+                boven_cel1.alignment = center_align
+                boven_cel1.border = thin_border
+                boven_cel2.value = attr2
+                boven_cel2.alignment = center_align
+                boven_cel2.border = thin_border
+                cel1.value = naam
+                cel1.alignment = center_align
+                cel1.border = thin_border
+                cel2.value = naam
+                cel2.alignment = center_align
+                cel2.border = thin_border
+                cel1.fill = lichtgroen_fill
+                cel2.fill = lichtgroen_fill
+                break
+
     # 2. Maak een lijst van alle (student, blok) combinaties die geldig zijn
     opties = []
     for s in lange_werkers:
