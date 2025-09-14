@@ -1015,35 +1015,6 @@ def get_student_work_hours(naam):
                 break
     return sorted(uren)
 
-# --- Controle: in de eerste drie pauzeuren alleen lange pauzes, in de rest alleen korte pauzes ---
-eerste_drie_cols = pauze_cols[:6] if len(pauze_cols) >= 6 else pauze_cols[:]
-lange_pauze_namen = set()
-for pv, pv_row in pv_rows:
-    for i in range(len(eerste_drie_cols)-1):
-        col1 = eerste_drie_cols[i]
-        col2 = eerste_drie_cols[i+1]
-        naam = ws_pauze.cell(pv_row, col1).value
-        if naam and ws_pauze.cell(pv_row, col2).value == naam:
-            lange_pauze_namen.add(naam)
-
-# In de eerste drie pauzeuren: geen enkele korte pauze (dus geen enkele cel met naam die niet in een dubbel blok zit)
-for pv, pv_row in pv_rows:
-    for i in range(len(eerste_drie_cols)):
-        col = eerste_drie_cols[i]
-        naam = ws_pauze.cell(pv_row, col).value
-        if naam and naam not in lange_pauze_namen:
-            ws_pauze.cell(pv_row, col).value = None  # Verwijder korte pauze uit eerste drie pauzeuren
-
-# In de overige pauzeuren: geen enkele lange pauze (dus geen dubbele blokken)
-overige_cols = pauze_cols[6:] if len(pauze_cols) > 6 else []
-for pv, pv_row in pv_rows:
-    for i in range(len(overige_cols)-1):
-        col1 = overige_cols[i]
-        col2 = overige_cols[i+1]
-        naam = ws_pauze.cell(pv_row, col1).value
-        if naam and ws_pauze.cell(pv_row, col2).value == naam:
-            # Verwijder de tweede helft van een ongeldige lange pauze
-            ws_pauze.cell(pv_row, col2).value = None
 
 # --- Controle: in de eerste drie pauzeuren alleen lange pauzes, in de rest alleen korte pauzes ---
 lange_pauze_namen = set()
