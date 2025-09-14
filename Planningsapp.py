@@ -1965,24 +1965,27 @@ for pv, pv_row in pv_rows:
             continue
         halve_uren = []  # lijst van (idx, col1, col2)
         max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
-    # Verzamel alle mogelijke plekken voor alle pauzevlinders
+    # Alleen pauzevlinders die langer dan zes uur werken krijgen een lange pauze
+    werkuren_pv = get_student_work_hours(pv["naam"])
+    if werkuren_pv <= 6:
+        continue
+    # Verzamel alleen plekken in de eigen rij van deze pauzevlinder
     alle_halve_uren = []  # lijst van (pv, pv_row, idx, col1, col2)
-    for pv2, pv_row2 in pv_rows:
-        for idx in range(max_start_idx+1):
-            col1 = pauze_cols[idx]
-            col2 = pauze_cols[idx+1]
-            col1_header = ws_pauze.cell(1, col1).value
-            # Alleen starten op heel of half uur
-            try:
-                min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
-            except:
-                min1 = 0
-            if min1 not in (0, 30):
-                continue
-            cel1 = ws_pauze.cell(pv_row2, col1)
-            cel2 = ws_pauze.cell(pv_row2, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                alle_halve_uren.append((pv2, pv_row2, idx, col1, col2))
+    for idx in range(max_start_idx+1):
+        col1 = pauze_cols[idx]
+        col2 = pauze_cols[idx+1]
+        col1_header = ws_pauze.cell(1, col1).value
+        # Alleen starten op heel of half uur
+        try:
+            min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
+        except:
+            min1 = 0
+        if min1 not in (0, 30):
+            continue
+        cel1 = ws_pauze.cell(pv_row, col1)
+        cel2 = ws_pauze.cell(pv_row, col2)
+        if cel1.value in [None, ""] and cel2.value in [None, ""]:
+            alle_halve_uren.append((pv, pv_row, idx, col1, col2))
     # Shuffle voor spreiding
     random.shuffle(alle_halve_uren)
     # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
