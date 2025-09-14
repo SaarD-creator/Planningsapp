@@ -1853,13 +1853,9 @@ for pv, pv_row in pv_rows:
     naam = pv["naam"]
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) > 6:
-        # Verzamel alle mogelijke halve uren (twee aaneengesloten kwartieren) in de eerste drie pauzeuren
+        # Verzamel ALLE mogelijke halve uren (twee aaneengesloten kwartieren) over de hele pauzeperiode
         halve_uren = []  # lijst van (idx, col1, col2)
-        max_halve_uren = 3  # eerste drie halve uren
         for idx in range(len(pauze_cols)-1):
-            # Alleen de eerste drie halve uren meenemen
-            if idx >= max_halve_uren:
-                break
             col1 = pauze_cols[idx]
             col2 = pauze_cols[idx+1]
             cel1 = ws_pauze.cell(pv_row, col1)
