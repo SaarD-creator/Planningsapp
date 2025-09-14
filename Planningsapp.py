@@ -659,6 +659,8 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1895,7 +1897,10 @@ blokken_laatste = [(c, t) for c, t, is_laatste in eerste3_blokken if is_laatste]
 alle_blokken = blokken_niet_laatste + blokken_laatste
 
 # 4. Pauzevlinders krijgen hun pauze in hun eigen rij, zo gespreid mogelijk
+
+# --- EERST: Pauzevlinders met >6u krijgen ALTIJD een lange pauze in hun eigen rij, indien mogelijk ---
 pv_blokken = deque(alle_blokken)
+gebruikte_blokken = set()
 for pv, pv_row, naam in pv_lange:
     werk_uren = get_student_work_hours(naam)
     # Zoek een vrij blok in hun eigen rij waar ze werken
@@ -1915,7 +1920,7 @@ for pv, pv_row, naam in pv_lange:
         col2 = pauze_cols[idx+1]
         cel1 = ws_pauze.cell(pv_row, col)
         cel2 = ws_pauze.cell(pv_row, col2)
-        if cel1.value in [None, ""] and cel2.value in [None, ""]:
+        if cel1.value in [None, ""] and cel2.value in [None, ""] and (col, t) not in gebruikte_blokken:
             cel1.value = naam
             cel2.value = naam
             cel1.alignment = center_align
@@ -1925,14 +1930,16 @@ for pv, pv_row, naam in pv_lange:
             cel1.fill = lichtgroen_fill
             cel2.fill = lichtgroen_fill
             geplaatst = True
-            pv_blokken.remove((col, t))
+            gebruikte_blokken.add((col, t))
             break
     # Indien geen plek gevonden, doe niets (komt zelden voor)
 
 # 5. Andere lange werkers: verdeel over de resterende blokken, zo gespreid mogelijk
 
 # Alleen blokken in de eerste drie pauzevlinderuren zijn toegestaan
-vrije_blokken = deque([b for b in blokken_niet_laatste + blokken_laatste if b not in [b[:2] for b in eerste3_blokken if b[0] in [col for col, _, _ in eerste3_blokken if col not in pv_blokken]]])
+
+# Alleen blokken in de eerste drie pauzevlinderuren zijn toegestaan, en niet al gebruikt door pauzevlinders
+vrije_blokken = deque([b for b in blokken_niet_laatste + blokken_laatste if b not in gebruikte_blokken])
 for naam in lange_pauze_studenten:
     if not vrije_blokken:
         break  # geen blokken meer beschikbaar, dus geen lange pauze meer mogelijk
@@ -1983,9 +1990,11 @@ ws_feedback = wb_out.create_sheet("Feedback")
 row_fb = 1
 
 # 1. Lange werkers (>6u) zonder lange pauze
+
+# Pauzevlinders én andere lange werkers zonder lange pauze
 lange_werkers_zonder_lange_pauze = []
-for s in lange_werkers:
-    naam = s["naam"]
+for s in lange_werkers + [pv for pv, _, _ in pv_lange]:
+    naam = s["naam"] if isinstance(s, dict) else s["naam"]
     # Zoek in ws_pauze of deze student een dubbele blok (lange pauze) heeft
     heeft_lange = False
     for pv, pv_row in pv_rows:
