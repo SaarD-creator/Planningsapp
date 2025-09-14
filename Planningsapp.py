@@ -658,6 +658,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1929,13 +1930,17 @@ for pv, pv_row, naam in pv_lange:
     # Indien geen plek gevonden, doe niets (komt zelden voor)
 
 # 5. Andere lange werkers: verdeel over de resterende blokken, zo gespreid mogelijk
-over_blokken = deque([b for b in alle_blokken if b not in [b[:2] for b in eerste3_blokken if b[0] in [col for col, _, _ in eerste3_blokken if col not in pv_blokken]]])
+
+# Alleen blokken in de eerste drie pauzevlinderuren zijn toegestaan
+vrije_blokken = deque([b for b in blokken_niet_laatste + blokken_laatste if b not in [b[:2] for b in eerste3_blokken if b[0] in [col for col, _, _ in eerste3_blokken if col not in pv_blokken]]])
 for naam in lange_pauze_studenten:
+    if not vrije_blokken:
+        break  # geen blokken meer beschikbaar, dus geen lange pauze meer mogelijk
     werk_uren = get_student_work_hours(naam)
     geplaatst = False
-    for _ in range(len(over_blokken)):
-        col, t = over_blokken[0]
-        over_blokken.rotate(-1)
+    for _ in range(len(vrije_blokken)):
+        col, t = vrije_blokken[0]
+        vrije_blokken.rotate(-1)
         header = ws_pauze.cell(1, col).value
         uur = parse_header_uur(header)
         if uur not in werk_uren:
@@ -1963,11 +1968,11 @@ for naam in lange_pauze_studenten:
                 cel1.fill = lichtgroen_fill
                 cel2.fill = lichtgroen_fill
                 geplaatst = True
-                over_blokken.remove((col, t))
+                vrije_blokken.remove((col, t))
                 break
         if geplaatst:
             break
-    # Indien geen plek gevonden, doe niets (komt zelden voor)
+    # Indien geen plek gevonden, ga naar volgende student
 
 
 
