@@ -1964,8 +1964,9 @@ for pv, pv_row in pv_rows:
             continue
         halve_uren = []  # lijst van (idx, col1, col2)
         max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
-        # Verzamel alle mogelijke plekken per pauzevlinder
-        halve_uren = []  # lijst van (idx, col1, col2)
+    # Verzamel alle mogelijke plekken voor alle pauzevlinders
+    alle_halve_uren = []  # lijst van (pv, pv_row, idx, col1, col2)
+    for pv2, pv_row2 in pv_rows:
         for idx in range(max_start_idx+1):
             col1 = pauze_cols[idx]
             col2 = pauze_cols[idx+1]
@@ -1977,46 +1978,38 @@ for pv, pv_row in pv_rows:
                 min1 = 0
             if min1 not in (0, 30):
                 continue
-            cel1 = ws_pauze.cell(pv_row, col1)
-            cel2 = ws_pauze.cell(pv_row, col2)
+            cel1 = ws_pauze.cell(pv_row2, col1)
+            cel2 = ws_pauze.cell(pv_row2, col2)
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                halve_uren.append((idx, col1, col2))
-        # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
-        from collections import Counter, defaultdict
-        pv_lange_count = Counter()
-        for pv2, pv_row2 in pv_rows:
-            for idx2, col in enumerate(pauze_cols[:-1]):
-                cel = ws_pauze.cell(pv_row2, col)
-                next_col = pauze_cols[idx2+1]
-                cel_next = ws_pauze.cell(pv_row2, next_col)
-                if cel.value and cel.value == cel_next.value:
-                    pv_lange_count[pv2["naam"]] += 1
-        # Groepeer halve_uren per tijdslot (idx)
-        halve_uren_per_idx = defaultdict(list)
-        for tup in halve_uren:
-            halve_uren_per_idx[tup[0]].append(tup)
-        # Shuffle per tijdslot voor spreiding
-        gespreid_halve_uren = []
-        for idx in sorted(halve_uren_per_idx.keys()):
-            random.shuffle(halve_uren_per_idx[idx])
-            gespreid_halve_uren.extend(halve_uren_per_idx[idx])
-        # Sorteer op aantal lange pauzes per pauzevlinder
-        gespreid_halve_uren.sort(key=lambda tup: pv_lange_count[pv["naam"]])
-        geplaatst = False
-        for idx, col1, col2 in gespreid_halve_uren:
-            cel1 = ws_pauze.cell(pv_row, col1)
-            cel2 = ws_pauze.cell(pv_row, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
-                cel1.value = naam
-                cel2.value = naam
-                cel1.alignment = center_align
-                cel2.alignment = center_align
-                cel1.border = thin_border
-                cel2.border = thin_border
-                cel1.fill = lichtgroen_fill
-                cel2.fill = lichtgroen_fill
-                geplaatst = True
-                break
+                alle_halve_uren.append((pv2, pv_row2, idx, col1, col2))
+    # Shuffle voor spreiding
+    random.shuffle(alle_halve_uren)
+    # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
+    from collections import Counter
+    pv_lange_count = Counter()
+    for pv2, pv_row2 in pv_rows:
+        for idx2, col in enumerate(pauze_cols[:-1]):
+            cel = ws_pauze.cell(pv_row2, col)
+            next_col = pauze_cols[idx2+1]
+            cel_next = ws_pauze.cell(pv_row2, next_col)
+            if cel.value and cel.value == cel_next.value:
+                pv_lange_count[pv2["naam"]] += 1
+    # Sorteer bij het plaatsen op aantal lange pauzes per pauzevlinder
+    geplaatst = False
+    for pv2, pv_row2, idx, col1, col2 in sorted(alle_halve_uren, key=lambda tup: pv_lange_count[tup[0]["naam"]]):
+        cel1 = ws_pauze.cell(pv_row2, col1)
+        cel2 = ws_pauze.cell(pv_row2, col2)
+        if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
+            cel1.value = naam
+            cel2.value = naam
+            cel1.alignment = center_align
+            cel2.alignment = center_align
+            cel1.border = thin_border
+            cel2.border = thin_border
+            cel1.fill = lichtgroen_fill
+            cel2.fill = lichtgroen_fill
+            geplaatst = True
+            break
         # Indien geen plek gevonden, doe niets (komt zelden voor)
 
 
