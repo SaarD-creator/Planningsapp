@@ -661,12 +661,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1094,36 +1088,31 @@ def plaats_student(student, harde_mode=False):
         eerste_uur = uur_col_pairs[0][0]
         grens_uur_2_5 = eerste_uur + 2
         grens_uur_3 = eerste_uur + 3
-        # Blokken volledig binnen de eerste 2,5 uur
+        # Blokken die eindigen vóór het laatste halfuur van de eerste 3 uur
         blokken_links = []
-        blokken_links_laatste_halfuur_3u = []
+        blokken_links_laatste_halfuur = []
         blokken_rechts = []
-        blokken_rechts_laatste_halfuur_3u = []
+        blokken_rechts_laatste_halfuur = []
         for i in range(len(uur_col_pairs)-1):
             uur1, col1 = uur_col_pairs[i]
             uur2, col2 = uur_col_pairs[i+1]
             if col2 == col1 + 1:
-                # Blokken volledig binnen de eerste 2,5 uur
-                if uur1 >= eerste_uur and uur2 <= grens_uur_2_5:
+                header = ws_pauze.cell(1, col2).value if 'ws_pauze' in globals() else None
+                # Blokken die eindigen vóór het laatste halfuur van de eerste 3 uur
+                if uur2 < grens_uur_3 or (uur2 == grens_uur_3 and header and (':00' in str(header) or 'u00' in str(header))):
                     blokken_links.append((i, uur1, col1, uur2, col2))
-                # Blokken die eindigen op het laatste halfuur van de eerste 3 uur (bv. 12:30-13:00)
-                elif uur2 == grens_uur_3 and col2 != col1 + 1:  # extra check, maar col2==col1+1 altijd waar
-                    blokken_links_laatste_halfuur_3u.append((i, uur1, col1, uur2, col2))
-                elif uur2 == grens_uur_3:
-                    # Check of het blok op een :30 eindigt (dus laatste halfuur)
-                    header = ws_pauze.cell(1, col2).value if 'ws_pauze' in globals() else None
-                    if header and (':30' in str(header) or 'u30' in str(header)):
-                        blokken_links_laatste_halfuur_3u.append((i, uur1, col1, uur2, col2))
+                # Blokken die eindigen in het laatste halfuur van de eerste 3 uur (bv. 12:30-13:00)
+                elif uur2 == grens_uur_3 and header and (':30' in str(header) or 'u30' in str(header)):
+                    blokken_links_laatste_halfuur.append((i, uur1, col1, uur2, col2))
         for i in reversed(range(len(uur_col_pairs)-1)):
             uur1, col1 = uur_col_pairs[i]
             uur2, col2 = uur_col_pairs[i+1]
             if col2 == col1 + 1:
-                if uur1 >= eerste_uur and uur2 <= grens_uur_2_5:
+                header = ws_pauze.cell(1, col2).value if 'ws_pauze' in globals() else None
+                if uur2 < grens_uur_3 or (uur2 == grens_uur_3 and header and (':00' in str(header) or 'u00' in str(header))):
                     blokken_rechts.append((i, uur1, col1, uur2, col2))
-                elif uur2 == grens_uur_3:
-                    header = ws_pauze.cell(1, col2).value if 'ws_pauze' in globals() else None
-                    if header and (':30' in str(header) or 'u30' in str(header)):
-                        blokken_rechts_laatste_halfuur_3u.append((i, uur1, col1, uur2, col2))
+                elif uur2 == grens_uur_3 and header and (':30' in str(header) or 'u30' in str(header)):
+                    blokken_rechts_laatste_halfuur.append((i, uur1, col1, uur2, col2))
         lange_werkers_lijst = getattr(plaats_student, "_lange_werkers_lijst", None)
         if lange_werkers_lijst is None:
             lange_werkers_lijst = [s["naam"] for s in studenten if (student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)) and s["naam"] not in [pv["naam"] for pv in selected]]
@@ -1136,9 +1125,9 @@ def plaats_student(student, harde_mode=False):
         # Als er te weinig blokken zijn, voeg blokken toe uit het laatste halfuur van de eerste 3 uur
         if len(lange_pauze_opties) < 1:
             if idx_in_lijst % 2 == 0:
-                lange_pauze_opties = blokken_links_laatste_halfuur_3u
+                lange_pauze_opties = blokken_links_laatste_halfuur
             else:
-                lange_pauze_opties = blokken_rechts_laatste_halfuur_3u
+                lange_pauze_opties = blokken_rechts_laatste_halfuur
         # Als er nog steeds te weinig zijn, neem alle blokken
         if len(lange_pauze_opties) < 1:
             for i in range(len(uur_col_pairs)-1):
