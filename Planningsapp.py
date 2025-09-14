@@ -1,3 +1,20 @@
+# --- Helper: check of header een xx:00 of xx:30 tijd is (hele/halve uren) ---
+def is_half_uur_start(header):
+    """Check of de header een xx:00 of xx:30 tijd is."""
+    if not header:
+        return False
+    s = str(header).strip()
+    if "u" in s:
+        tijd = s.split("u")
+        if len(tijd) == 2 and tijd[1] in ("", "00", "0"):
+            return True
+        if len(tijd) == 2 and tijd[1] in ("30"):
+            return True
+    if ":" in s:
+        parts = s.split(":")
+        if len(parts) == 2 and parts[1] in ("00", "30"):
+            return True
+    return False
 
 
 # tussenstapje
