@@ -1083,15 +1083,15 @@ def plaats_student(student, harde_mode=False):
     # Vind alle mogelijke dubbele blokjes (lange pauzes)
     # Alleen lange pauzes in de eerste 12 kwartieren (dus eerste drie volledige uren)
     eerste_twaalf = uur_col_pairs[:12] if len(uur_col_pairs) >= 12 else uur_col_pairs
-    # Bepaal alle blokken, maar markeer het 6de halfuur (kwartier 11 en 12, dus index 10 en 11)
+    # Bepaal alle blokken, maar markeer het laatste halfuur (de twee laatste kwartieren, index 10 en 11)
     lange_pauze_opties_lr = []
     last_optie_lr = []
     for i in range(len(eerste_twaalf)-1):
         uur1, col1 = eerste_twaalf[i]
         uur2, col2 = eerste_twaalf[i+1]
         if col2 == col1 + 1:
-            # 6de halfuur = blok van kwartier 11 en 12 (i==10)
-            if i == 10:
+            # Laatste halfuur = blok van kwartier 11 en 12 (i==10)
+            if i == len(eerste_twaalf)-2:
                 last_optie_lr.append((i, uur1, col1, uur2, col2))
             else:
                 lange_pauze_opties_lr.append((i, uur1, col1, uur2, col2))
@@ -1101,7 +1101,7 @@ def plaats_student(student, harde_mode=False):
         uur1, col1 = eerste_twaalf[i-1]
         uur2, col2 = eerste_twaalf[i]
         if col2 == col1 + 1:
-            if i-1 == 10:
+            if i-1 == len(eerste_twaalf)-2:
                 last_optie_rl.append((i-1, uur1, col1, uur2, col2))
             else:
                 lange_pauze_opties_rl.append((i-1, uur1, col1, uur2, col2))
