@@ -1850,6 +1850,7 @@ for _ in range(max_opt_passes_lange):
 
 # --- Verspreid alle lange pauzes over de eerste drie pauzevlinderuren, alleen op xx:00 of xx:30 ---
 
+
 def is_half_uur_start(header):
     if not header:
         return False
@@ -1866,52 +1867,51 @@ def is_half_uur_start(header):
 
 # Verzamel alle mogelijke dubbele blokken (start op xx:00 of xx:30) in de eerste drie pauzevlinderuren
 eerste3 = pauze_cols[:8]  # 3 uur = 12 kwartieren = 8 halve uren (2 per uur)
-lange_blokken = []  # (tijdslot_idx, pv_row, col1, col2, header1, header2)
+blokken_per_tijdslot = [[] for _ in range(8)]  # 8 halve uren
 for idx in range(len(eerste3)-1):
     col1 = eerste3[idx]
     col2 = eerste3[idx+1]
     header1 = ws_pauze.cell(1, col1).value
-    header2 = ws_pauze.cell(1, col2).value
     if not is_half_uur_start(header1):
         continue
-    tijdslot_idx = idx  # tijdslot is de positie in de eerste drie uur
+    tijdslot_idx = idx
     for pv, pv_row in pv_rows:
         cel1 = ws_pauze.cell(pv_row, col1)
         cel2 = ws_pauze.cell(pv_row, col2)
         if cel1.value in [None, ""] and cel2.value in [None, ""]:
-            lange_blokken.append((tijdslot_idx, pv_row, col1, col2, header1, header2))
-
-# Sorteer blokken per tijdslot (dus alle pauzevlinders tegelijk per tijdslot)
-lange_blokken.sort(key=lambda x: x[0])
+            blokken_per_tijdslot[tijdslot_idx].append((pv_row, col1, col2, header1))
 
 # Verzamel alle studenten die een lange pauze moeten krijgen (pauzevlinders + lange_werkers)
 lange_pauze_studenten = [pv for pv, _ in pv_rows if len(get_student_work_hours(pv["naam"])) > 6]
 lange_pauze_studenten += [s for s in lange_werkers if s["naam"] not in [pv["naam"] for pv, _ in pv_rows]]
+random.shuffle(lange_pauze_studenten)
 
-# Cyclisch toewijzen: per tijdslot, dan per pauzevlinder, zodat spreiding maximaal is
+# Round-robin toewijzing: eerst elk tijdslot één student, dan pas tweede ronde, enz.
 student_idx = 0
 num_students = len(lange_pauze_studenten)
-for tijdslot in range(8):
-    # Pak alle blokken van dit tijdslot
-    slot_blokken = [b for b in lange_blokken if b[0] == tijdslot]
-    for b in slot_blokken:
+num_slots = 8
+slot_ptrs = [0]*num_slots  # bijhouden welke blokken per tijdslot al gevuld zijn
+while student_idx < num_students:
+    for tijdslot in range(num_slots):
         if student_idx >= num_students:
             break
-        _, pv_row, col1, col2, header1, header2 = b
-        naam = lange_pauze_studenten[student_idx]["naam"]
-        cel1 = ws_pauze.cell(pv_row, col1)
-        cel2 = ws_pauze.cell(pv_row, col2)
-        cel1.value = naam
-        cel2.value = naam
-        cel1.alignment = center_align
-        cel2.alignment = center_align
-        cel1.border = thin_border
-        cel2.border = thin_border
-        cel1.fill = lichtgroen_fill
-        cel2.fill = lichtgroen_fill
-        student_idx += 1
-    if student_idx >= num_students:
-        break
+        # Zoek een vrij blok in dit tijdslot
+        ptr = slot_ptrs[tijdslot]
+        if ptr < len(blokken_per_tijdslot[tijdslot]):
+            pv_row, col1, col2, header1 = blokken_per_tijdslot[tijdslot][ptr]
+            naam = lange_pauze_studenten[student_idx]["naam"]
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            cel1.value = naam
+            cel2.value = naam
+            cel1.alignment = center_align
+            cel2.alignment = center_align
+            cel1.border = thin_border
+            cel2.border = thin_border
+            cel1.fill = lichtgroen_fill
+            cel2.fill = lichtgroen_fill
+            slot_ptrs[tijdslot] += 1
+            student_idx += 1
 
 
 
