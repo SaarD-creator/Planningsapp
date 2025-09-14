@@ -659,6 +659,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1021,10 +1022,11 @@ pv_lange_namen = [pv["naam"] for pv in pv_lange]
 pv_lange_slots = []
 for naam in pv_lange_namen:
     pv_slots = slots_per_pv.get(naam, [])
-    if pv_slots:
+    pv_slots_copy = list(pv_slots)  # iterate over a copy to avoid ValueError
+    if pv_slots_copy:
         # Kies het slot dat het best verspreid is (middelste slot)
-        idx = len(pv_slots) // 2
-        pv_row, col, t = pv_slots[idx]
+        idx = len(pv_slots_copy) // 2
+        pv_row, col, t = pv_slots_copy[idx]
         cel1 = ws_pauze.cell(pv_row, col)
         cel2 = ws_pauze.cell(pv_row, col+1) if (col+1, (t.hour, (t.minute+15)%60)) in [(c, (tt.hour, tt.minute)) for (c,tt) in eerste3_slots] else None
         if cel1.value in [None, ""] and cel2 and cel2.value in [None, ""]:
@@ -1037,7 +1039,7 @@ for naam in pv_lange_namen:
             cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
             cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
             # Markeer deze slots als bezet
-            slots_per_pv[naam] = [s for s in pv_slots if s[1] != col and s[1] != col+1]
+            slots_per_pv[naam] = [s for s in pv_slots_copy if s[1] != col and s[1] != col+1]
 
 # 2. Overige lange werkers: verdeel over resterende slots (alle rijen)
 lw_lange_namen = [s["naam"] for s in lw_lange]
