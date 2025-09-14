@@ -1009,7 +1009,7 @@ lange_werkers = [s for s in studenten
 ]
 lange_werkers_names = {s["naam"] for s in lange_werkers}
 
-    werkuren_pv = get_student_work_hours(pv["naam"])
+werkuren_pv = get_student_work_hours(pv["naam"])
     try:
         werkuren_pv = float(werkuren_pv)
     except Exception:
