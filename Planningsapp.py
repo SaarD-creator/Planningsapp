@@ -956,48 +956,70 @@ def wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols):
                 "attrs": (attr1, attr2)
             })
 
-    # 3. Verdeel de studenten zo eerlijk mogelijk over de blokken (blok-gericht)
-    #    - Loop over de blokken en wijs per blok de eerste student toe die kan en nog geen lange pauze heeft
-    student_bezet = set()
+    # 3. Maximale spreiding: wijs blokken toe zodat de afstand tussen de gekozen blokken maximaal is
+    #    - Sorteer blokken
     blokken_sorted = sorted(set([optie["blok"] for optie in opties]))
     studenten_sorted = sorted(lange_werkers, key=lambda s: s["naam"])
-    for blok in blokken_sorted:
-        # Vind alle studenten die dit blok kunnen en nog geen lange pauze hebben
-        kandidaten = [optie for optie in opties if optie["blok"] == blok and optie["student"]["naam"] not in student_bezet]
-        if not kandidaten:
-            continue
-        # Kies de student die het minst opties heeft (zodat de rest meer kans houdt)
-        kandidaten.sort(key=lambda o: sum(1 for oo in opties if oo["student"]==o["student"]))
-        optie = kandidaten[0]
-        naam = optie["student"]["naam"]
-        col1, col2 = blok
-        uur1, uur2 = optie["uren"]
-        attr1, attr2 = optie["attrs"]
-        # Zoek een pauzevlinder die deze attractie kan overnemen
-        for pv, pv_row in pv_rows:
-            if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+    toegewezen_blokken = []
+    toegewezen_studenten = set()
+    opties_per_student = {s["naam"]: [o for o in opties if o["student"]["naam"] == s["naam"]] for s in studenten_sorted}
+
+    def blok_afstand_score(blok, gekozen_blokken):
+        # Score = kleinste afstand tot een al gekozen blok (hoe groter, hoe beter)
+        if not gekozen_blokken:
+            return float('inf')
+        idx = blokken_sorted.index(blok)
+        return min(abs(idx - blokken_sorted.index(b)) for b in gekozen_blokken)
+
+    for _ in range(min(len(studenten_sorted), len(blokken_sorted))):
+        # Kies de student die nog niet is toegewezen
+        beste_score = -1
+        beste_optie = None
+        for s in studenten_sorted:
+            naam = s["naam"]
+            if naam in toegewezen_studenten:
                 continue
-            cel1 = ws_pauze.cell(pv_row, col1)
-            cel2 = ws_pauze.cell(pv_row, col2)
-            boven_cel1 = ws_pauze.cell(pv_row-1, col1)
-            boven_cel2 = ws_pauze.cell(pv_row-1, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                boven_cel1.value = attr1
-                boven_cel1.alignment = center_align
-                boven_cel1.border = thin_border
-                boven_cel2.value = attr2
-                boven_cel2.alignment = center_align
-                boven_cel2.border = thin_border
-                cel1.value = naam
-                cel1.alignment = center_align
-                cel1.border = thin_border
-                cel2.value = naam
-                cel2.alignment = center_align
-                cel2.border = thin_border
-                cel1.fill = lichtgroen_fill
-                cel2.fill = lichtgroen_fill
-                student_bezet.add(naam)
-                break
+            # Kies het blok met de grootste afstand tot de al gekozen blokken
+            opties_student = [o for o in opties_per_student[naam] if o["blok"] not in toegewezen_blokken]
+            if not opties_student:
+                continue
+            opties_student.sort(key=lambda o: -blok_afstand_score(o["blok"], toegewezen_blokken))
+            optie = opties_student[0]
+            score = blok_afstand_score(optie["blok"], toegewezen_blokken)
+            if score > beste_score:
+                beste_score = score
+                beste_optie = optie
+        if beste_optie:
+            naam = beste_optie["student"]["naam"]
+            col1, col2 = beste_optie["blok"]
+            uur1, uur2 = beste_optie["uren"]
+            attr1, attr2 = beste_optie["attrs"]
+            # Zoek een pauzevlinder die deze attractie kan overnemen
+            for pv, pv_row in pv_rows:
+                if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+                    continue
+                cel1 = ws_pauze.cell(pv_row, col1)
+                cel2 = ws_pauze.cell(pv_row, col2)
+                boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+                boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                    boven_cel1.value = attr1
+                    boven_cel1.alignment = center_align
+                    boven_cel1.border = thin_border
+                    boven_cel2.value = attr2
+                    boven_cel2.alignment = center_align
+                    boven_cel2.border = thin_border
+                    cel1.value = naam
+                    cel1.alignment = center_align
+                    cel1.border = thin_border
+                    cel2.value = naam
+                    cel2.alignment = center_align
+                    cel2.border = thin_border
+                    cel1.fill = lichtgroen_fill
+                    cel2.fill = lichtgroen_fill
+                    toegewezen_blokken.append(beste_optie["blok"])
+                    toegewezen_studenten.add(naam)
+                    break
 
 # --- Roep deze functie aan ná de definitie van lange_werkers ---
 
