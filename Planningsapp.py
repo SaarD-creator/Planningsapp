@@ -1304,12 +1304,12 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
         if not plaats_student(s, harde_mode=False):
             niet_geplaatst.append(s)
         continue
-    # Verzamel alle mogelijke halve uren (twee aaneengesloten kwartieren) waarop deze student werkt en een pauze mag hebben
+    # Alleen de eerste drie halve uren (indices 0,1,2) zijn toegestaan
     halve_uren = []  # lijst van (col1, col2, uur1, uur2, pv, pv_row)
     werk_uren_set = set(werk_uren)
     verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
     for pv, pv_row in pv_rows:
-        for idx in range(len(pauze_cols)-1):
+        for idx in range(min(3, len(pauze_cols)-1)):
             col1 = pauze_cols[idx]
             col2 = pauze_cols[idx+1]
             col1_header = ws_pauze.cell(1, col1).value
@@ -1919,9 +1919,9 @@ for pv, pv_row in pv_rows:
     naam = pv["naam"]
     werk_uren = get_student_work_hours(naam)
     if len(werk_uren) > 6:
-        # Verzamel ALLE mogelijke halve uren (twee aaneengesloten kwartieren) over de hele pauzeperiode
+        # Alleen de eerste drie halve uren (indices 0,1,2) zijn toegestaan
         halve_uren = []  # lijst van (idx, col1, col2)
-        for idx in range(len(pauze_cols)-1):
+        for idx in range(min(3, len(pauze_cols)-1)):
             col1 = pauze_cols[idx]
             col2 = pauze_cols[idx+1]
             cel1 = ws_pauze.cell(pv_row, col1)
