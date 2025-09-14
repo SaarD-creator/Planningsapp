@@ -1030,19 +1030,24 @@ lange_werkers_names = {s["naam"] for s in lange_werkers}
 eerste_drie_cols = pauze_cols[:6] if len(pauze_cols) >= 6 else pauze_cols[:]
 
 # Maak een lijst van alle mogelijke dubbele blokken (twee naast elkaar liggende cellen) in deze kolommen, voor alle pauzevlinders
-mogelijke_lange_pauze_slots = []  # (pv_row, col1, col2)
+mogelijke_lange_pauze_slots = []  # (pv_row, col1, col2, uur1, uur2)
 for pv, pv_row in pv_rows:
     for i in range(len(eerste_drie_cols)-1):
         col1 = eerste_drie_cols[i]
         col2 = eerste_drie_cols[i+1]
-        # Alleen als beide cellen leeg zijn
-        if ws_pauze.cell(pv_row, col1).value in [None, ""] and ws_pauze.cell(pv_row, col2).value in [None, ""]:
-            mogelijke_lange_pauze_slots.append((pv_row, col1, col2))
+        header1 = ws_pauze.cell(1, col1).value
+        header2 = ws_pauze.cell(1, col2).value
+        uur1 = parse_header_uur(header1)
+        uur2 = parse_header_uur(header2)
+        # Alleen als beide cellen leeg zijn en uren geldig
+        if uur1 is not None and uur2 is not None and ws_pauze.cell(pv_row, col1).value in [None, ""] and ws_pauze.cell(pv_row, col2).value in [None, ""]:
+            mogelijke_lange_pauze_slots.append((pv_row, col1, col2, uur1, uur2))
 
 # Shuffle de lijst zodat de verdeling random is
 random.shuffle(mogelijke_lange_pauze_slots)
 
-# Voor elke lange werker: wijs het eerstvolgende vrije slot toe waar de student op beide uren werkt
+# Voor elke lange werker: wijs het eerstvolgende vrije slot toe waar de student op beide uren werkt, en geef maximaal 1 lange pauze per persoon
+lange_pauze_toegewezen = set()
 for s in lange_werkers:
     naam = s["naam"]
     werk_uren = get_student_work_hours(naam)
@@ -1050,14 +1055,9 @@ for s in lange_werkers:
         verboden_uren = {werk_uren[0], werk_uren[-1]}
     else:
         verboden_uren = set(werk_uren)
-    toegewezen = False
-    for idx, (pv_row, col1, col2) in enumerate(mogelijke_lange_pauze_slots):
-        header1 = ws_pauze.cell(1, col1).value
-        header2 = ws_pauze.cell(1, col2).value
-        uur1 = parse_header_uur(header1)
-        uur2 = parse_header_uur(header2)
-        if uur1 is None or uur2 is None:
-            continue
+    for idx, (pv_row, col1, col2, uur1, uur2) in enumerate(mogelijke_lange_pauze_slots):
+        if naam in lange_pauze_toegewezen:
+            break  # Maximaal 1 lange pauze per persoon
         if uur1 in werk_uren and uur2 in werk_uren and uur1 not in verboden_uren and uur2 not in verboden_uren:
             ws_pauze.cell(pv_row, col1).value = naam
             ws_pauze.cell(pv_row, col2).value = naam
@@ -1067,10 +1067,22 @@ for s in lange_werkers:
             ws_pauze.cell(pv_row, col2).border = thin_border
             ws_pauze.cell(pv_row, col1).fill = lichtgroen_fill
             ws_pauze.cell(pv_row, col2).fill = lichtgroen_fill
-            toegewezen = True
+            lange_pauze_toegewezen.add(naam)
             # Verwijder dit slot zodat het niet dubbel gebruikt wordt
             mogelijke_lange_pauze_slots.pop(idx)
             break
+
+# Controle: niemand mag meer dan 1 lange pauze hebben, en geen enkele lange pauze buiten de eerste drie pauzeuren
+for s in lange_werkers:
+    naam = s["naam"]
+    count = 0
+    for pv, pv_row in pv_rows:
+        for i in range(len(eerste_drie_cols)-1):
+            col1 = eerste_drie_cols[i]
+            col2 = eerste_drie_cols[i+1]
+            if ws_pauze.cell(pv_row, col1).value == naam and ws_pauze.cell(pv_row, col2).value == naam:
+                count += 1
+    assert count <= 1, f"{naam} heeft meer dan 1 lange pauze!"
 
 def get_student_work_hours(naam):
     """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
