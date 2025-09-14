@@ -655,6 +655,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -907,167 +908,6 @@ for pv, pv_row in pv_rows:
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
 # DEEL 4: Lange werkers (>6 uur) pauze inplannen – gegarandeerd
-# --- Helper: werkuren ophalen vóór gebruik ---
-def get_student_work_hours(naam):
-    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
-    uren = set()
-    for col in range(2, ws_planning.max_column + 1):
-        header = ws_planning.cell(1, col).value
-        uur = parse_header_uur(header)
-        if uur is None:
-            continue
-        # check of student in deze kolom ergens staat
-        for row in range(2, ws_planning.max_row + 1):
-            if ws_planning.cell(row, col).value == naam:
-                uren.add(uur)
-                break
-    return sorted(uren)
-# --- Eerlijke, gespreide verdeling van lange pauzes (pauzevlinders en lange werkers) ---
-def vind_heel_half_slots(ws_pauze, pauze_cols, eerste3_uren):
-    """Vind alle dubbele blokken (heel/half uur) in de eerste drie pauzeuren per rij."""
-    slots_per_row = defaultdict(list)  # pv_row -> [(col1, col2)]
-    for pv, pv_row in pv_rows:
-        for idx in range(len(pauze_cols)-1):
-            col1 = pauze_cols[idx]
-            col2 = pauze_cols[idx+1]
-            tijd1 = ws_pauze.cell(1, col1).value
-            tijd2 = ws_pauze.cell(1, col2).value
-            # Alleen heel/half uur, geen kwartieren
-            if not (tijd1 and tijd2):
-                continue
-            try:
-                h1, m1 = int(tijd1.split('u')[0]), int(tijd1.split('u')[1] or 0) if 'u' in tijd1 and len(tijd1.split('u'))>1 else 0
-                h2, m2 = int(tijd2.split('u')[0]), int(tijd2.split('u')[1] or 0) if 'u' in tijd2 and len(tijd2.split('u'))>1 else 0
-            except:
-                continue
-            if (m1 not in (0,30)) or (m2 not in (0,30)):
-                continue
-            # Alleen in eerste drie pauzeuren
-            if h1 not in eerste3_uren or h2 not in eerste3_uren:
-                continue
-            # Vermijd laatste halfuur indien mogelijk
-            if max(h1,h2)==max(eerste3_uren) and (m1==30 or m2==30):
-                continue
-            # Dubbele blokken (naast elkaar)
-            if col2 == col1+1:
-                slots_per_row[pv_row].append((col1, col2))
-    return slots_per_row
-
-# Bepaal eerste drie pauzeuren
-eerste3_uren = sorted(list(set([parse_header_uur(ws_pauze.cell(1, col).value) for col in pauze_cols if parse_header_uur(ws_pauze.cell(1, col).value) is not None])))[:3]
-slots_per_row = vind_heel_half_slots(ws_pauze, pauze_cols, eerste3_uren)
-
-# Pauzevlinders met >6u: prioriteit, altijd in eigen rij
-
-# --- Nieuwe, betere spreiding van lange pauzes ---
-pv_lange = [pv for pv in selected if len(get_student_work_hours(pv['naam'])) > 6]
-lw_lange = [s for s in studenten if (student_totalen.get(s['naam'], 0) > 6 or ('-18' in str(s['naam']) and student_totalen.get(s['naam'], 0) > 0)) and s['naam'] not in [pv['naam'] for pv in selected]]
-
-# Verzamel alle mogelijke slots per uur (per rij)
-
-# Bepaal slots per uur, markeer laatste halfuur van derde uur apart
-# Sorteer de uren (eerste drie pauzeuren)
-# (deze regel moet na het vullen van slots_per_uur komen)
-slots_per_uur = {}  # uur -> lijst van (pv_row, col1, col2)
-laatste_halfuur_slots = []
-if len(uren_sorted) >= 3:
-    derde_uur = uren_sorted[2]
-else:
-    derde_uur = None
-for pv, pv_row in pv_rows:
-    for (col1, col2) in slots_per_row[pv_row]:
-        tijd1 = ws_pauze.cell(1, col1).value
-        tijd2 = ws_pauze.cell(1, col2).value
-        if tijd1 and 'u' in tijd1:
-            uur = int(tijd1.split('u')[0])
-            min1 = int(tijd1.split('u')[1]) if 'u' in tijd1 and len(tijd1.split('u'))>1 and tijd1.split('u')[1] else 0
-            min2 = int(tijd2.split('u')[1]) if tijd2 and 'u' in tijd2 and len(tijd2.split('u'))>1 and tijd2.split('u')[1] else 0
-            # Markeer laatste halfuur van derde uur apart
-            if derde_uur is not None and uur == derde_uur and (min1 == 30 or min2 == 30):
-                laatste_halfuur_slots.append((pv_row, col1, col2))
-            else:
-                slots_per_uur.setdefault(uur, []).append((pv_row, col1, col2))
-
-# Sorteer de uren (eerste drie pauzeuren)
-uren_sorted = sorted([u for u in slots_per_uur if u in eerste3_uren])
-
-# 1. Pauzevlinders met >6u: cyclisch over de uren
-
-# Eerst alle slots behalve laatste halfuur van derde uur
-gebruikte_slots = set()
-pv_lange_cycle = pv_lange.copy()
-for i, uur in enumerate(uren_sorted):
-    for pv in pv_lange_cycle:
-        pv_row = next((row for p, row in pv_rows if p['naam']==pv['naam']), None)
-        slot = next(((r, c1, c2) for (r, c1, c2) in slots_per_uur.get(uur, []) if r == pv_row and (r, c1, c2) not in gebruikte_slots), None)
-        if slot:
-            _, col1, col2 = slot
-            cel1 = ws_pauze.cell(pv_row, col1)
-            cel2 = ws_pauze.cell(pv_row, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                cel1.value = pv['naam']
-                cel2.value = pv['naam']
-                cel1.alignment = center_align
-                cel2.alignment = center_align
-                cel1.border = thin_border
-                cel2.border = thin_border
-                cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-                cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-                gebruikte_slots.add(slot)
-# Daarna, indien nodig, het laatste halfuur van derde uur
-for pv in pv_lange_cycle:
-    slot = next(((r, c1, c2) for (r, c1, c2) in laatste_halfuur_slots if r == next((row for p, row in pv_rows if p['naam']==pv['naam']), None) and (r, c1, c2) not in gebruikte_slots), None)
-    if slot:
-        pv_row, col1, col2 = slot
-        cel1 = ws_pauze.cell(pv_row, col1)
-        cel2 = ws_pauze.cell(pv_row, col2)
-        if cel1.value in [None, ""] and cel2.value in [None, ""]:
-            cel1.value = pv['naam']
-            cel2.value = pv['naam']
-            cel1.alignment = center_align
-            cel2.alignment = center_align
-            cel1.border = thin_border
-            cel2.border = thin_border
-            cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-            cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-            gebruikte_slots.add(slot)
-
-# 2. Overige lange werkers: cyclisch over de uren, over alle rijen
-all_free_slots = []
-for uur in uren_sorted:
-    for (pv_row, col1, col2) in slots_per_uur.get(uur, []):
-        if (pv_row, col1, col2) in gebruikte_slots:
-            continue
-        cel1 = ws_pauze.cell(pv_row, col1)
-        cel2 = ws_pauze.cell(pv_row, col2)
-        if cel1.value in [None, ""] and cel2.value in [None, ""]:
-            all_free_slots.append((pv_row, col1, col2))
-# Daarna, indien nodig, het laatste halfuur van derde uur
-for (pv_row, col1, col2) in laatste_halfuur_slots:
-    if (pv_row, col1, col2) in gebruikte_slots:
-        continue
-    cel1 = ws_pauze.cell(pv_row, col1)
-    cel2 = ws_pauze.cell(pv_row, col2)
-    if cel1.value in [None, ""] and cel2.value in [None, ""]:
-        all_free_slots.append((pv_row, col1, col2))
-
-for idx, s in enumerate(lw_lange):
-    if idx < len(all_free_slots):
-        pv_row, col1, col2 = all_free_slots[idx]
-        cel1 = ws_pauze.cell(pv_row, col1)
-        cel2 = ws_pauze.cell(pv_row, col2)
-        cel1.value = s['naam']
-        cel2.value = s['naam']
-        cel1.alignment = center_align
-        cel2.alignment = center_align
-        cel1.border = thin_border
-        cel2.border = thin_border
-        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-        cel1.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-        cel2.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
 # -----------------------------
 
 from openpyxl.styles import Alignment, Border, Side, PatternFill
@@ -2005,30 +1845,114 @@ for _ in range(max_opt_passes_lange):
     pass  # (oude optimalisatie-code is verwijderd, want niet meer nodig)
 
 # --- Pauzevlinders met >6u: altijd lange pauze in eigen rij ---
+
+# --- Lange pauzes eerlijk en gespreid over de eerste drie pauzevlinderuren ---
+def vind_uren_in_eerste_drie_pauzevlinderuren():
+    # Verzamel alle unieke uren in de eerste drie pauzevlinderuren
+    uren = []
+    for col in pauze_cols:
+        col_header = ws_pauze.cell(1, col).value
+        col_uur = parse_header_uur(col_header)
+        if col_uur is not None and col_uur not in uren:
+            uren.append(col_uur)
+        if len(uren) == 3:
+            break
+    return uren
+
+eerste_drie_uren = vind_uren_in_eerste_drie_pauzevlinderuren()
+
+# Vind alle mogelijke dubbele blokken (start_col, pv_row) in de eerste drie pauzevlinderuren
+def vind_mogelijke_lange_pauze_blokken(pv_row):
+    blokken = []
+    for idx in range(len(pauze_cols)-1):
+        col1 = pauze_cols[idx]
+        col2 = pauze_cols[idx+1]
+        col1_uur = parse_header_uur(ws_pauze.cell(1, col1).value)
+        col2_uur = parse_header_uur(ws_pauze.cell(1, col2).value)
+        # Beide kwartieren moeten in de eerste drie pauzevlinderuren vallen
+        if col1_uur not in eerste_drie_uren or col2_uur not in eerste_drie_uren:
+            continue
+        # Alleen blokken op heel of half uur (dus bv. 13u00/13u15 of 13u30/13u45)
+        min1 = int(ws_pauze.cell(1, col1).value[-2:]) if 'u' in ws_pauze.cell(1, col1).value else 0
+        min2 = int(ws_pauze.cell(1, col2).value[-2:]) if 'u' in ws_pauze.cell(1, col2).value else 0
+        if not ((min1 in [0,30]) and (min2 in [15,45])):
+            continue
+        cel1 = ws_pauze.cell(pv_row, col1)
+        cel2 = ws_pauze.cell(pv_row, col2)
+        if cel1.value in [None, ""] and cel2.value in [None, ""]:
+            blokken.append((col1, col2, col1_uur, min1, idx))
+    return blokken
+
+# Verzamel alle pauzevlinders en lange werkers (pauzevlinders eerst)
+lange_werkers_gesorteerd = [pv for pv, _ in pv_rows if len(get_student_work_hours(pv["naam"])) > 6] + [s for s in lange_werkers if s["naam"] not in [pv["naam"] for pv, _ in pv_rows]]
+
+# Verzamel alle mogelijke blokken per pauzevlinder-rij
+pv_blokken = {}
 for pv, pv_row in pv_rows:
-    naam = pv["naam"]
-    werk_uren = get_student_work_hours(naam)
-    if len(werk_uren) > 6:
-        # Zoek een vrij dubbel blok (twee naast elkaar liggende cellen) in hun eigen rij
-        geplaatst = False
-        for idx in range(len(pauze_cols)-1):
-            col1 = pauze_cols[idx]
-            col2 = pauze_cols[idx+1]
+    pv_blokken[pv["naam"]] = vind_mogelijke_lange_pauze_blokken(pv_row)
+
+# Verzamel alle mogelijke blokken voor niet-pauzevlinders (alle rijen)
+andere_blokken = []
+for pv, pv_row in pv_rows:
+    andere_blokken.extend([(pv_row, col1, col2, col1_uur, min1, idx) for (col1, col2, col1_uur, min1, idx) in vind_mogelijke_lange_pauze_blokken(pv_row)])
+
+# Verdeel de blokken zo eerlijk mogelijk over de uren, vermijd laatste halfuur derde uur indien mogelijk
+uren_sorted = sorted(eerste_drie_uren)
+derde_uur = uren_sorted[2] if len(uren_sorted) >= 3 else None
+
+def is_laatste_halfuur(col_uur, min1):
+    return derde_uur is not None and col_uur == derde_uur and min1 == 30
+
+toegewezen_blokken = set()
+for werker in lange_werkers_gesorteerd:
+    naam = werker["naam"] if isinstance(werker, dict) else werker
+    # Pauzevlinders krijgen altijd in hun eigen rij
+    blokken = pv_blokken.get(naam, [])
+    # Eerst alle blokken behalve laatste halfuur derde uur
+    normale_blokken = [b for b in blokken if not is_laatste_halfuur(b[2], b[3])]
+    if normale_blokken:
+        gekozen = normale_blokken[0]
+    elif blokken:
+        gekozen = blokken[0]
+    else:
+        # Geen blok in eigen rij, zoek in andere rijen (voor niet-pauzevlinders)
+        if naam in pv_blokken:
+            continue  # pauzevlinder krijgt alleen in eigen rij
+        # Zoek een blok in andere_blokken dat nog niet is toegewezen
+        kandidaten = [b for b in andere_blokken if not is_laatste_halfuur(b[3], b[4]) and (b[0], b[1], b[2]) not in toegewezen_blokken]
+        if not kandidaten:
+            kandidaten = [b for b in andere_blokken if (b[0], b[1], b[2]) not in toegewezen_blokken]
+        if kandidaten:
+            gekozen = kandidaten[0]
+            pv_row, col1, col2, col1_uur, min1, idx = gekozen
             cel1 = ws_pauze.cell(pv_row, col1)
             cel2 = ws_pauze.cell(pv_row, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                cel1.value = naam
-                cel2.value = naam
-                cel1.alignment = center_align
-                cel2.alignment = center_align
-                cel1.border = thin_border
-                cel2.border = thin_border
-                cel1.fill = lichtgroen_fill
-                cel2.fill = lichtgroen_fill
-                # Cel erboven mag leeg blijven
-                geplaatst = True
-                break
-        # Indien geen plek gevonden, doe niets (komt zelden voor)
+            cel1.value = naam
+            cel2.value = naam
+            cel1.alignment = center_align
+            cel2.alignment = center_align
+            cel1.border = thin_border
+            cel2.border = thin_border
+            cel1.fill = lichtgroen_fill
+            cel2.fill = lichtgroen_fill
+            toegewezen_blokken.add((pv_row, col1, col2))
+        continue
+    # Plaats blok in eigen rij
+    for pv, pv_row in pv_rows:
+        if pv["naam"] == naam:
+            col1, col2, col1_uur, min1, idx = gekozen
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            cel1.value = naam
+            cel2.value = naam
+            cel1.alignment = center_align
+            cel2.alignment = center_align
+            cel1.border = thin_border
+            cel2.border = thin_border
+            cel1.fill = lichtgroen_fill
+            cel2.fill = lichtgroen_fill
+            toegewezen_blokken.add((pv_row, col1, col2))
+            break
 
 
 
