@@ -1031,6 +1031,8 @@ lange_werkers_names = {s["naam"] for s in lange_werkers}
 
 # ---- Random lange pauze toewijzing, korte pauze code ongemoeid ----
 def random_lange_pauze_toewijzing(lange_werkers, pv_rows, pauze_cols):
+    # Zorg dat lichtgroen_fill beschikbaar is
+    global lichtgroen_fill
     for s in random.sample(lange_werkers, len(lange_werkers)):
         naam = s["naam"]
         werk_uren = get_student_work_hours(naam)
