@@ -1083,22 +1083,32 @@ def plaats_student(student, harde_mode=False):
     # Vind alle mogelijke dubbele blokjes (lange pauzes)
     # Alleen lange pauzes in de eerste 12 kwartieren (dus eerste drie volledige uren)
     eerste_twaalf = uur_col_pairs[:12] if len(uur_col_pairs) >= 12 else uur_col_pairs
+    # Bepaal alle blokken, maar markeer het 6de halfuur (kwartier 11 en 12, dus index 10 en 11)
     lange_pauze_opties_lr = []
+    last_optie_lr = []
     for i in range(len(eerste_twaalf)-1):
         uur1, col1 = eerste_twaalf[i]
         uur2, col2 = eerste_twaalf[i+1]
         if col2 == col1 + 1:
-            lange_pauze_opties_lr.append((i, uur1, col1, uur2, col2))
+            # 6de halfuur = blok van kwartier 11 en 12 (i==10)
+            if i == 10:
+                last_optie_lr.append((i, uur1, col1, uur2, col2))
+            else:
+                lange_pauze_opties_lr.append((i, uur1, col1, uur2, col2))
     lange_pauze_opties_rl = []
+    last_optie_rl = []
     for i in range(len(eerste_twaalf)-1, 0, -1):
         uur1, col1 = eerste_twaalf[i-1]
         uur2, col2 = eerste_twaalf[i]
         if col2 == col1 + 1:
-            lange_pauze_opties_rl.append((i-1, uur1, col1, uur2, col2))
+            if i-1 == 10:
+                last_optie_rl.append((i-1, uur1, col1, uur2, col2))
+            else:
+                lange_pauze_opties_rl.append((i-1, uur1, col1, uur2, col2))
     if plaats_student._lr_toggle % 2 == 1:
-        opties = lange_pauze_opties_lr
+        opties = lange_pauze_opties_lr + last_optie_lr
     else:
-        opties = lange_pauze_opties_rl
+        opties = lange_pauze_opties_rl + last_optie_rl
     last_optie = []
     # Probeer alle opties voor de lange pauze (max 1x per student)
     if not reg["lange"]:
