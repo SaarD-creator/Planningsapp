@@ -1009,7 +1009,9 @@ lange_werkers = [s for s in studenten
 ]
 lange_werkers_names = {s["naam"] for s in lange_werkers}
 
-werkuren_pv = get_student_work_hours(pv["naam"])
+
+for pv, pv_row in pv_rows:
+    werkuren_pv = get_student_work_hours(pv["naam"])
     try:
         werkuren_pv = float(werkuren_pv)
     except Exception:
@@ -1050,9 +1052,9 @@ werkuren_pv = get_student_work_hours(pv["naam"])
         for pv2, pv_row2, idx, col1, col2 in sorted(alle_halve_uren, key=lambda tup: pv_lange_count[tup[0]["naam"]]):
             cel1 = ws_pauze.cell(pv_row2, col1)
             cel2 = ws_pauze.cell(pv_row2, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
-                cel1.value = naam
-                cel2.value = naam
+            if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(pv["naam"]):
+                cel1.value = pv["naam"]
+                cel2.value = pv["naam"]
                 cel1.alignment = center_align
                 cel2.alignment = center_align
                 cel1.border = thin_border
