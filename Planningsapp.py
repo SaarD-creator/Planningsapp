@@ -1867,7 +1867,8 @@ for _ in range(max_opt_passes_lange):
 
 # --- Pauzevlinders met >6u: altijd lange pauze in eigen rij ---
 
-# --- Pauzevlinders met >6u: altijd lange pauze in eigen rij, alleen op hele/halve uren, gespreid ---
+
+# --- Helper: check of header een xx:00 of xx:30 tijd is (hele/halve uren) ---
 def is_half_uur_start(header):
     """Check of de header een xx:00 of xx:30 tijd is."""
     if not header:
