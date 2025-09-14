@@ -743,15 +743,12 @@ for col in range(2, len(uren_rij1) + 2):
 # Gebruik exact dezelfde open_uren en headers als in deel 1 voor de pauzeplanning
 uren_rij1 = []
 for uur in sorted(open_uren):
-    gevonden = False
+    # Zoek de originele header uit ws_out (de hoofdplanning)
     for col in range(2, ws_out.max_column + 1):
         header = ws_out.cell(1, col).value
         if header and str(header).startswith(str(uur)):
             uren_rij1.append(header)
-            gevonden = True
             break
-    if not gevonden:
-        uren_rij1.append(f"{uur}u")
 
 # Opslaan met dezelfde unieke naam
 
@@ -1078,59 +1075,39 @@ def plaats_student(student, harde_mode=False):
         plaats_student.pauze_registry = {}
     reg = plaats_student.pauze_registry.setdefault(naam, {"lange": False, "korte": False})
 
-
-    # --- AANGEPAST: lange pauzes deels links, deels rechts ---
-    lange_pauze_opties = []
-    if len(uur_col_pairs) > 1:
-        eerste_uur = uur_col_pairs[0][0]
-        grens_uur_2_5 = eerste_uur + 2
-        grens_uur_3 = eerste_uur + 3
-        # Verzamel blokken per starttijd
-        blokken_start = {}
-        blokken_laatste_halfuur = []
-        for i in range(len(uur_col_pairs)-1):
-            uur1, col1 = uur_col_pairs[i]
-            uur2, col2 = uur_col_pairs[i+1]
-            if col2 == col1 + 1:
-                header_start = ws_pauze.cell(1, col1).value if 'ws_pauze' in globals() else None
-                header_end = ws_pauze.cell(1, col2).value if 'ws_pauze' in globals() else None
-                # Blokken die starten op eerste uur of laatste uur vóór laatste halfuur
-                if uur1 == eerste_uur or uur1 == grens_uur_2_5:
-                    blokken_start.setdefault(uur1, []).append((i, uur1, col1, uur2, col2))
-                # Blokken die starten in het laatste halfuur van de eerste 3 uur
-                elif uur1 == grens_uur_2_5 + 0.5 or (header_start and (':30' in str(header_start) or 'u30' in str(header_start)) and uur1 == grens_uur_2_5):
-                    blokken_laatste_halfuur.append((i, uur1, col1, uur2, col2))
-        # Wissel buitenkant-in: eerst begin, dan eind, dan pas laatste halfuur
-        lange_werkers_lijst = getattr(plaats_student, "_lange_werkers_lijst", None)
-        if lange_werkers_lijst is None:
-            lange_werkers_lijst = [s["naam"] for s in studenten if (student_totalen.get(s["naam"], 0) > 6 or ("-18" in str(s["naam"]) and student_totalen.get(s["naam"], 0) > 0)) and s["naam"] not in [pv["naam"] for pv in selected]]
-            plaats_student._lange_werkers_lijst = lange_werkers_lijst
-        idx_in_lijst = plaats_student._lange_werkers_lijst.index(student["naam"]) if student["naam"] in plaats_student._lange_werkers_lijst else 0
-        # Wissel: even index = eerste_uur, oneven = grens_uur_2_5
-        volgorde = []
-        left = list(blokken_start.get(eerste_uur, []))
-        right = list(blokken_start.get(grens_uur_2_5, []))
-        # Afwisselend links en rechts vullen
-        while left or right:
-            if left:
-                volgorde.append(left.pop(0))
-            if right:
-                volgorde.append(right.pop(0))
-        lange_pauze_opties = volgorde
-        # Als er te weinig blokken zijn, voeg blokken toe uit het laatste halfuur
-        if len(lange_pauze_opties) < 1:
-            lange_pauze_opties = blokken_laatste_halfuur
-        # Als er nog steeds te weinig zijn, neem alle blokken
-        if len(lange_pauze_opties) < 1:
-            for i in range(len(uur_col_pairs)-1):
-                uur1, col1 = uur_col_pairs[i]
-                uur2, col2 = uur_col_pairs[i+1]
-                if col2 == col1 + 1:
-                    lange_pauze_opties.append((i, uur1, col1, uur2, col2))
-
+    # Afwisselend links-rechts en rechts-links vullen van lange pauzes
+    # Gebruik een statische teller op de functie om af te wisselen
+    if not hasattr(plaats_student, "_lr_toggle"):
+        plaats_student._lr_toggle = 0
+    plaats_student._lr_toggle += 1
+    # Vind alle mogelijke dubbele blokjes (lange pauzes)
+    lange_pauze_opties_lr = []  # links naar rechts
+    lange_pauze_opties_rl = []  # rechts naar links
+    for i in range(len(uur_col_pairs)-1):
+        uur1, col1 = uur_col_pairs[i]
+        uur2, col2 = uur_col_pairs[i+1]
+        if col2 == col1 + 1:
+            lange_pauze_opties_lr.append((i, uur1, col1, uur2, col2))
+    for i in range(len(uur_col_pairs)-1, 0, -1):
+        uur1, col1 = uur_col_pairs[i-1]
+        uur2, col2 = uur_col_pairs[i]
+        if col2 == col1 + 1:
+            lange_pauze_opties_rl.append((i-1, uur1, col1, uur2, col2))
+    # Sla het zesde halfuur (meestal laatste blokje) over in de eerste ronde
+    def filter_zesde_halfuur(opties):
+        # Bepaal het zesde halfuur (laatste blokje)
+        if len(opties) <= 5:
+            return opties, []
+        # Neem alle opties behalve de laatste
+        return opties[:-1], [opties[-1]]
+    # Kies de richting
+    if plaats_student._lr_toggle % 2 == 1:
+        opties, last_optie = filter_zesde_halfuur(lange_pauze_opties_lr)
+    else:
+        opties, last_optie = filter_zesde_halfuur(lange_pauze_opties_rl)
     # Probeer alle opties voor de lange pauze (max 1x per student)
     if not reg["lange"]:
-        for optie in lange_pauze_opties:
+        for optie in opties + last_optie:
             i, uur1, col1, uur2, col2 = optie
             attr1 = vind_attractie_op_uur(naam, uur1)
             attr2 = vind_attractie_op_uur(naam, uur2)
