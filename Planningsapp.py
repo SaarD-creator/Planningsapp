@@ -656,6 +656,7 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
+
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -1521,9 +1522,27 @@ for s in studenten:
 # Eerst: korte pauze toewijzen aan studenten zonder lange pauze
 def korte_pauze_toewijzen(studenten_lijst):
     for s in studenten_lijst:
-        if s["naam"] in korte_pauze_ontvangers:
-            continue
         naam = s["naam"]
+        # Sla over als deze student al een pauze heeft (kort of lang)
+        if naam in korte_pauze_ontvangers:
+            continue
+        # Check of deze student al een lange pauze heeft gekregen
+        heeft_lange = False
+        for pv, pv_row in pv_rows:
+            for idx, col in enumerate(pauze_cols):
+                cel = ws_pauze.cell(pv_row, col)
+                if cel.value == naam:
+                    # Check of volgende cel ook deze naam heeft (dubbele blok)
+                    if idx+1 < len(pauze_cols):
+                        next_col = pauze_cols[idx+1]
+                        cel_next = ws_pauze.cell(pv_row, next_col)
+                        if cel_next.value == naam:
+                            heeft_lange = True
+                            break
+            if heeft_lange:
+                break
+        if heeft_lange:
+            continue
         werk_uren = get_student_work_hours(naam)
         if len(werk_uren) > 2:
             verboden_uren = {werk_uren[0], werk_uren[-1]}
