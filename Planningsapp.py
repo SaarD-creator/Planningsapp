@@ -655,9 +655,6 @@ for row in ws_out.iter_rows(min_row=2, values_only=True):
 
 
 
-
-
-
 #DEEL 2
 #oooooooooooooooooooo
 #oooooooooooooooooooo
@@ -921,13 +918,24 @@ center_align = Alignment(horizontal="center", vertical="center")
 # Zachtblauw, anders dan je titelkleuren; alleen voor naamcellen
 naam_leeg_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
 
-# Alleen kolommen B..G
-# Dynamisch: alle kolommen waar in rij 1 een uur staat (bv. '13u45', '14u', ...)
+
+# Dynamisch: alle kolommen waar in rij 1 een uur staat (bv. '13u', '13u30', ...)
 pauze_cols = []
+pauze_col_times = []  # (col, tijd in minuten sinds 0:00)
 for col in range(2, ws_pauze.max_column + 1):
     header = ws_pauze.cell(1, col).value
     if header and ("u" in str(header)):
         pauze_cols.append(col)
+        # Parse tijd als minuten sinds 0:00
+        s = str(header).replace('u', ':').replace('U', ':')
+        try:
+            if ':' in s:
+                uur, minuut = s.split(':')
+                pauze_col_times.append((col, int(uur)*60+int(minuut)))
+            else:
+                pauze_col_times.append((col, int(s)*60))
+        except:
+            pauze_col_times.append((col, 0))
 
 
 def is_student_extra(naam):
@@ -1045,48 +1053,65 @@ def pv_kan_attr(pv, attr):
 slot_order = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
 random.shuffle(slot_order)  # <— kern om lege plekken later willekeurig te verspreiden
 
+
+# --- NIEUW: Gelijkmatige verdeling van lange pauzes over de eerste drie pauzevlinderuren ---
 def plaats_student(student, harde_mode=False):
     """
     Plaats student bij een geschikte pauzevlinder in B..G op een uur waar student effectief werkt.
-    - Overschrijven alleen in harde_mode én alleen als de huidige inhoud géén lange werker is.
-    - Volgorde van slots is willekeurig (slot_order) zodat lege plekken random verdeeld blijven.
+    Lange pauzes worden zo gelijkmatig mogelijk over de eerste drie pauzevlinderuren verdeeld,
+    starten alleen op heel of half uur, en bij voorkeur niet in het laatste half uur.
     """
     naam = student["naam"]
-    werk_uren = get_student_work_hours(naam)  # echte uren waarop student in 'Planning' staat
-    # Pauze mag niet in eerste of laatste werkuur vallen
+    werk_uren = get_student_work_hours(naam)
     werk_uren_set = set(werk_uren)
     if len(werk_uren) > 2:
         verboden_uren = {werk_uren[0], werk_uren[-1]}
     else:
-        verboden_uren = set(werk_uren)  # als maar 1 of 2 uur: geen pauze mogelijk
+        verboden_uren = set(werk_uren)
 
-    # Sorteer alle pauzekolommen op volgorde
-    pauze_cols_sorted = sorted(pauze_cols)
-    # Zoek alle (uur, col) paren, filter verboden uren
+    # Bepaal de eerste drie pauzevlinderuren (in minuten)
+    if pauze_col_times:
+        eerste3 = sorted(pauze_col_times, key=lambda x: x[1])[:6]  # 3 uur = 6 blokken van 30 min
+        eerste3_minuten = [t for c, t in eerste3]
+        eerste3_cols = [c for c, t in eerste3]
+        laatste_halfuur = max(eerste3_minuten)  # bv. 14:30 = 870
+    else:
+        eerste3_minuten = []
+        eerste3_cols = []
+        laatste_halfuur = None
+
+    # Zoek alle mogelijke dubbele blokjes voor de lange pauze, alleen op heel of half uur
     uur_col_pairs = []
-    for col in pauze_cols_sorted:
+    for (col, minuten) in pauze_col_times:
         col_header = ws_pauze.cell(1, col).value
         col_uur = parse_header_uur(col_header)
         if col_uur is not None and col_uur in werk_uren_set and col_uur not in verboden_uren:
-            uur_col_pairs.append((col_uur, col))
+            uur_col_pairs.append((col_uur, col, minuten))
+
+    lange_pauze_opties = []
+    for i in range(len(uur_col_pairs)-1):
+        uur1, col1, min1 = uur_col_pairs[i]
+        uur2, col2, min2 = uur_col_pairs[i+1]
+        # Alleen als blok aansluitend is
+        if col2 == col1 + 1 and (min1 % 30 == 0):
+            # Alleen als beide blokken in de eerste drie pauzeuren vallen
+            if min1 in eerste3_minuten and min2 in eerste3_minuten:
+                # Bij voorkeur niet in het laatste half uur
+                in_laatste_halfuur = (min1 == laatste_halfuur - 30 or min2 == laatste_halfuur)
+                lange_pauze_opties.append((i, uur1, col1, uur2, col2, min1, in_laatste_halfuur))
+
+    # Sorteer opties: eerst niet in laatste half uur, dan zo gelijkmatig mogelijk verspreid
+    lange_pauze_opties.sort(key=lambda x: (x[6], abs(x[5] - sum(eerste3_minuten)/len(eerste3_minuten))))
 
     # Houd bij of deze student al een lange/korte pauze heeft gekregen
     if not hasattr(plaats_student, "pauze_registry"):
         plaats_student.pauze_registry = {}
     reg = plaats_student.pauze_registry.setdefault(naam, {"lange": False, "korte": False})
 
-    # Eerst: zoek alle mogelijke dubbele blokjes voor de lange pauze
-    lange_pauze_opties = []
-    for i in range(len(uur_col_pairs)-1):
-        uur1, col1 = uur_col_pairs[i]
-        uur2, col2 = uur_col_pairs[i+1]
-        if col2 == col1 + 1:
-            lange_pauze_opties.append((i, uur1, col1, uur2, col2))
-
     # Probeer alle opties voor de lange pauze (max 1x per student)
-    if not reg["lange"]:
+    if not reg["lange"] and lange_pauze_opties:
         for optie in lange_pauze_opties:
-            i, uur1, col1, uur2, col2 = optie
+            i, uur1, col1, uur2, col2, min1, in_laatste_halfuur = optie
             attr1 = vind_attractie_op_uur(naam, uur1)
             attr2 = vind_attractie_op_uur(naam, uur2)
             if not attr1 or not attr2:
@@ -1116,10 +1141,9 @@ def plaats_student(student, harde_mode=False):
                     # Nu: zoek een korte pauze, eerst 10 t/m 16 blokjes afstand, dan 9 t/m 1
                     if not reg["korte"]:
                         found = False
-                        # Eerst 10 t/m 16 blokjes afstand
                         for min_blokjes in range(10, 17):
                             for j in range(i+min_blokjes, len(uur_col_pairs)):
-                                uur_kort, col_kort = uur_col_pairs[j]
+                                uur_kort, col_kort, _ = uur_col_pairs[j]
                                 if not is_korte_pauze_toegestaan_col(col_kort):
                                     continue
                                 attr_kort = vind_attractie_op_uur(naam, uur_kort)
@@ -1154,11 +1178,10 @@ def plaats_student(student, harde_mode=False):
                                             return True
                             if found:
                                 break
-                        # Dan 9 t/m 1 blokjes afstand
                         if not found:
                             for min_blokjes in range(9, 0, -1):
                                 for j in range(i+min_blokjes, len(uur_col_pairs)):
-                                    uur_kort, col_kort = uur_col_pairs[j]
+                                    uur_kort, col_kort, _ = uur_col_pairs[j]
                                     if not is_korte_pauze_toegestaan_col(col_kort):
                                         continue
                                     attr_kort = vind_attractie_op_uur(naam, uur_kort)
@@ -1193,7 +1216,6 @@ def plaats_student(student, harde_mode=False):
                                                 return True
                                 if found:
                                     break
-                    # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
                 elif harde_mode:
                     occupant1 = str(cel1.value).strip() if cel1.value else ""
@@ -1215,7 +1237,7 @@ def plaats_student(student, harde_mode=False):
                         # Nu: zoek een korte pauze minstens 6 blokjes verderop
                         if not reg["korte"]:
                             for j in range(i+6, len(uur_col_pairs)):
-                                uur_kort, col_kort = uur_col_pairs[j]
+                                uur_kort, col_kort, _ = uur_col_pairs[j]
                                 attr_kort = vind_attractie_op_uur(naam, uur_kort)
                                 if not attr_kort:
                                     continue
@@ -1246,14 +1268,13 @@ def plaats_student(student, harde_mode=False):
                                             return True
                         return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
-    # Korte pauze alleen als nog niet toegekend
-    for uur in random.sample(werk_uren, len(werk_uren)):
+    for uur, col, _ in random.sample(uur_col_pairs, len(uur_col_pairs)):
         if uur in verboden_uren:
             continue
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             continue
-        for (pv, pv_row, col) in slot_order:
+        for (pv, pv_row, _) in slot_order:
             col_header = ws_pauze.cell(1, col).value
             col_uur = parse_header_uur(col_header)
             if col_uur != uur:
