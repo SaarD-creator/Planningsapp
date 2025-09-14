@@ -911,28 +911,24 @@ for pv, pv_row in pv_rows:
 # DEEL 4: Lange werkers (>6 uur) pauze inplannen – gegarandeerd
 # --- LANGE PAUZE TOEWIJZING: gespreid, eerste drie pauzevlinderuren, heel/half uur ---
 def wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols):
-    # Bepaal de eerste drie pauzevlinderuren (op basis van headers in ws_pauze)
+
+    # 1. Verzamel alle mogelijke dubbele blokken (col, col+1) in de eerste 3 pauzevlinderuren (6 kwartieren)
     pauzeuren = []
     for col in sorted(pauze_cols):
         header = ws_pauze.cell(1, col).value
         if header:
             tijd = str(header).strip()
             if tijd.endswith("u") or tijd.endswith("u00") or tijd.endswith("u30"):
-                pauzeuren.append((col, tijd))
-        if len(pauzeuren) >= 6:  # 6 blokken = 3x halfuur
+                pauzeuren.append(col)
+        if len(pauzeuren) >= 6:
             break
-    pauzeuren_cols = [col for col, _ in pauzeuren]
-    # Verdeel de lange werkers zo eerlijk mogelijk over de blokken
-    n = len(lange_werkers)
-    m = len(pauzeuren_cols) - 1  # aantal mogelijke dubbele blokken
-    if m <= 0:
-        return
-    # Maak alle mogelijke dubbele blokken (col, col+1)
-    blokken = [(pauzeuren_cols[i], pauzeuren_cols[i+1]) for i in range(m)]
-    # Sorteer werkers op naam voor determinisme
-    werkers_sorted = sorted(lange_werkers, key=lambda s: s["naam"])
-    # Verdeel zo gespreid mogelijk
-    for idx, s in enumerate(werkers_sorted):
+    blokken = []
+    for i in range(len(pauzeuren)-1):
+        blokken.append((pauzeuren[i], pauzeuren[i+1]))
+
+    # 2. Maak een lijst van alle (student, blok) combinaties die geldig zijn
+    opties = []
+    for s in lange_werkers:
         naam = s["naam"]
         werk_uren = get_student_work_hours(naam)
         werk_uren_set = set(werk_uren)
@@ -940,48 +936,77 @@ def wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols):
             verboden_uren = {werk_uren[0], werk_uren[-1]}
         else:
             verboden_uren = set(werk_uren)
-        # Kies blok gespreid
-        blok_idx = int(round(idx * (len(blokken)-1) / max(1, n-1))) if n > 1 else 0
-        col1, col2 = blokken[blok_idx]
-        header1 = ws_pauze.cell(1, col1).value
-        header2 = ws_pauze.cell(1, col2).value
-        uur1 = parse_header_uur(header1)
-        uur2 = parse_header_uur(header2)
-        if uur1 not in werk_uren_set or uur2 not in werk_uren_set:
-            continue
-        if uur1 in verboden_uren or uur2 in verboden_uren:
-            continue
-        attr1 = vind_attractie_op_uur(naam, uur1)
-        attr2 = vind_attractie_op_uur(naam, uur2)
-        if not attr1 or not attr2:
-            continue
-        # Zoek een pauzevlinder die deze attractie kan overnemen
-        geplaatst = False
-        for pv, pv_row in pv_rows:
-            if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+        for col1, col2 in blokken:
+            header1 = ws_pauze.cell(1, col1).value
+            header2 = ws_pauze.cell(1, col2).value
+            uur1 = parse_header_uur(header1)
+            uur2 = parse_header_uur(header2)
+            if uur1 not in werk_uren_set or uur2 not in werk_uren_set:
                 continue
-            cel1 = ws_pauze.cell(pv_row, col1)
-            cel2 = ws_pauze.cell(pv_row, col2)
-            boven_cel1 = ws_pauze.cell(pv_row-1, col1)
-            boven_cel2 = ws_pauze.cell(pv_row-1, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                boven_cel1.value = attr1
-                boven_cel1.alignment = center_align
-                boven_cel1.border = thin_border
-                boven_cel2.value = attr2
-                boven_cel2.alignment = center_align
-                boven_cel2.border = thin_border
-                cel1.value = naam
-                cel1.alignment = center_align
-                cel1.border = thin_border
-                cel2.value = naam
-                cel2.alignment = center_align
-                cel2.border = thin_border
-                cel1.fill = lichtgroen_fill
-                cel2.fill = lichtgroen_fill
-                geplaatst = True
-                break
-        # Als niet geplaatst: sla over, feedbacksheet meldt wie geen lange pauze kreeg
+            if uur1 in verboden_uren or uur2 in verboden_uren:
+                continue
+            attr1 = vind_attractie_op_uur(naam, uur1)
+            attr2 = vind_attractie_op_uur(naam, uur2)
+            if not attr1 or not attr2:
+                continue
+            opties.append({
+                "student": s,
+                "blok": (col1, col2),
+                "uren": (uur1, uur2),
+                "attrs": (attr1, attr2)
+            })
+
+    # 3. Verdeel de studenten zo eerlijk mogelijk over de blokken (round-robin)
+    #    - Per blok maximaal 1 student
+    #    - Per student maximaal 1 blok
+    blok_bezet = set()
+    student_bezet = set()
+    # Sorteer eerst blokken en studenten voor determinisme
+    blokken_sorted = sorted(set([optie["blok"] for optie in opties]))
+    studenten_sorted = sorted(lange_werkers, key=lambda s: s["naam"])
+    # Loop round-robin over blokken en wijs toe aan eerste student die kan
+    idx = 0
+    while len(student_bezet) < len(studenten_sorted):
+        blok = blokken_sorted[idx % len(blokken_sorted)]
+        # Vind een student die nog niet bezet is en dit blok kan
+        for optie in opties:
+            if optie["blok"] == blok and optie["student"]["naam"] not in student_bezet and blok not in blok_bezet:
+                naam = optie["student"]["naam"]
+                col1, col2 = blok
+                uur1, uur2 = optie["uren"]
+                attr1, attr2 = optie["attrs"]
+                # Zoek een pauzevlinder die deze attractie kan overnemen
+                geplaatst = False
+                for pv, pv_row in pv_rows:
+                    if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+                        continue
+                    cel1 = ws_pauze.cell(pv_row, col1)
+                    cel2 = ws_pauze.cell(pv_row, col2)
+                    boven_cel1 = ws_pauze.cell(pv_row-1, col1)
+                    boven_cel2 = ws_pauze.cell(pv_row-1, col2)
+                    if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                        boven_cel1.value = attr1
+                        boven_cel1.alignment = center_align
+                        boven_cel1.border = thin_border
+                        boven_cel2.value = attr2
+                        boven_cel2.alignment = center_align
+                        boven_cel2.border = thin_border
+                        cel1.value = naam
+                        cel1.alignment = center_align
+                        cel1.border = thin_border
+                        cel2.value = naam
+                        cel2.alignment = center_align
+                        cel2.border = thin_border
+                        cel1.fill = lichtgroen_fill
+                        cel2.fill = lichtgroen_fill
+                        geplaatst = True
+                        blok_bezet.add(blok)
+                        student_bezet.add(naam)
+                        break
+                break  # ga naar volgende blok/student
+        idx += 1
+        if idx > 1000:  # failsafe
+            break
 
 # --- Roep deze functie aan ná de definitie van lange_werkers ---
 
