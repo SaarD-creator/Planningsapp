@@ -1084,7 +1084,7 @@ def plaats_student(student, harde_mode=False):
             lange_pauze_opties.append((i, uur1, col1, uur2, col2))
 
     # Probeer alle opties voor de lange pauze (max 1x per student)
-    if not reg["lange"]:
+    if not reg["lange"] and not heeft_al_lange_pauze(naam):
         for optie in lange_pauze_opties:
             i, uur1, col1, uur2, col2 = optie
             attr1 = vind_attractie_op_uur(naam, uur1)
@@ -1098,7 +1098,7 @@ def plaats_student(student, harde_mode=False):
                 cel2 = ws_pauze.cell(pv_row, col2)
                 boven_cel1 = ws_pauze.cell(pv_row-1, col1)
                 boven_cel2 = ws_pauze.cell(pv_row-1, col2)
-                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
                     # Vul beide blokjes voor lange pauze
                     boven_cel1.value = attr1
                     boven_cel1.alignment = center_align
@@ -1198,7 +1198,7 @@ def plaats_student(student, harde_mode=False):
                 elif harde_mode:
                     occupant1 = str(cel1.value).strip() if cel1.value else ""
                     occupant2 = str(cel2.value).strip() if cel2.value else ""
-                    if (occupant1 not in lange_werkers_names) and (occupant2 not in lange_werkers_names):
+                    if (occupant1 not in lange_werkers_names) and (occupant2 not in lange_werkers_names) and not heeft_al_lange_pauze(naam):
                         boven_cel1.value = attr1
                         boven_cel1.alignment = center_align
                         boven_cel1.border = thin_border
