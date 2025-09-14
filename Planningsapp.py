@@ -983,8 +983,8 @@ def wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols):
                 break
         # Als niet geplaatst: sla over, feedbacksheet meldt wie geen lange pauze kreeg
 
-# --- Roep deze functie aan vóór de bestaande DEEL 4-logica ---
-wijs_lange_pauzes_gespreid(lange_werkers, pv_rows, pauze_cols)
+# --- Roep deze functie aan ná de definitie van lange_werkers ---
+
 # -----------------------------
 
 from openpyxl.styles import Alignment, Border, Side, PatternFill
