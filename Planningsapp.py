@@ -1327,6 +1327,8 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
     werk_uren_set = set(werk_uren)
     verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
     max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
+    # Verzamel alle mogelijke plekken per pauzevlinder
+    halve_uren = []  # lijst van (col1, col2, uur1, uur2, pv, pv_row)
     for pv, pv_row in pv_rows:
         for idx in range(max_start_idx+1):
             col1 = pauze_cols[idx]
@@ -1359,7 +1361,18 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
                 continue
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
                 halve_uren.append((col1, col2, uur1, uur2, pv, pv_row))
-    random.shuffle(halve_uren)
+    # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
+    from collections import Counter
+    pv_lange_count = Counter()
+    for pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols[:-1]):
+            cel = ws_pauze.cell(pv_row, col)
+            next_col = pauze_cols[idx+1]
+            cel_next = ws_pauze.cell(pv_row, next_col)
+            if cel.value and cel.value == cel_next.value:
+                pv_lange_count[pv["naam"]] += 1
+    # Sorteer halve_uren zodat de pauzevlinder met het minste lange pauzes eerst komt
+    halve_uren.sort(key=lambda tup: pv_lange_count[tup[4]["naam"]])
     geplaatst = False
     for col1, col2, uur1, uur2, pv, pv_row in halve_uren:
         cel1 = ws_pauze.cell(pv_row, col1)
@@ -1951,6 +1964,8 @@ for pv, pv_row in pv_rows:
             continue
         halve_uren = []  # lijst van (idx, col1, col2)
         max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
+        # Verzamel alle mogelijke plekken per pauzevlinder
+        halve_uren = []  # lijst van (idx, col1, col2)
         for idx in range(max_start_idx+1):
             col1 = pauze_cols[idx]
             col2 = pauze_cols[idx+1]
@@ -1966,9 +1981,18 @@ for pv, pv_row in pv_rows:
             cel2 = ws_pauze.cell(pv_row, col2)
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
                 halve_uren.append((idx, col1, col2))
-        # Shuffle de halve uren
-        random.shuffle(halve_uren)
-        # Probeer in geshuffelde volgorde een lange pauze te plaatsen
+        # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
+        from collections import Counter
+        pv_lange_count = Counter()
+        for pv2, pv_row2 in pv_rows:
+            for idx2, col in enumerate(pauze_cols[:-1]):
+                cel = ws_pauze.cell(pv_row2, col)
+                next_col = pauze_cols[idx2+1]
+                cel_next = ws_pauze.cell(pv_row2, next_col)
+                if cel.value and cel.value == cel_next.value:
+                    pv_lange_count[pv2["naam"]] += 1
+        # Sorteer halve_uren zodat de pauzevlinder met het minste lange pauzes eerst komt
+        halve_uren.sort(key=lambda tup: pv_lange_count[pv["naam"]])
         geplaatst = False
         for idx, col1, col2 in halve_uren:
             cel1 = ws_pauze.cell(pv_row, col1)
