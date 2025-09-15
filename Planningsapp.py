@@ -1144,34 +1144,34 @@ def plaats_student(student, harde_mode=False):
                                 if cel_kort.value not in [None, ""]:
                                     continue
                                 alle_korte_pauze_opties.append((abs(idx_p-lange_pauze_einde_idx), -idx_p, idx_p, uur_kort, col_kort, pv_row2, attr_kort))
-                        # Sorteer opties op afstand tot einde lange pauze: eerst 10, 11, ..., dan 9, 8, ...
-                        # Groepeer opties per afstand, shuffle per afstand
+                        # Implementeer afstandsstrategie: eerst 10, 11, 12, ..., dan 9, 8, ...
                         opties_per_afstand = {}
+                        max_afstand = 0
                         for opt in alle_korte_pauze_opties:
-                            afstand = abs(opt[2] - lange_pauze_einde_idx)
-                            opties_per_afstand.setdefault(afstand, []).append(opt)
-                        opties_geprioriteerd = []
-                        # Eerst 10, 11, 12, ...
-                        for afstand in range(10, max(opties_per_afstand.keys(), default=9)+1):
-                            if afstand in opties_per_afstand:
-                                random.shuffle(opties_per_afstand[afstand])
-                                opties_geprioriteerd.extend(sorted(opties_per_afstand[afstand]))
-                        # Dan 9, 8, ...
-                        for afstand in range(9, 0, -1):
-                            if afstand in opties_per_afstand:
-                                random.shuffle(opties_per_afstand[afstand])
-                                opties_geprioriteerd.extend(sorted(opties_per_afstand[afstand]))
-                        for _afstand, _neg_idx, idx_p, uur_kort, col_kort, pv_row2, attr_kort in opties_geprioriteerd:
-                            boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
-                            boven_cel_kort.value = attr_kort
-                            boven_cel_kort.alignment = center_align
-                            boven_cel_kort.border = thin_border
-                            cel_kort = ws_pauze.cell(pv_row2, col_kort)
-                            cel_kort.value = naam
-                            cel_kort.alignment = center_align
-                            cel_kort.border = thin_border
-                            reg["korte"] = True
-                            return True
+                            afstand = opt[2] - lange_pauze_einde_idx
+                            if afstand > 0:
+                                opties_per_afstand.setdefault(afstand, []).append(opt)
+                                if afstand > max_afstand:
+                                    max_afstand = afstand
+                        # Afstandsprioriteit: 10, 11, 12, ..., dan 9, 8, ...
+                        afstanden = list(range(10, max_afstand+1)) + list(range(9, 0, -1))
+                        for afstand in afstanden:
+                            opties = opties_per_afstand.get(afstand, [])
+                            if opties:
+                                random.shuffle(opties)
+                                # Sorteer op meest rechtse kolom (hoogste idx_p)
+                                opties.sort(key=lambda x: -x[2])
+                                for _afstand, _neg_idx, idx_p, uur_kort, col_kort, pv_row2, attr_kort in opties:
+                                    boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
+                                    boven_cel_kort.value = attr_kort
+                                    boven_cel_kort.alignment = center_align
+                                    boven_cel_kort.border = thin_border
+                                    cel_kort = ws_pauze.cell(pv_row2, col_kort)
+                                    cel_kort.value = naam
+                                    cel_kort.alignment = center_align
+                                    cel_kort.border = thin_border
+                                    reg["korte"] = True
+                                    return True
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
                 elif harde_mode:
