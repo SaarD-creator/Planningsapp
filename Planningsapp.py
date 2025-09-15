@@ -1143,12 +1143,14 @@ def plaats_student(student, harde_mode=False):
                                 cel_kort = ws_pauze.cell(pv_row2, col_kort)
                                 if cel_kort.value not in [None, ""]:
                                     continue
-                                alle_korte_pauze_opties.append((abs(idx_p-lange_pauze_einde_idx), -idx_p, idx_p, uur_kort, col_kort, pv_row2, attr_kort))
+                                # Bereken afstand in kwartieren/tijd, niet in kolomindex
+                                afstand = uur_kort - uur2  # uur2 is het tweede uur van de lange pauze
+                                alle_korte_pauze_opties.append((afstand, uur_kort, col_kort, pv_row2, attr_kort))
                         # Implementeer afstandsstrategie: eerst 10, 11, 12, ..., dan 9, 8, ...
                         opties_per_afstand = {}
                         max_afstand = 0
                         for opt in alle_korte_pauze_opties:
-                            afstand = opt[2] - lange_pauze_einde_idx
+                            afstand = opt[0]
                             if afstand > 0:
                                 opties_per_afstand.setdefault(afstand, []).append(opt)
                                 if afstand > max_afstand:
@@ -1158,9 +1160,9 @@ def plaats_student(student, harde_mode=False):
                         for afstand in afstanden:
                             opties = opties_per_afstand.get(afstand, [])
                             if opties:
-                                # Kies de meest rechtse optie (hoogste idx_p)
-                                beste_optie = max(opties, key=lambda x: x[2])
-                                _afstand, _neg_idx, idx_p, uur_kort, col_kort, pv_row2, attr_kort = beste_optie
+                                # Kies de meest rechtse optie qua tijd (hoogste uur_kort)
+                                beste_optie = max(opties, key=lambda x: x[1])
+                                _afstand, uur_kort, col_kort, pv_row2, attr_kort = beste_optie
                                 boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
                                 boven_cel_kort.value = attr_kort
                                 boven_cel_kort.alignment = center_align
