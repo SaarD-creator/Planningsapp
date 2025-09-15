@@ -7,91 +7,140 @@
 
 import streamlit as st
 import random
-from collections import defaultdict
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
-from io import BytesIO
-import datetime
 
-# -----------------------------
-# Datum
-# -----------------------------
-vandaag = datetime.date.today().strftime("%d-%m-%Y")
+# Optimalisatielus: 5 planningen genereren en de beste kiezen
+import copy
+num_runs = 5
+best_score = None
+best_state = None
+for _run in range(num_runs):
+    ws_pauze_tmp = wb_out.copy_worksheet(ws_pauze)
+    ws_pauze_tmp.title = f"Pauze_tmp_{_run}"
+    for pv, pv_row in pv_rows:
+        for col in pauze_cols:
+            ws_pauze_tmp.cell(pv_row, col).value = None
 
-# -----------------------------
-# Excelbestand uploaden
-# -----------------------------
-uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
+    # Reset counters voor deze run
+    from collections import Counter
+    plaats_student.pv_lange_pauze_count = Counter()
+    lange_pauze_ontvangers = set()
+    niet_geplaatst = []
 
-if not uploaded_file:
-    st.warning("Upload eerst het Excelbestand met de gegevens om verder te gaan.")
-    st.stop()
+    for s in lange_werkers:
+        naam = s["naam"]
+        werk_uren = get_student_work_hours(naam)
+        if len(werk_uren) <= 6:
+            if not plaats_student(s, harde_mode=False):
+                niet_geplaatst.append(s)
+            continue
+        halve_uren = []
+        werk_uren_set = set(werk_uren)
+        verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
+        max_start_idx = min(10, len(pauze_cols)-2)
+        for pv, pv_row in pv_rows:
+            for idx in range(max_start_idx+1):
+                col1 = pauze_cols[idx]
+                col2 = pauze_cols[idx+1]
+                col1_header = ws_pauze_tmp.cell(1, col1).value
+                col2_header = ws_pauze_tmp.cell(1, col2).value
+                try:
+                    min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
+                except:
+                    min1 = 0
+                if min1 not in (0, 30):
+                    continue
+                uur1 = parse_header_uur(col1_header)
+                uur2 = parse_header_uur(col2_header)
+                if uur1 is None or uur2 is None:
+                    continue
+                if uur1 not in werk_uren_set or uur2 not in werk_uren_set:
+                    continue
+                if uur1 in verboden_uren or uur2 in verboden_uren:
+                    continue
+                cel1 = ws_pauze_tmp.cell(pv_row, col1)
+                cel2 = ws_pauze_tmp.cell(pv_row, col2)
+                attr1 = vind_attractie_op_uur(naam, uur1)
+                attr2 = vind_attractie_op_uur(naam, uur2)
+                if not attr1 or not attr2:
+                    continue
+                if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
+                    continue
+                if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                    halve_uren.append((col1, col2, uur1, uur2, pv, pv_row))
+        random.shuffle(halve_uren)
+        pv_lange_pauze_count = plaats_student.pv_lange_pauze_count
+        for pv, _ in pv_rows:
+            if pv["naam"] not in pv_lange_pauze_count:
+                pv_lange_pauze_count[pv["naam"]] = 0
+        geplaatst = False
+        halve_uren_sorted = sorted(halve_uren, key=lambda x: pv_lange_pauze_count[x[4]["naam"]])
+        for col1, col2, uur1, uur2, pv, pv_row in halve_uren_sorted:
+            cel1 = ws_pauze_tmp.cell(pv_row, col1)
+            cel2 = ws_pauze_tmp.cell(pv_row, col2)
+            boven_cel1 = ws_pauze_tmp.cell(pv_row-1, col1)
+            boven_cel2 = ws_pauze_tmp.cell(pv_row-1, col2)
+            attr1 = vind_attractie_op_uur(naam, uur1)
+            attr2 = vind_attractie_op_uur(naam, uur2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                boven_cel1.value = attr1
+                boven_cel1.alignment = center_align
+                boven_cel1.border = thin_border
+                boven_cel2.value = attr2
+                boven_cel2.alignment = center_align
+                boven_cel2.border = thin_border
+                cel1.value = naam
+                cel1.alignment = center_align
+                cel1.border = thin_border
+                cel1.fill = lichtgroen_fill
+                cel2.value = naam
+                cel2.alignment = center_align
+                cel2.border = thin_border
+                cel2.fill = lichtgroen_fill
+                lange_pauze_ontvangers.add(naam)
+                geplaatst = True
+                pv_lange_pauze_count[pv["naam"]] += 1
+                break
+        if not geplaatst:
+            if not plaats_student(s, harde_mode=False):
+                niet_geplaatst.append(s)
 
-wb = load_workbook(BytesIO(uploaded_file.read()))
-ws = wb["Blad1"]
+    # Evalueer deze planning
+    korte_pauze_ontvangers = set()
+    for pv, pv_row in pv_rows:
+        for col in pauze_cols:
+            cel = ws_pauze_tmp.cell(pv_row, col)
+            if cel.value and str(cel.value).strip() != "":
+                idx = pauze_cols.index(col)
+                is_lange = False
+                if idx+1 < len(pauze_cols):
+                    next_col = pauze_cols[idx+1]
+                    cel_next = ws_pauze_tmp.cell(pv_row, next_col)
+                    if cel_next.value == cel.value:
+                        is_lange = True
+                if idx > 0:
+                    prev_col = pauze_cols[idx-1]
+                    prev_cel = ws_pauze_tmp.cell(pv_row, prev_col)
+                    if prev_cel.value == cel.value:
+                        is_lange = True
+                if not is_lange:
+                    korte_pauze_ontvangers.add(str(cel.value).strip())
+    alle_studenten = [s["naam"] for s in studenten if student_totalen.get(s["naam"], 0) > 0]
+    iedereen_pauze = all(naam in korte_pauze_ontvangers for naam in alle_studenten)
+    diff = 0
+    if pv_lange_pauze_count:
+        diff = max(pv_lange_pauze_count.values()) - min(pv_lange_pauze_count.values())
+    else:
+        diff = 999
+    score = (iedereen_pauze, -diff)
+    if (best_score is None) or (score > best_score):
+        best_score = score
+        best_state = copy.deepcopy(ws_pauze_tmp)
 
-# -----------------------------
-
-# Hulpfuncties
-# -----------------------------
-def max_consecutive_hours(urenlijst):
-    if not urenlijst:
-        return 0
-    urenlijst = sorted(set(urenlijst))
-    maxr = huidig = 1
-    for i in range(1, len(urenlijst)):
-        huidig = huidig + 1 if urenlijst[i] == urenlijst[i-1] + 1 else 1
-        maxr = max(maxr, huidig)
-    return maxr
-
-def partition_run_lengths(L):
-    """Flexibele blokken: prioritair 3 uur, dan 2,4,1 om shift te vullen."""
-    blocks = [3,2,4,1]
-    dp = [(10**9, [])]*(L+1)
-    dp[0] = (0, [])
-    for i in range(1, L+1):
-        best = (10**9, [])
-        for b in blocks:
-            if i-b < 0:
-                continue
-            prev_ones, prev_blocks = dp[i-b]
-            new_blocks = prev_blocks + [b]
-            ones = prev_ones + (1 if b==1 else 0)
-            if ones < best[0]:
-                best = (ones, new_blocks)
-        dp[i] = best
-    return dp[L][1]
-
-def contiguous_runs(sorted_hours):
-    runs=[]
-    if not sorted_hours:
-        return runs
-    run=[sorted_hours[0]]
-    for h in sorted_hours[1:]:
-        if h==run[-1]+1:
-            run.append(h)
-        else:
-            runs.append(run)
-            run=[h]
-    runs.append(run)
-    return runs
-
-# Helpers die in meerdere delen gebruikt worden
-def normalize_attr(name):
-    """Normaliseer attractienaam zodat 'X 2' telt als 'X'; trim & lower-case voor vergelijking."""
-    if not name:
-        return ""
-    s = str(name).strip()
-    parts = s.rsplit(" ", 1)
-    if len(parts) == 2 and parts[1].isdigit():
-        s = parts[0]
-    return s.strip().lower()
-
-def parse_header_uur(header):
-    """Map headertekst (bv. '14u', '14:00', '14:30') naar het hele uur (14)."""
-    if not header:
-        return None
+# Na alle runs: kopieer best_state naar ws_pauze
+if best_state is not None:
+    for pv, pv_row in pv_rows:
+        for col in pauze_cols:
+            ws_pauze.cell(pv_row, col).value = best_state.cell(pv_row, col).value
     s = str(header).strip()
     try:
         if "u" in s:
