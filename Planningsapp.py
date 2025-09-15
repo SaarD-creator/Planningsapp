@@ -1129,17 +1129,18 @@ def plaats_student(student, harde_mode=False):
                             if cel_kort.value not in [None, ""]:
                                 continue
                             korte_pauze_opties.append((j, uur_kort, col_kort))
-                        # Sorteer opties op afstand tot lange pauze volgens strategie
-                        def afstandscore(j):
-                            afstand = abs(j - (i+1))
-                            na_lange_pauze = j >= (i+1)
-                            # Sorteer eerst op afstand (10, 11, ...), dan op of het NA de lange pauze ligt (True eerst)
+                        # Eerst alle opties NA de lange pauze (afstand 10, 11, ...), dan pas ervoor (-10, -11, ...)
+                        opties_na = []
+                        opties_voor = []
+                        for j, uur_kort, col_kort in korte_pauze_opties:
+                            afstand = j - (i+1)
                             if afstand >= 10:
-                                return (afstand, not na_lange_pauze)  # True < False, dus na_lange_pauze eerst
-                            else:
-                                return (100 - afstand, not na_lange_pauze)
-                        korte_pauze_opties_sorted = sorted(korte_pauze_opties, key=lambda x: afstandscore(x[0]))
-                        for j, uur_kort, col_kort in korte_pauze_opties_sorted:
+                                opties_na.append((afstand, j, uur_kort, col_kort))
+                            elif afstand <= -10:
+                                opties_voor.append((abs(afstand), j, uur_kort, col_kort))
+                        opties_na.sort()  # eerst afstand 10, 11, ...
+                        opties_voor.sort()  # dan afstand -10, -11, ...
+                        for _afstand, j, uur_kort, col_kort in opties_na + opties_voor:
                             boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
                             boven_cel_kort.value = vind_attractie_op_uur(naam, uur_kort)
                             boven_cel_kort.alignment = center_align
