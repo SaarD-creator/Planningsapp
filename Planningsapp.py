@@ -2,7 +2,6 @@
 
 
 # tussenstapje
-kak
 # niet random, geen extra's, kleurtjes!
 
 
@@ -1132,11 +1131,13 @@ def plaats_student(student, harde_mode=False):
                             korte_pauze_opties.append((j, uur_kort, col_kort))
                         # Sorteer opties op afstand tot lange pauze volgens strategie
                         def afstandscore(j):
-                            afstand = abs(j - (i+1))  # afstand tot einde lange pauze
+                            afstand = abs(j - (i+1))
+                            na_lange_pauze = j >= (i+1)
+                            # Sorteer eerst op afstand (10, 11, ...), dan op of het NA de lange pauze ligt (True eerst)
                             if afstand >= 10:
-                                return afstand  # eerst 10, 11, 12, ...
+                                return (afstand, not na_lange_pauze)  # True < False, dus na_lange_pauze eerst
                             else:
-                                return 100 - afstand  # dan 9, 8, ...
+                                return (100 - afstand, not na_lange_pauze)
                         korte_pauze_opties_sorted = sorted(korte_pauze_opties, key=lambda x: afstandscore(x[0]))
                         for j, uur_kort, col_kort in korte_pauze_opties_sorted:
                             boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
