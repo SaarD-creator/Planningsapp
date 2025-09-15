@@ -1,6 +1,7 @@
 #tussenstap (15/09) enkel nog te kort tijd tussen pauzes pauzevlinders 
 
 
+
 # tussenstapje
 # niet random, geen extra's, kleurtjes!
 
@@ -1144,7 +1145,6 @@ def plaats_student(student, harde_mode=False):
                                     continue
                                 alle_korte_pauze_opties.append((abs(idx_p-lange_pauze_einde_idx), -idx_p, idx_p, uur_kort, col_kort, pv_row2, attr_kort))
                         # Sorteer opties op afstand tot einde lange pauze: eerst 10, 11, ..., dan 9, 8, ...
-                        import random
                         # Groepeer opties per afstand, shuffle per afstand
                         opties_per_afstand = {}
                         for opt in alle_korte_pauze_opties:
