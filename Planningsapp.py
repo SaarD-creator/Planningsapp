@@ -1,4 +1,4 @@
-#keigoed (13/09) maar nog geen random verdeling
+#tussenstap (14/09) 
 
 
 # tussenstapje
@@ -50,85 +50,83 @@ def partition_run_lengths(L):
     blocks = [3,2,4,1]
     dp = [(10**9, [])]*(L+1)
     dp[0] = (0, [])
-
-    # Plaats lange pauzes voor pauzevlinders vóór de andere lange werkers
-    for pv, pv_row in pv_rows:
-        werkuren_pv = get_student_work_hours(pv["naam"])
-        try:
-            werkuren_pv = float(werkuren_pv)
-        except Exception:
-            werkuren_pv = 0
-        if werkuren_pv <= 6:
-            continue
-        # Verzamel alleen plekken in de eigen rij van deze pauzevlinder
-        alle_halve_uren = []  # lijst van (pv, pv_row, idx, col1, col2)
-        for idx in range(max_start_idx+1):
-            col1 = pauze_cols[idx]
-            col2 = pauze_cols[idx+1]
-            col1_header = ws_pauze.cell(1, col1).value
-            # Alleen starten op heel of half uur
-            try:
-                min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
-            except:
-                min1 = 0
-            if min1 not in (0, 30):
+    for i in range(1, L+1):
+        best = (10**9, [])
+        for b in blocks:
+            if i-b < 0:
                 continue
-            cel1 = ws_pauze.cell(pv_row, col1)
-            cel2 = ws_pauze.cell(pv_row, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                alle_halve_uren.append((pv, pv_row, idx, col1, col2))
-        # Shuffle voor spreiding
-        random.shuffle(alle_halve_uren)
-        # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
-        from collections import Counter
-        pv_lange_count = Counter()
-        for pv2, pv_row2 in pv_rows:
-            for idx2, col in enumerate(pauze_cols[:-1]):
-                cel = ws_pauze.cell(pv_row2, col)
-                next_col = pauze_cols[idx2+1]
-                cel_next = ws_pauze.cell(pv_row2, next_col)
-                if cel.value and cel.value == cel_next.value:
-                    pv_lange_count[pv2["naam"]] += 1
-        # Sorteer bij het plaatsen op aantal lange pauzes per pauzevlinder
-        geplaatst = False
-        for pv2, pv_row2, idx, col1, col2 in sorted(alle_halve_uren, key=lambda tup: pv_lange_count[tup[0]["naam"]]):
-            cel1 = ws_pauze.cell(pv_row2, col1)
-            cel2 = ws_pauze.cell(pv_row2, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(pv["naam"]):
-                cel1.value = pv["naam"]
-                cel2.value = pv["naam"]
-                cel1.alignment = center_align
-                cel2.alignment = center_align
-                cel1.border = thin_border
-                cel2.border = thin_border
-                cel1.fill = lichtgroen_fill
-                cel2.fill = lichtgroen_fill
-                geplaatst = True
-                break
-        # Markeer pauzevlinders die recht hadden op een lange pauze maar die niet gekregen hebben
-        if not geplaatst:
-            if 'pauzevlinders_zonder_lange_pauze' not in locals():
-                pauzevlinders_zonder_lange_pauze = []
-            pauzevlinders_zonder_lange_pauze.append(pv["naam"])
+            prev_ones, prev_blocks = dp[i-b]
+            new_blocks = prev_blocks + [b]
+            ones = prev_ones + (1 if b==1 else 0)
+            if ones < best[0]:
+                best = (ones, new_blocks)
+        dp[i] = best
+    return dp[L][1]
 
+def contiguous_runs(sorted_hours):
+    runs=[]
+    if not sorted_hours:
+        return runs
+    run=[sorted_hours[0]]
+    for h in sorted_hours[1:]:
+        if h==run[-1]+1:
+            run.append(h)
+        else:
+            runs.append(run)
+            run=[h]
+    runs.append(run)
+    return runs
+
+# Helpers die in meerdere delen gebruikt worden
+def normalize_attr(name):
+    """Normaliseer attractienaam zodat 'X 2' telt als 'X'; trim & lower-case voor vergelijking."""
+    if not name:
+        return ""
+    s = str(name).strip()
+    parts = s.rsplit(" ", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        s = parts[0]
+    return s.strip().lower()
+
+def parse_header_uur(header):
+    """Map headertekst (bv. '14u', '14:00', '14:30') naar het hele uur (14)."""
+    if not header:
+        return None
+    s = str(header).strip()
+    try:
+        if "u" in s:
+            return int(s.split("u")[0])
+        if ":" in s:
+            uur, _min = s.split(":")
+            return int(uur)
+        return int(s)
+    except:
+        return None
+
+# -----------------------------
+# Studenten inlezen
+# -----------------------------
+studenten=[]
+for rij in range(2,500):
     naam = ws.cell(rij,12).value
-    if naam:
-        uren_beschikbaar=[10+(kol-3) for kol in range(3,12) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
-        attracties=[ws.cell(1,kol).value for kol in range(14,32) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
-        try:
-            aantal_attracties=int(ws[f'AG{rij}'].value) if ws[f'AG{rij}'].value else len(attracties)
-        except:
-            aantal_attracties=len(attracties)
-        studenten.append({
-            "naam": naam,
-            "uren_beschikbaar": sorted(uren_beschikbaar),
-            "attracties":[a for a in attracties if a],
-            "aantal_attracties":aantal_attracties,
-            "is_pauzevlinder":False,
-            "pv_number":None,
-            "assigned_attracties":set(),
-            "assigned_hours":[]
-        })
+    if not naam:
+        continue
+    uren_beschikbaar=[10+(kol-3) for kol in range(3,12) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
+    attracties=[ws.cell(1,kol).value for kol in range(14,32) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
+    try:
+        aantal_attracties=int(ws[f'AG{rij}'].value) if ws[f'AG{rij}'].value else len(attracties)
+    except:
+        aantal_attracties=len(attracties)
+    studenten.append({
+        "naam": naam,
+        "uren_beschikbaar": sorted(uren_beschikbaar),
+        "attracties":[a for a in attracties if a],
+        "aantal_attracties":aantal_attracties,
+        "is_pauzevlinder":False,
+        "pv_number":None,
+        "assigned_attracties":set(),
+        "assigned_hours":[]
+    })
 
 # -----------------------------
 # Openingsuren
@@ -1009,65 +1007,64 @@ lange_werkers = [s for s in studenten
 ]
 lange_werkers_names = {s["naam"] for s in lange_werkers}
 
-
-for pv, pv_row in pv_rows:
-    werkuren_pv = get_student_work_hours(pv["naam"])
-    try:
-        werkuren_pv = float(werkuren_pv)
-    except Exception:
-        werkuren_pv = 0
-
-    if werkuren_pv > 6:
-        # Verzamel alleen plekken in de eigen rij van deze pauzevlinder
-        alle_halve_uren = []  # lijst van (pv, pv_row, idx, col1, col2)
-        for idx in range(max_start_idx+1):
-            col1 = pauze_cols[idx]
-            col2 = pauze_cols[idx+1]
-            col1_header = ws_pauze.cell(1, col1).value
-            # Alleen starten op heel of half uur
-            try:
-                min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
-            except:
-                min1 = 0
-            if min1 not in (0, 30):
-                continue
-            cel1 = ws_pauze.cell(pv_row, col1)
-            cel2 = ws_pauze.cell(pv_row, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                alle_halve_uren.append((pv, pv_row, idx, col1, col2))
-        # Shuffle voor spreiding
-        random.shuffle(alle_halve_uren)
-        # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
-        from collections import Counter
-        pv_lange_count = Counter()
-        for pv2, pv_row2 in pv_rows:
-            for idx2, col in enumerate(pauze_cols[:-1]):
-                cel = ws_pauze.cell(pv_row2, col)
-                next_col = pauze_cols[idx2+1]
-                cel_next = ws_pauze.cell(pv_row2, next_col)
-                if cel.value and cel.value == cel_next.value:
-                    pv_lange_count[pv2["naam"]] += 1
-        # Sorteer bij het plaatsen op aantal lange pauzes per pauzevlinder
-        geplaatst = False
-        for pv2, pv_row2, idx, col1, col2 in sorted(alle_halve_uren, key=lambda tup: pv_lange_count[tup[0]["naam"]]):
-            cel1 = ws_pauze.cell(pv_row2, col1)
-            cel2 = ws_pauze.cell(pv_row2, col2)
-            if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(pv["naam"]):
-                cel1.value = pv["naam"]
-                cel2.value = pv["naam"]
-                cel1.alignment = center_align
-                cel2.alignment = center_align
-                cel1.border = thin_border
-                cel2.border = thin_border
-                cel1.fill = lichtgroen_fill
-                cel2.fill = lichtgroen_fill
-                geplaatst = True
+def get_student_work_hours(naam):
+    """Welke uren werkt deze student echt (zoals te zien in werkblad 'Planning')?"""
+    uren = set()
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur is None:
+            continue
+        # check of student in deze kolom ergens staat
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                uren.add(uur)
                 break
-        # Markeer pauzevlinders die recht hadden op een lange pauze maar die niet gekregen hebben
-        if not geplaatst:
-            if 'pauzevlinders_zonder_lange_pauze' not in locals():
-                pauzevlinders_zonder_lange_pauze = []
-            pauzevlinders_zonder_lange_pauze.append(pv["naam"])
+    return sorted(uren)
+
+def vind_attractie_op_uur(naam, uur):
+    """Geef attractienaam (exact zoals in Planning-kolom A) waar student staat op dit uur; None als niet gevonden."""
+    for col in range(2, ws_planning.max_column + 1):
+        header = ws_planning.cell(1, col).value
+        col_uur = parse_header_uur(header)
+        if col_uur != uur:
+            continue
+        for row in range(2, ws_planning.max_row + 1):
+            if ws_planning.cell(row, col).value == naam:
+                return ws_planning.cell(row, 1).value
+    return None
+
+def pv_kan_attr(pv, attr):
+    """Check of pv attr kan (met normalisatie, zodat 'X 2' telt als 'X')."""
+    base = normalize_attr(attr)
+    if base == "extra":
+        return True
+    return base in pv_cap_set.get(pv["naam"], set())
+
+# Willekeurige volgorde van pauzeplekken (pv-rij x kolom) om lege cellen random te spreiden
+slot_order = [(pv, pv_row, col) for (pv, pv_row) in pv_rows for col in pauze_cols]
+random.shuffle(slot_order)  # <— kern om lege plekken later willekeurig te verspreiden
+
+def plaats_student(student, harde_mode=False):
+    """
+    Plaats student bij een geschikte pauzevlinder in B..G op een uur waar student effectief werkt.
+    - Overschrijven alleen in harde_mode én alleen als de huidige inhoud géén lange werker is.
+    - Volgorde van slots is willekeurig (slot_order) zodat lege plekken random verdeeld blijven.
+    """
+    naam = student["naam"]
+    werk_uren = get_student_work_hours(naam)  # echte uren waarop student in 'Planning' staat
+    # Pauze mag niet in eerste of laatste werkuur vallen
+    werk_uren_set = set(werk_uren)
+    if len(werk_uren) > 2:
+        verboden_uren = {werk_uren[0], werk_uren[-1]}
+    else:
+        verboden_uren = set(werk_uren)  # als maar 1 of 2 uur: geen pauze mogelijk
+
+    # Sorteer alle pauzekolommen op volgorde
+    pauze_cols_sorted = sorted(pauze_cols)
+    # Zoek alle (uur, col) paren, filter verboden uren
+    uur_col_pairs = []
+    for col in pauze_cols_sorted:
         col_header = ws_pauze.cell(1, col).value
         col_uur = parse_header_uur(col_header)
         if col_uur is not None and col_uur in werk_uren_set and col_uur not in verboden_uren:
@@ -1330,8 +1327,6 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
     werk_uren_set = set(werk_uren)
     verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
     max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
-    # Zelfde aanpak als bij pauzevlinders, maar nu voor lange werkers die geen pauzevlinder zijn
-    alle_halve_uren = []  # lijst van (pv, pv_row, col1, col2, uur1, uur2)
     for pv, pv_row in pv_rows:
         for idx in range(max_start_idx+1):
             col1 = pauze_cols[idx]
@@ -1363,22 +1358,10 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
             if not pv_kan_attr(pv, attr1) and not is_student_extra(naam):
                 continue
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
-                alle_halve_uren.append((pv, pv_row, col1, col2, uur1, uur2))
-    # Shuffle voor spreiding
-    random.shuffle(alle_halve_uren)
-    # Tel per lange werker het aantal lange pauzes (dubbele blokken)
-    from collections import Counter
-    lange_count = Counter()
-    for pv, pv_row in pv_rows:
-        for idx, col in enumerate(pauze_cols[:-1]):
-            cel = ws_pauze.cell(pv_row, col)
-            next_col = pauze_cols[idx+1]
-            cel_next = ws_pauze.cell(pv_row, next_col)
-            if cel.value and cel.value == cel_next.value:
-                lange_count[pv["naam"]] += 1
-    # Sorteer bij het plaatsen op aantal lange pauzes per werker
+                halve_uren.append((col1, col2, uur1, uur2, pv, pv_row))
+    random.shuffle(halve_uren)
     geplaatst = False
-    for pv, pv_row, col1, col2, uur1, uur2 in sorted(alle_halve_uren, key=lambda tup: lange_count[tup[0]["naam"]]):
+    for col1, col2, uur1, uur2, pv, pv_row in halve_uren:
         cel1 = ws_pauze.cell(pv_row, col1)
         cel2 = ws_pauze.cell(pv_row, col2)
         boven_cel1 = ws_pauze.cell(pv_row-1, col1)
@@ -1968,58 +1951,39 @@ for pv, pv_row in pv_rows:
             continue
         halve_uren = []  # lijst van (idx, col1, col2)
         max_start_idx = min(10, len(pauze_cols)-2)  # idx 0 t/m 10 zijn halve uren binnen eerste 11 kwartieren
-    # Alleen pauzevlinders die langer dan zes uur werken krijgen een lange pauze
-    werkuren_pv = get_student_work_hours(pv["naam"])
-    try:
-        if werkuren_pv is None or float(werkuren_pv) <= 6:
-            continue
-    except Exception:
-        continue
-    # Verzamel alleen plekken in de eigen rij van deze pauzevlinder
-    alle_halve_uren = []  # lijst van (pv, pv_row, idx, col1, col2)
-    for idx in range(max_start_idx+1):
-        col1 = pauze_cols[idx]
-        col2 = pauze_cols[idx+1]
-        col1_header = ws_pauze.cell(1, col1).value
-        # Alleen starten op heel of half uur
-        try:
-            min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
-        except:
-            min1 = 0
-        if min1 not in (0, 30):
-            continue
-        cel1 = ws_pauze.cell(pv_row, col1)
-        cel2 = ws_pauze.cell(pv_row, col2)
-        if cel1.value in [None, ""] and cel2.value in [None, ""]:
-            alle_halve_uren.append((pv, pv_row, idx, col1, col2))
-    # Shuffle voor spreiding
-    random.shuffle(alle_halve_uren)
-    # Tel per pauzevlinder het aantal lange pauzes (dubbele blokken)
-    from collections import Counter
-    pv_lange_count = Counter()
-    for pv2, pv_row2 in pv_rows:
-        for idx2, col in enumerate(pauze_cols[:-1]):
-            cel = ws_pauze.cell(pv_row2, col)
-            next_col = pauze_cols[idx2+1]
-            cel_next = ws_pauze.cell(pv_row2, next_col)
-            if cel.value and cel.value == cel_next.value:
-                pv_lange_count[pv2["naam"]] += 1
-    # Sorteer bij het plaatsen op aantal lange pauzes per pauzevlinder
-    geplaatst = False
-    for pv2, pv_row2, idx, col1, col2 in sorted(alle_halve_uren, key=lambda tup: pv_lange_count[tup[0]["naam"]]):
-        cel1 = ws_pauze.cell(pv_row2, col1)
-        cel2 = ws_pauze.cell(pv_row2, col2)
-        if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
-            cel1.value = naam
-            cel2.value = naam
-            cel1.alignment = center_align
-            cel2.alignment = center_align
-            cel1.border = thin_border
-            cel2.border = thin_border
-            cel1.fill = lichtgroen_fill
-            cel2.fill = lichtgroen_fill
-            geplaatst = True
-            break
+        for idx in range(max_start_idx+1):
+            col1 = pauze_cols[idx]
+            col2 = pauze_cols[idx+1]
+            col1_header = ws_pauze.cell(1, col1).value
+            # Alleen starten op heel of half uur
+            try:
+                min1 = int(str(col1_header).split('u')[1]) if 'u' in str(col1_header) and len(str(col1_header).split('u')) > 1 else 0
+            except:
+                min1 = 0
+            if min1 not in (0, 30):
+                continue
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""]:
+                halve_uren.append((idx, col1, col2))
+        # Shuffle de halve uren
+        random.shuffle(halve_uren)
+        # Probeer in geshuffelde volgorde een lange pauze te plaatsen
+        geplaatst = False
+        for idx, col1, col2 in halve_uren:
+            cel1 = ws_pauze.cell(pv_row, col1)
+            cel2 = ws_pauze.cell(pv_row, col2)
+            if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
+                cel1.value = naam
+                cel2.value = naam
+                cel1.alignment = center_align
+                cel2.alignment = center_align
+                cel1.border = thin_border
+                cel2.border = thin_border
+                cel1.fill = lichtgroen_fill
+                cel2.fill = lichtgroen_fill
+                geplaatst = True
+                break
         # Indien geen plek gevonden, doe niets (komt zelden voor)
 
 
@@ -2053,18 +2017,6 @@ for s in lange_werkers:
         lange_werkers_zonder_lange_pauze.append(naam)
 
 ws_feedback.cell(row_fb, 1, "Lange werkers (>6u) zonder lange pauze:")
-row_fb += 1
-# Pauzevlinders zonder lange pauze feedback
-if 'pauzevlinders_zonder_lange_pauze' in locals() and pauzevlinders_zonder_lange_pauze:
-    ws_feedback.cell(row_fb, 1, "Pauzevlinders (>6u) zonder lange pauze:")
-    row_fb += 1
-    for naam in pauzevlinders_zonder_lange_pauze:
-        ws_feedback.cell(row_fb, 1, naam)
-        row_fb += 1
-else:
-    ws_feedback.cell(row_fb, 1, "✓")
-    ws_feedback.cell(row_fb, 2, "Alle pauzevlinders met >6u hebben een lange pauze gekregen.")
-    row_fb += 1
 row_fb += 1
 if lange_werkers_zonder_lange_pauze:
     for naam in lange_werkers_zonder_lange_pauze:
