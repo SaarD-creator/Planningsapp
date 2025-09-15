@@ -1434,14 +1434,17 @@ for pv, pv_row in pv_rows:
         if lengte >= 2:
             lange_blok_einde = start + lengte - 1
             break
-    # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze, NIET in de eerste 12 kwartieren (tenzij <=6u open)
     def is_toegestaan_pv_col(col):
         if len(open_uren) <= 6:
             return True
         return col not in get_verboden_korte_pauze_kolommen()
     if lange_blok_einde is not None:
-        min_kort_idx = lange_blok_einde + 10
-        for idx in range(min_kort_idx, len(pauze_cols)):
+        # Zoek een korte pauze met afstandsstrategie: eerst 10, dan 11, ... dan 9, 8, ...
+        found = False
+        for afstand in list(range(10, len(pauze_cols)-lange_blok_einde)) + list(range(9, 0, -1)):
+            idx = lange_blok_einde + afstand
+            if idx >= len(pauze_cols):
+                continue
             col = pauze_cols[idx]
             if not is_toegestaan_pv_col(col):
                 continue
@@ -1451,6 +1454,7 @@ for pv, pv_row in pv_rows:
                 cel.fill = lichtpaars_fill
                 cel.alignment = center_align
                 cel.border = thin_border
+                found = True
                 break
     else:
         # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
