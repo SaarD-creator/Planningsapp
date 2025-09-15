@@ -1360,24 +1360,18 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
             if cel1.value in [None, ""] and cel2.value in [None, ""]:
                 halve_uren.append((col1, col2, uur1, uur2, pv, pv_row))
     random.shuffle(halve_uren)
-    # Fairness: count long breaks per pauzevlinder
+    # Fairness: keep a live counter of long breaks per pauzevlinder
     from collections import Counter
-    pv_lange_pauze_count = Counter()
+    if not hasattr(plaats_student, "pv_lange_pauze_count"):
+        plaats_student.pv_lange_pauze_count = Counter()
+    pv_lange_pauze_count = plaats_student.pv_lange_pauze_count
     for pv, _ in pv_rows:
-        pv_lange_pauze_count[pv["naam"]] = 0
-    for idx, col in enumerate(pauze_cols):
-        for pv, pv_row in pv_rows:
-            cel = ws_pauze.cell(pv_row, col)
-            if cel.value and str(cel.value).strip() == naam:
-                # Check if this is a long break (double block)
-                if idx+1 < len(pauze_cols):
-                    next_col = pauze_cols[idx+1]
-                    cel_next = ws_pauze.cell(pv_row, next_col)
-                    if cel_next.value == naam:
-                        pv_lange_pauze_count[pv["naam"]] += 1
+        if pv["naam"] not in pv_lange_pauze_count:
+            pv_lange_pauze_count[pv["naam"]] = 0
     geplaatst = False
-    # Try to assign to the pauzevlinder with the fewest long breaks so far
-    for col1, col2, uur1, uur2, pv, pv_row in sorted(halve_uren, key=lambda x: pv_lange_pauze_count[x[4]["naam"]]):
+    # Sorteer bij elke poging op actuele telling
+    halve_uren_sorted = sorted(halve_uren, key=lambda x: pv_lange_pauze_count[x[4]["naam"]])
+    for col1, col2, uur1, uur2, pv, pv_row in halve_uren_sorted:
         cel1 = ws_pauze.cell(pv_row, col1)
         cel2 = ws_pauze.cell(pv_row, col2)
         boven_cel1 = ws_pauze.cell(pv_row-1, col1)
