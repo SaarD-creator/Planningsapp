@@ -1144,11 +1144,24 @@ def plaats_student(student, harde_mode=False):
                                     continue
                                 alle_korte_pauze_opties.append((abs(idx_p-lange_pauze_einde_idx), -idx_p, idx_p, uur_kort, col_kort, pv_row2, attr_kort))
                         # Sorteer opties op afstand tot einde lange pauze: eerst 10, 11, ..., dan 9, 8, ...
-                        opties_10plus = [opt for opt in alle_korte_pauze_opties if (opt[2]-lange_pauze_einde_idx) >= 10]
-                        opties_9min = [opt for opt in alle_korte_pauze_opties if 1 <= (opt[2]-lange_pauze_einde_idx) < 10]
-                        opties_10plus.sort()
-                        opties_9min.sort()
-                        for _afstand, _neg_idx, idx_p, uur_kort, col_kort, pv_row2, attr_kort in opties_10plus + opties_9min:
+                        import random
+                        # Groepeer opties per afstand, shuffle per afstand
+                        opties_per_afstand = {}
+                        for opt in alle_korte_pauze_opties:
+                            afstand = abs(opt[2] - lange_pauze_einde_idx)
+                            opties_per_afstand.setdefault(afstand, []).append(opt)
+                        opties_geprioriteerd = []
+                        # Eerst 10, 11, 12, ...
+                        for afstand in range(10, max(opties_per_afstand.keys(), default=9)+1):
+                            if afstand in opties_per_afstand:
+                                random.shuffle(opties_per_afstand[afstand])
+                                opties_geprioriteerd.extend(sorted(opties_per_afstand[afstand]))
+                        # Dan 9, 8, ...
+                        for afstand in range(9, 0, -1):
+                            if afstand in opties_per_afstand:
+                                random.shuffle(opties_per_afstand[afstand])
+                                opties_geprioriteerd.extend(sorted(opties_per_afstand[afstand]))
+                        for _afstand, _neg_idx, idx_p, uur_kort, col_kort, pv_row2, attr_kort in opties_geprioriteerd:
                             boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
                             boven_cel_kort.value = attr_kort
                             boven_cel_kort.alignment = center_align
