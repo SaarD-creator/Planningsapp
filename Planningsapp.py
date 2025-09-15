@@ -1115,39 +1115,39 @@ def plaats_student(student, harde_mode=False):
                     reg["lange"] = True
                     # Nu: zoek een korte pauze, alleen volgens afstandsstrategie (eerst 10, dan 11, ..., dan 9, 8, ...)
                     if not reg["korte"]:
-                        for min_blokjes in list(range(10, len(uur_col_pairs)-i)) + list(range(9, 0, -1)):
-                            for j in range(i+min_blokjes, len(uur_col_pairs)):
-                                uur_kort, col_kort = uur_col_pairs[j]
-                                if not is_korte_pauze_toegestaan_col(col_kort):
-                                    continue
-                                attr_kort = vind_attractie_op_uur(naam, uur_kort)
-                                if not attr_kort:
-                                    continue
-                                cel_kort = ws_pauze.cell(pv_row, col_kort)
-                                boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
-                                if cel_kort.value in [None, ""]:
-                                    boven_cel_kort.value = attr_kort
-                                    boven_cel_kort.alignment = center_align
-                                    boven_cel_kort.border = thin_border
-                                    cel_kort.value = naam
-                                    cel_kort.alignment = center_align
-                                    cel_kort.border = thin_border
-                                    reg["korte"] = True
-                                    return True
-                                elif harde_mode:
-                                    occupant = str(cel_kort.value).strip() if cel_kort.value else ""
-                                    if occupant not in lange_werkers_names:
-                                        boven_cel_kort.value = attr_kort
-                                        boven_cel_kort.alignment = center_align
-                                        boven_cel_kort.border = thin_border
-                                        cel_kort.value = naam
-                                        cel_kort.alignment = center_align
-                                        cel_kort.border = thin_border
-                                        reg["korte"] = True
-                                        return True
-                        # Geen korte pauze gevonden met afstandsstrategie: geen korte pauze plaatsen
-                        # (dus geen fallback meer)
-                        pass
+                        # Maak lijst van alle mogelijke korte pauze-opties (index, uur, kolom)
+                        korte_pauze_opties = []
+                        for j, (uur_kort, col_kort) in enumerate(uur_col_pairs):
+                            if j == i or j == i+1:
+                                continue  # mag niet overlappen met lange pauze
+                            if not is_korte_pauze_toegestaan_col(col_kort):
+                                continue
+                            attr_kort = vind_attractie_op_uur(naam, uur_kort)
+                            if not attr_kort:
+                                continue
+                            cel_kort = ws_pauze.cell(pv_row, col_kort)
+                            if cel_kort.value not in [None, ""]:
+                                continue
+                            korte_pauze_opties.append((j, uur_kort, col_kort))
+                        # Sorteer opties op afstand tot lange pauze volgens strategie
+                        def afstandscore(j):
+                            afstand = abs(j - (i+1))  # afstand tot einde lange pauze
+                            if afstand >= 10:
+                                return afstand  # eerst 10, 11, 12, ...
+                            else:
+                                return 100 - afstand  # dan 9, 8, ...
+                        korte_pauze_opties_sorted = sorted(korte_pauze_opties, key=lambda x: afstandscore(x[0]))
+                        for j, uur_kort, col_kort in korte_pauze_opties_sorted:
+                            boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
+                            boven_cel_kort.value = vind_attractie_op_uur(naam, uur_kort)
+                            boven_cel_kort.alignment = center_align
+                            boven_cel_kort.border = thin_border
+                            cel_kort = ws_pauze.cell(pv_row, col_kort)
+                            cel_kort.value = naam
+                            cel_kort.alignment = center_align
+                            cel_kort.border = thin_border
+                            reg["korte"] = True
+                            return True
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
                 elif harde_mode:
