@@ -1115,11 +1115,23 @@ def plaats_student(student, harde_mode=False):
                     reg["lange"] = True
                     # Nu: zoek een korte pauze, alleen volgens afstandsstrategie (eerst 10, dan 11, ..., dan 9, 8, ...)
                     if not reg["korte"]:
-                        # Maak lijst van alle mogelijke korte pauze-opties (index, uur, kolom)
+                        # Zoek kolomindex van einde lange pauze
+                        lange_pauze_einde_col = col2  # col2 is de tweede kolom van de lange pauze
+                        lange_pauze_einde_idx = None
+                        for idx_p, col in enumerate(pauze_cols):
+                            if col == lange_pauze_einde_col:
+                                lange_pauze_einde_idx = idx_p
+                                break
+                        if lange_pauze_einde_idx is None:
+                            return True  # kan niet verder
+                        # Maak lijst van alle mogelijke korte pauze-opties NA de lange pauze, binnen werkuren, met restricties
                         korte_pauze_opties = []
-                        for j, (uur_kort, col_kort) in enumerate(uur_col_pairs):
-                            if j == i or j == i+1:
-                                continue  # mag niet overlappen met lange pauze
+                        for idx_p in range(lange_pauze_einde_idx+1, len(pauze_cols)):
+                            col_kort = pauze_cols[idx_p]
+                            col_header = ws_pauze.cell(1, col_kort).value
+                            uur_kort = parse_header_uur(col_header)
+                            if uur_kort is None or uur_kort not in werk_uren_set or uur_kort in verboden_uren:
+                                continue
                             if not is_korte_pauze_toegestaan_col(col_kort):
                                 continue
                             attr_kort = vind_attractie_op_uur(naam, uur_kort)
@@ -1128,19 +1140,13 @@ def plaats_student(student, harde_mode=False):
                             cel_kort = ws_pauze.cell(pv_row, col_kort)
                             if cel_kort.value not in [None, ""]:
                                 continue
-                            korte_pauze_opties.append((j, uur_kort, col_kort))
-                        # Eerst alle opties NA de lange pauze (afstand 10, 11, ...), dan pas ervoor (-10, -11, ...)
-                        opties_na = []
-                        opties_voor = []
-                        for j, uur_kort, col_kort in korte_pauze_opties:
-                            afstand = j - (i+1)
-                            if afstand >= 10:
-                                opties_na.append((afstand, j, uur_kort, col_kort))
-                            elif afstand <= -10:
-                                opties_voor.append((abs(afstand), j, uur_kort, col_kort))
-                        opties_na.sort()  # eerst afstand 10, 11, ...
-                        opties_voor.sort()  # dan afstand -10, -11, ...
-                        for _afstand, j, uur_kort, col_kort in opties_na + opties_voor:
+                            korte_pauze_opties.append((idx_p, uur_kort, col_kort))
+                        # Sorteer opties op afstand tot einde lange pauze: eerst 10, dan 11, 12, ..., dan 9, 8, ...
+                        opties_10plus = [(abs(idx_p-lange_pauze_einde_idx), idx_p, uur_kort, col_kort) for idx_p, uur_kort, col_kort in korte_pauze_opties if (idx_p-lange_pauze_einde_idx) >= 10]
+                        opties_9min = [(abs(idx_p-lange_pauze_einde_idx), idx_p, uur_kort, col_kort) for idx_p, uur_kort, col_kort in korte_pauze_opties if 1 <= (idx_p-lange_pauze_einde_idx) < 10]
+                        opties_10plus.sort()  # eerst afstand 10, 11, ...
+                        opties_9min.sort()    # dan afstand 9, 8, ...
+                        for _afstand, idx_p, uur_kort, col_kort in opties_10plus + opties_9min:
                             boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
                             boven_cel_kort.value = vind_attractie_op_uur(naam, uur_kort)
                             boven_cel_kort.alignment = center_align
