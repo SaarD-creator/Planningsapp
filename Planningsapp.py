@@ -1113,10 +1113,8 @@ def plaats_student(student, harde_mode=False):
                     cel2.alignment = center_align
                     cel2.border = thin_border
                     reg["lange"] = True
-                    # Nu: zoek een korte pauze, eerst exact 10 blokjes afstand, dan 11, 12, ... tot einde, daarna 9, 8, ... tot 1
+                    # Nu: zoek een korte pauze, alleen volgens afstandsstrategie (eerst 10, dan 11, ..., dan 9, 8, ...)
                     if not reg["korte"]:
-                        found = False
-                        # Eerst exact 10 blokjes afstand
                         for min_blokjes in list(range(10, len(uur_col_pairs)-i)) + list(range(9, 0, -1)):
                             for j in range(i+min_blokjes, len(uur_col_pairs)):
                                 uur_kort, col_kort = uur_col_pairs[j]
@@ -1125,7 +1123,6 @@ def plaats_student(student, harde_mode=False):
                                 attr_kort = vind_attractie_op_uur(naam, uur_kort)
                                 if not attr_kort:
                                     continue
-                                # Alleen zoeken in dezelfde rij als de lange pauze (dus bij dezelfde pauzevlinder)
                                 cel_kort = ws_pauze.cell(pv_row, col_kort)
                                 boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
                                 if cel_kort.value in [None, ""]:
@@ -1136,7 +1133,6 @@ def plaats_student(student, harde_mode=False):
                                     cel_kort.alignment = center_align
                                     cel_kort.border = thin_border
                                     reg["korte"] = True
-                                    found = True
                                     return True
                                 elif harde_mode:
                                     occupant = str(cel_kort.value).strip() if cel_kort.value else ""
@@ -1148,10 +1144,10 @@ def plaats_student(student, harde_mode=False):
                                         cel_kort.alignment = center_align
                                         cel_kort.border = thin_border
                                         reg["korte"] = True
-                                        found = True
                                         return True
-                            if found:
-                                break
+                        # Geen korte pauze gevonden met afstandsstrategie: geen korte pauze plaatsen
+                        # (dus geen fallback meer)
+                        pass
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
                 elif harde_mode:
