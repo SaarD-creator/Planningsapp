@@ -1158,20 +1158,19 @@ def plaats_student(student, harde_mode=False):
                         for afstand in afstanden:
                             opties = opties_per_afstand.get(afstand, [])
                             if opties:
-                                random.shuffle(opties)
-                                # Sorteer op meest rechtse kolom (hoogste idx_p)
-                                opties.sort(key=lambda x: -x[2])
-                                for _afstand, _neg_idx, idx_p, uur_kort, col_kort, pv_row2, attr_kort in opties:
-                                    boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
-                                    boven_cel_kort.value = attr_kort
-                                    boven_cel_kort.alignment = center_align
-                                    boven_cel_kort.border = thin_border
-                                    cel_kort = ws_pauze.cell(pv_row2, col_kort)
-                                    cel_kort.value = naam
-                                    cel_kort.alignment = center_align
-                                    cel_kort.border = thin_border
-                                    reg["korte"] = True
-                                    return True
+                                # Kies de meest rechtse optie (hoogste idx_p)
+                                beste_optie = max(opties, key=lambda x: x[2])
+                                _afstand, _neg_idx, idx_p, uur_kort, col_kort, pv_row2, attr_kort = beste_optie
+                                boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
+                                boven_cel_kort.value = attr_kort
+                                boven_cel_kort.alignment = center_align
+                                boven_cel_kort.border = thin_border
+                                cel_kort = ws_pauze.cell(pv_row2, col_kort)
+                                cel_kort.value = naam
+                                cel_kort.alignment = center_align
+                                cel_kort.border = thin_border
+                                reg["korte"] = True
+                                return True
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
                 elif harde_mode:
