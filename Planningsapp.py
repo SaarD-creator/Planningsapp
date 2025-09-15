@@ -1,4 +1,4 @@
-#tussenstap (14/09) 
+#tussenstap (15/09) enkel nog te kort tijd tussen pauzes pauzevlinders 
 
 
 # tussenstapje
@@ -1434,50 +1434,23 @@ for pv, pv_row in pv_rows:
         if lengte >= 2:
             lange_blok_einde = start + lengte - 1
             break
+    # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze, NIET in de eerste 12 kwartieren (tenzij <=6u open)
     def is_toegestaan_pv_col(col):
         if len(open_uren) <= 6:
             return True
         return col not in get_verboden_korte_pauze_kolommen()
     if lange_blok_einde is not None:
-        # Zelfde logica als bij andere lange werkers: zoek alle mogelijke korte pauze-blokken in eigen rij, met afstandsstrategie
-        werk_uren = get_student_work_hours(pv["naam"])
-        werk_uren_set = set(werk_uren)
-        verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
-        # Bepaal alle mogelijke korte pauze opties (enkel blok, niet dubbel, in eigen werkuren, niet in verboden blokken)
-        korte_pauze_opties = []  # lijst van (idx, uur, col)
-        for idx in range(len(pauze_cols)):
+        min_kort_idx = lange_blok_einde + 10
+        for idx in range(min_kort_idx, len(pauze_cols)):
             col = pauze_cols[idx]
-            col_header = ws_pauze.cell(1, col).value
-            col_uur = parse_header_uur(col_header)
-            if col_uur is None or col_uur not in werk_uren_set or col_uur in verboden_uren:
-                continue
             if not is_toegestaan_pv_col(col):
                 continue
             cel = ws_pauze.cell(pv_row, col)
-            # Alleen als het blok vrij is en geen deel van een lange pauze
             if cel.value in [None, ""]:
-                # Check of dit blok niet direct aansluit op de lange pauze
-                is_lange = False
-                if idx > 0 and ws_pauze.cell(pv_row, pauze_cols[idx-1]).value == pv["naam"]:
-                    is_lange = True
-                if idx+1 < len(pauze_cols) and ws_pauze.cell(pv_row, pauze_cols[idx+1]).value == pv["naam"]:
-                    is_lange = True
-                if not is_lange:
-                    korte_pauze_opties.append((idx, col_uur, col))
-        # Zoek met afstandsstrategie vanaf einde lange pauze
-        found = False
-        for afstand in list(range(10, len(pauze_cols)-lange_blok_einde)) + list(range(9, 0, -1)):
-            idx_gewenst = lange_blok_einde + afstand
-            for idx, uur, col in korte_pauze_opties:
-                if idx == idx_gewenst:
-                    cel = ws_pauze.cell(pv_row, col)
-                    cel.value = pv["naam"]
-                    cel.fill = lichtpaars_fill
-                    cel.alignment = center_align
-                    cel.border = thin_border
-                    found = True
-                    break
-            if found:
+                cel.value = pv["naam"]
+                cel.fill = lichtpaars_fill
+                cel.alignment = center_align
+                cel.border = thin_border
                 break
     else:
         # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
