@@ -1453,7 +1453,7 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
         else:
             i += 1
 
-    # Geen eigen lange pauze: kies een rechtse, geldige plek op eigen rij (liefst index >= target_gap)
+    # Geen eigen lange pauze: kies een geldige plek op eigen rij (liefst vroegste index >= target_gap)
     if lange_blok_einde is None:
         werk_uren = get_student_work_hours(naam)
         if len(werk_uren) > 2:
@@ -1474,8 +1474,9 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
             candidates.append((prefer, i, col, uur))
         if not candidates:
             return False
-        # Kies met voorkeur voor index >= target_gap, en verder meest rechts (grootste idx)
-        candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        # Kies met voorkeur voor index >= target_gap; binnen die groep de vroegste (kleinste index)
+        # Sort key: (pref_is_false, index) zodat pref==1 eerst komt, dan kleinste index
+        candidates.sort(key=lambda x: (x[0] == 0, x[1]))
         _pref, i, col, uur = candidates[0]
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
@@ -1580,7 +1581,8 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
     return False
 
 for pv, pv_row in pv_rows:
-    _pv_place_best_short(pv, pv_row, target_gap=10)
+    # Voor pauzevlinders: streef naar minstens 8 blokken; als 8 niet haalbaar, kies de best mogelijke grotere of kleinere afstand
+    _pv_place_best_short(pv, pv_row, target_gap=8)
 
 
 # ---- Korte pauze voor ALLE studenten (ook <=6u, behalve pauzevlinders en lange werkers) ----
@@ -1747,14 +1749,15 @@ def _place_short_pause_for(naam):
         pv_korte_pauze_count[pv["naam"]] += 1
         return True
 
-    # Als anchor bestaat, probeer exact +10, dan groter, anders lagere alternatieven
+    # Als anchor bestaat, probeer exact target, dan groter, anders lagere alternatieven
     if anchor >= 0:
+        target = 8 if is_pauzevlinder(naam) else 10
         # +10 en verder
-        for d in range(10, len(pauze_cols)-anchor):
+        for d in range(target, len(pauze_cols)-anchor):
             if _try_place_at_col(pauze_cols[anchor + d]):
                 return True
         # lager
-        for d in range(9, 0, -1):
+        for d in range(target-1, 0, -1):
             idx = anchor + d
             if 0 <= idx < len(pauze_cols) and _try_place_at_col(pauze_cols[idx]):
                 return True
@@ -2346,13 +2349,14 @@ def _recolor_pauze_sheet():
             # anders korte pauze
             cel.fill = lichtpaars_fill
 
-def _enforce_min_gap_for_short_pauses(desired_gap=10, max_passes=5):
+def _enforce_min_gap_for_short_pauses(desired_gap_default=10, desired_gap_pv=8, max_passes=5):
     changed = False
     for _ in range(max_passes):
         improved = False
         # itereren over alle studenten met minstens 1 korte pauze
         alle_namen = {s["naam"] for s in studenten if student_totalen.get(s["naam"], 0) > 0}
         for naam in alle_namen:
+            desired_gap = desired_gap_pv if is_pauzevlinder(naam) else desired_gap_default
             short_pos = _get_student_short_pause_positions(naam)
             if not short_pos:
                 continue
@@ -2395,8 +2399,8 @@ def _enforce_min_gap_for_short_pauses(desired_gap=10, max_passes=5):
         _recolor_pauze_sheet()
     return changed
 
-# Voer de enforce stap uit met doelafstand 10 blokken
-_enforce_min_gap_for_short_pauses(desired_gap=10, max_passes=6)
+# Voer de enforce stap uit met doelafstand 10 blokken (niet-PV) en 8 blokken (PV)
+_enforce_min_gap_for_short_pauses(desired_gap_default=10, desired_gap_pv=8, max_passes=6)
 
 # Optionele samenvatting in Streamlit
 def _global_min_gap_summary():
@@ -2409,8 +2413,14 @@ def _global_min_gap_summary():
             per_student[naam] = mg
     if per_student:
         overall = min(per_student.values())
-        ok_cnt = sum(1 for v in per_student.values() if v >= 10)
-        st.info(f"Minimale afstand tussen pauzes: globaal min={overall} blokken; {ok_cnt}/{len(per_student)} personen halen ≥10.")
+        # rapport: niet-PV met ≥10, PV met ≥8
+        ok_non_pv = sum(1 for naam, v in per_student.items() if (not is_pauzevlinder(naam)) and v >= 10)
+        ok_pv = sum(1 for naam, v in per_student.items() if is_pauzevlinder(naam) and v >= 8)
+        total_non_pv = sum(1 for naam in per_student if not is_pauzevlinder(naam))
+        total_pv = sum(1 for naam in per_student if is_pauzevlinder(naam))
+        st.info(
+            f"Minimale afstand: globaal min={overall} blokken; niet-PV ≥10: {ok_non_pv}/{total_non_pv}; PV ≥8: {ok_pv}/{total_pv}."
+        )
 
 _global_min_gap_summary()
 
