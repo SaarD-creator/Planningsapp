@@ -1148,10 +1148,11 @@ def plaats_student(student, harde_mode=False):
                                 alle_korte_pauze_opties.append((afstand, uur_kort, col_kort, pv_row2, attr_kort))
                             # DEBUG: print alle opties voor korte pauze
                             if alle_korte_pauze_opties:
-                                print(f"Korte pauze-opties voor {naam} na lange pauze op {uur2}:")
+                                import streamlit as st
+                                st.write(f"Korte pauze-opties voor {naam} na lange pauze op {uur2}:")
                                 for opt in alle_korte_pauze_opties:
                                     afstand, uur_kort, col_kort, pv_row2, attr_kort = opt
-                                    print(f"  afstand: {afstand}, uur: {uur_kort}, kolom: {col_kort}, rij: {pv_row2}, attractie: {attr_kort}")
+                                    st.write(f"  afstand: {afstand}, uur: {uur_kort}, kolom: {col_kort}, rij: {pv_row2}, attractie: {attr_kort}")
                         # Implementeer afstandsstrategie: eerst 10, 11, 12, ..., dan 9, 8, ...
                         opties_per_afstand = {}
                         max_afstand = 0
