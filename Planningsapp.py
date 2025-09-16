@@ -1427,47 +1427,93 @@ def _pv_has_short_pause(naam, pv_row):
     return False
 
 def _pv_place_best_short(pv, pv_row, target_gap=10):
+    """Plaats korte pauze op eigen rij met voorkeur: exact +10 blokken na lange pauze-einde,
+    anders +11, +12, ...; als dat niet past, probeer +9, +8, ...; valt terug op globale laatste lange-pauze-einde als geen eigen lange pauze."""
     naam = pv["naam"]
     # Als er al een korte pauze staat, niets doen
     if _pv_has_short_pause(naam, pv_row):
         return False
-    # Verzamel alle eigen pauzecolumn-indices (lange + evt. bestaande korte)
-    taken_idx = []
-    for i, col in enumerate(pauze_cols):
-        if ws_pauze.cell(pv_row, col).value == naam:
-            taken_idx.append(i)
-    # Kandidaten: lege cellen op eigen rij, kolom toegestaan
+
+    # Hulpfuncties
     def is_toegestaan_pv_col(col):
         if len(open_uren) <= 6:
             return True
         return col not in get_verboden_korte_pauze_kolommen()
-    candidates = []
-    for i, col in enumerate(pauze_cols):
+
+    # Zoek eigen lange pauze-einde op deze rij
+    lange_blok_einde = None
+    i = 0
+    while i < len(pauze_cols)-1:
+        c1 = pauze_cols[i]
+        c2 = pauze_cols[i+1]
+        if ws_pauze.cell(pv_row, c1).value == naam and ws_pauze.cell(pv_row, c2).value == naam:
+            lange_blok_einde = i+1
+            # ga door; kies de laatste indien meerdere
+            i += 2
+        else:
+            i += 1
+
+    # Als geen eigen lange pauze: gebruik globale laatste dubbele blok over alle pv-rijen
+    if lange_blok_einde is None:
+        last_double_end = -1
+        for _pv2, row2 in pv_rows:
+            j = 0
+            while j < len(pauze_cols)-1:
+                c1 = pauze_cols[j]
+                c2 = pauze_cols[j+1]
+                if ws_pauze.cell(row2, c1).value == _pv2["naam"] and ws_pauze.cell(row2, c2).value == _pv2["naam"]:
+                    last_double_end = max(last_double_end, j+1)
+                    j += 2
+                else:
+                    j += 1
+        anchor_idx = last_double_end
+    else:
+        anchor_idx = lange_blok_einde
+
+    if anchor_idx is None or anchor_idx < 0:
+        # Geen anchor beschikbaar: kies de eerste toegestane lege cel op eigen rij (zeldzaam)
+        for i, col in enumerate(pauze_cols):
+            if is_toegestaan_pv_col(col) and ws_pauze.cell(pv_row, col).value in [None, ""]:
+                cel = ws_pauze.cell(pv_row, col)
+                cel.value = naam
+                cel.fill = lichtpaars_fill
+                cel.alignment = center_align
+                cel.border = thin_border
+                return True
+        return False
+
+    # Eerst exact +10 blokken, dan +11, +12, ...
+    for d in range(target_gap, len(pauze_cols)-anchor_idx):
+        idx = anchor_idx + d
+        if idx >= len(pauze_cols):
+            break
+        col = pauze_cols[idx]
         if not is_toegestaan_pv_col(col):
             continue
-        if ws_pauze.cell(pv_row, col).value not in [None, ""]:
-            continue
-        # Bereken afstand tot dichtstbijzijnde eigen pauzecol
-        if taken_idx:
-            gap = min(abs(i - j) for j in taken_idx)
-        else:
-            gap = 10**9
-        candidates.append((gap, i, col))
-    if not candidates:
-        return False
-    # Kies beste: eerst die met gap >= target en grootste gap, anders max gap; tie-break: kleinste index
-    good = [c for c in candidates if c[0] >= target_gap]
-    if good:
-        best = max(good, key=lambda x: (x[0], -x[1]))
-    else:
-        best = max(candidates, key=lambda x: (x[0], -x[1]))
-    _, i, col = best
-    cel = ws_pauze.cell(pv_row, col)
-    cel.value = naam
-    cel.fill = lichtpaars_fill
-    cel.alignment = center_align
-    cel.border = thin_border
-    return True
+        if ws_pauze.cell(pv_row, col).value in [None, ""]:
+            cel = ws_pauze.cell(pv_row, col)
+            cel.value = naam
+            cel.fill = lichtpaars_fill
+            cel.alignment = center_align
+            cel.border = thin_border
+            return True
+
+    # Dan lagere alternatieven: +9, +8, ... +1
+    for d in range(target_gap-1, 0, -1):
+        idx = anchor_idx + d
+        if 0 <= idx < len(pauze_cols):
+            col = pauze_cols[idx]
+            if not is_toegestaan_pv_col(col):
+                continue
+            if ws_pauze.cell(pv_row, col).value in [None, ""]:
+                cel = ws_pauze.cell(pv_row, col)
+                cel.value = naam
+                cel.fill = lichtpaars_fill
+                cel.alignment = center_align
+                cel.border = thin_border
+                return True
+
+    return False
 
 for pv, pv_row in pv_rows:
     _pv_place_best_short(pv, pv_row, target_gap=10)
