@@ -942,6 +942,11 @@ def is_student_extra(naam):
     return False
 
 
+def is_pauzevlinder(naam):
+    """Is deze naam een pauzevlinder?"""
+    return any(pv["naam"] == naam for pv in selected)
+
+
 
 # ---- Helpers ----
 def parse_header_uur(header):
@@ -1737,8 +1742,6 @@ korte_pauze_toewijzen([s for s in studenten if s not in studenten_zonder_lange_p
 korte_pauze_toewijzen([s for s in studenten if s not in studenten_zonder_lange_pauze])
 
 # --- Iteratief wisselen: studenten zonder korte pauze proberen te ruilen met anderen (geen pauzevlinders) ---
-def is_pauzevlinder(naam):
-    return any(pv["naam"] == naam for pv in selected)
 
 def vind_korte_pauze_cell(naam):
     """Vind (pv_row, col) van de korte pauze van deze student, of None."""
