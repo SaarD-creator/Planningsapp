@@ -1,7 +1,6 @@
 #tussenstap (15/09) enkel nog te kort tijd tussen pauzes pauzevlinders 
 
 
-
 # tussenstapje
 # niet random, geen extra's, kleurtjes!
 
@@ -1114,74 +1113,58 @@ def plaats_student(student, harde_mode=False):
                     cel2.alignment = center_align
                     cel2.border = thin_border
                     reg["lange"] = True
-                    # Nu: zoek een korte pauze, alleen volgens afstandsstrategie (eerst 10, dan 11, ..., dan 9, 8, ...)
+                    # Nu: zoek een korte pauze, eerst alle opties met afstand >= 10, anders grootste afstand < 10
                     if not reg["korte"]:
-                        lange_pauze_einde_col = col2  # col2 is de tweede kolom van de lange pauze
-                        lange_pauze_einde_idx = None
-                        for idx_p, col in enumerate(pauze_cols):
-                            if col == lange_pauze_einde_col:
-                                lange_pauze_einde_idx = idx_p
-                                break
-                        if lange_pauze_einde_idx is None:
-                            return True  # kan niet verder
-                        # Verzamel ALLE mogelijke korte pauze-opties na de lange pauze, over alle pauzevlinder-rijen
-                        alle_korte_pauze_opties = []
-                        for idx_p in range(lange_pauze_einde_idx+1, len(pauze_cols)):
-                            col_kort = pauze_cols[idx_p]
-                            col_header = ws_pauze.cell(1, col_kort).value
-                            uur_kort = parse_header_uur(col_header)
-                            if uur_kort is None or uur_kort not in werk_uren_set or uur_kort in verboden_uren:
-                                continue
+                        opties_gte_10 = []
+                        opties_lt_10 = []
+                        for j in range(i+1, len(uur_col_pairs)):
+                            afstand = j - i
+                            uur_kort, col_kort = uur_col_pairs[j]
                             if not is_korte_pauze_toegestaan_col(col_kort):
                                 continue
                             attr_kort = vind_attractie_op_uur(naam, uur_kort)
                             if not attr_kort:
                                 continue
-                            for (pv2, pv_row2, _) in slot_order:
-                                if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
-                                    continue
-                                cel_kort = ws_pauze.cell(pv_row2, col_kort)
-                                if cel_kort.value not in [None, ""]:
-                                    continue
-                                # Bereken afstand in kwartieren/tijd, niet in kolomindex
-                                afstand = idx_p - lange_pauze_einde_idx
-                                alle_korte_pauze_opties.append((afstand, uur_kort, col_kort, pv_row2, attr_kort, idx_p))
-                            # DEBUG: print alle opties voor korte pauze
-                            if alle_korte_pauze_opties:
-                                import streamlit as st
-                                st.write(f"Korte pauze-opties voor {naam} na lange pauze op {uur2}:")
-                                for opt in alle_korte_pauze_opties:
-                                    afstand, uur_kort, col_kort, pv_row2, attr_kort, idx_p = opt
-                                    st.write(f"  afstand: {afstand}, uur: {uur_kort}, kolom: {col_kort}, rij: {pv_row2}, idx_p: {idx_p}, attractie: {attr_kort}")
-                        # Implementeer afstandsstrategie: eerst 10, 11, 12, ..., dan 9, 8, ...
-                        opties_per_afstand = {}
-                        max_afstand = 0
-                        for opt in alle_korte_pauze_opties:
-                            afstand = opt[0]
-                            if afstand > 0:
-                                opties_per_afstand.setdefault(afstand, []).append(opt)
-                                if afstand > max_afstand:
-                                    max_afstand = afstand
-                        # Afstandsprioriteit: 10, 11, 12, ..., dan 9, 8, ...
-                        afstanden = list(range(10, max_afstand+1)) + list(range(9, 0, -1))
-                        for afstand in afstanden:
-                            opties = opties_per_afstand.get(afstand, [])
-                            if opties:
-                                # Sorteer alleen op afstand, randomiseer bij gelijke afstand
-                                import random
-                                random.shuffle(opties)
-                                beste_optie = opties[0]
-                                _afstand, uur_kort, col_kort, pv_row2, attr_kort, idx_p = beste_optie
-                                boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
-                                boven_cel_kort.value = attr_kort
-                                boven_cel_kort.alignment = center_align
-                                boven_cel_kort.border = thin_border
-                                cel_kort = ws_pauze.cell(pv_row2, col_kort)
-                                cel_kort.value = naam
-                                cel_kort.alignment = center_align
-                                cel_kort.border = thin_border
-                                reg["korte"] = True
-                                return True
+                            cel_kort = ws_pauze.cell(pv_row, col_kort)
+                            boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
+                            if cel_kort.value in [None, ""]:
+                                if afstand >= 10:
+                                    opties_gte_10.append((afstand, j, uur_kort, col_kort, pv_row, attr_kort))
+                                else:
+                                    opties_lt_10.append((afstand, j, uur_kort, col_kort, pv_row, attr_kort))
+                        gekozen = None
+                        if opties_gte_10:
+                            # Kies de optie met de kleinste afstand >= 10
+                            gekozen = min(opties_gte_10, key=lambda x: x[0])
+                        elif opties_lt_10:
+                            # Kies de optie met de grootste afstand < 10
+                            gekozen = max(opties_lt_10, key=lambda x: x[0])
+                        if gekozen:
+                            _afstand, _j, uur_kort, col_kort, pv_row, attr_kort = gekozen
+                            boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
+                            cel_kort = ws_pauze.cell(pv_row, col_kort)
+                            boven_cel_kort.value = attr_kort
+                            boven_cel_kort.alignment = center_align
+                            boven_cel_kort.border = thin_border
+                            cel_kort.value = naam
+                            cel_kort.alignment = center_align
+                            cel_kort.border = thin_border
+                            reg["korte"] = True
+                            return True
+                                elif harde_mode:
+                                    occupant = str(cel_kort.value).strip() if cel_kort.value else ""
+                                    if occupant not in lange_werkers_names:
+                                        boven_cel_kort.value = attr_kort
+                                        boven_cel_kort.alignment = center_align
+                                        boven_cel_kort.border = thin_border
+                                        cel_kort.value = naam
+                                        cel_kort.alignment = center_align
+                                        cel_kort.border = thin_border
+                                        reg["korte"] = True
+                                        found = True
+                                        return True
+                            if found:
+                                break
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
                 elif harde_mode:
@@ -1236,57 +1219,47 @@ def plaats_student(student, harde_mode=False):
                         return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     # Korte pauze alleen als nog niet toegekend
-    # Fallback: werk_uren en verboden_uren opnieuw ophalen voor zekerheid
-    werk_uren = get_student_work_hours(naam)
-    werk_uren_set = set(werk_uren)
-    if len(werk_uren) > 2:
-        verboden_uren = {werk_uren[0], werk_uren[-1]}
-    else:
-        verboden_uren = set(werk_uren)
-    if werk_uren:
-        for uur in random.sample(werk_uren, len(werk_uren)):
-            if uur in verboden_uren:
+    for uur in random.sample(werk_uren, len(werk_uren)):
+        if uur in verboden_uren:
+            continue
+        attr = vind_attractie_op_uur(naam, uur)
+        if not attr:
+            continue
+        for (pv, pv_row, col) in slot_order:
+            col_header = ws_pauze.cell(1, col).value
+            col_uur = parse_header_uur(col_header)
+            if col_uur != uur:
                 continue
-            attr = vind_attractie_op_uur(naam, uur)
-            if not attr:
+            if not is_korte_pauze_toegestaan_col(col):
                 continue
-            for (pv, pv_row, col) in slot_order:
-                col_header = ws_pauze.cell(1, col).value
-                col_uur = parse_header_uur(col_header)
-                if col_uur != uur:
-                    continue
-                if not is_korte_pauze_toegestaan_col(col):
-                    continue
-                if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
-                    continue
-                cel = ws_pauze.cell(pv_row, col)
-                boven_cel = ws_pauze.cell(pv_row - 1, col)
-                current_val = cel.value
-                if current_val in [None, ""]:
-                    if not reg["korte"]:
-                        boven_cel.value = attr
-                        boven_cel.alignment = center_align
-                        boven_cel.border = thin_border
-                        cel.value = naam
-                        cel.alignment = center_align
-                        cel.border = thin_border
-                        reg["korte"] = True
-                        return True
-                else:
-                    if harde_mode:
-                        occupant = str(current_val).strip()
-                        if occupant not in lange_werkers_names:
-                            if not reg["korte"]:
-                                boven_cel.value = attr
-                                boven_cel.alignment = center_align
-                                boven_cel.border = thin_border
-                                cel.value = naam
-                                cel.alignment = center_align
-                                cel.border = thin_border
-                                reg["korte"] = True
-                                return True
-    return False
-    # Verwijder dubbele fallback-lus en zorg dat alle 'continue' statements binnen een for-lus staan
+            if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                continue
+            cel = ws_pauze.cell(pv_row, col)
+            boven_cel = ws_pauze.cell(pv_row - 1, col)
+            current_val = cel.value
+            if current_val in [None, ""]:
+                if not reg["korte"]:
+                    boven_cel.value = attr
+                    boven_cel.alignment = center_align
+                    boven_cel.border = thin_border
+                    cel.value = naam
+                    cel.alignment = center_align
+                    cel.border = thin_border
+                    reg["korte"] = True
+                    return True
+            else:
+                if harde_mode:
+                    occupant = str(current_val).strip()
+                    if occupant not in lange_werkers_names:
+                        if not reg["korte"]:
+                            boven_cel.value = attr
+                            boven_cel.alignment = center_align
+                            boven_cel.border = thin_border
+                            cel.value = naam
+                            cel.alignment = center_align
+                            cel.border = thin_border
+                            reg["korte"] = True
+                            return True
     return False
 
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
