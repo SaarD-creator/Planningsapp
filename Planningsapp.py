@@ -1453,7 +1453,7 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
         else:
             i += 1
 
-    # Geen eigen lange pauze: kies een rechtse, geldige plek op eigen rij (liefst index >= target_gap)
+    # Geen eigen lange pauze: kies een geldige plek op eigen rij (liefst vroegste index >= target_gap)
     if lange_blok_einde is None:
         werk_uren = get_student_work_hours(naam)
         if len(werk_uren) > 2:
@@ -1474,13 +1474,14 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
             candidates.append((prefer, i, col, uur))
         if not candidates:
             return False
-        # Kies met voorkeur voor index >= target_gap, en verder meest rechts (grootste idx)
-        candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        # Kies met voorkeur voor index >= target_gap; binnen die groep de vroegste (kleinste index)
+        candidates.sort(key=lambda x: (x[0] == 0, x[1]))
         _pref, i, col, uur = candidates[0]
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
             return False
-        ws_pauze.cell(pv_row-1, col).value = attr
+        # Voor PV-korte pauzes: laat het vakje erboven leeg
+        ws_pauze.cell(pv_row-1, col).value = None
         ws_pauze.cell(pv_row-1, col).alignment = center_align
         ws_pauze.cell(pv_row-1, col).border = thin_border
         cel = ws_pauze.cell(pv_row, col)
@@ -1509,7 +1510,8 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
                 attr = vind_attractie_op_uur(naam, uur)
                 if not attr:
                     continue
-                ws_pauze.cell(pv_row-1, col).value = attr
+                # Voor PV-korte pauzes: laat het vakje erboven leeg
+                ws_pauze.cell(pv_row-1, col).value = None
                 ws_pauze.cell(pv_row-1, col).alignment = center_align
                 ws_pauze.cell(pv_row-1, col).border = thin_border
                 cel = ws_pauze.cell(pv_row, col)
@@ -1542,7 +1544,8 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
             attr = vind_attractie_op_uur(naam, uur)
             if not attr:
                 continue
-            ws_pauze.cell(pv_row-1, col).value = attr
+            # Voor PV-korte pauzes: laat het vakje erboven leeg
+            ws_pauze.cell(pv_row-1, col).value = None
             ws_pauze.cell(pv_row-1, col).alignment = center_align
             ws_pauze.cell(pv_row-1, col).border = thin_border
             cel = ws_pauze.cell(pv_row, col)
@@ -1567,7 +1570,8 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
                 attr = vind_attractie_op_uur(naam, uur)
                 if not attr:
                     continue
-                ws_pauze.cell(pv_row-1, col).value = attr
+                # Voor PV-korte pauzes: laat het vakje erboven leeg
+                ws_pauze.cell(pv_row-1, col).value = None
                 ws_pauze.cell(pv_row-1, col).alignment = center_align
                 ws_pauze.cell(pv_row-1, col).border = thin_border
                 cel = ws_pauze.cell(pv_row, col)
@@ -1736,7 +1740,11 @@ def _place_short_pause_for(naam):
         # fairness op pv-rijen
         rows.sort(key=lambda r: pv_korte_pauze_count[r[0]["naam"]])
         pv, pv_row = rows[0]
-        ws_pauze.cell(pv_row-1, col).value = attr
+        # Voor PV-korte pauzes: laat het vakje erboven leeg
+        if is_pauzevlinder(naam):
+            ws_pauze.cell(pv_row-1, col).value = None
+        else:
+            ws_pauze.cell(pv_row-1, col).value = attr
         ws_pauze.cell(pv_row-1, col).alignment = center_align
         ws_pauze.cell(pv_row-1, col).border = thin_border
         cel = ws_pauze.cell(pv_row, col)
@@ -1889,7 +1897,8 @@ def korte_pauze_toewijzen(studenten_lijst):
             geldige_slots.sort(key=lambda slot: pv_korte_pauze_count[slot[0]["naam"]])
             for (pv, pv_row, col) in geldige_slots:
                 boven_cel = ws_pauze.cell(pv_row - 1, col)
-                boven_cel.value = attr
+                # PV korte pauze: laat boven leeg
+                boven_cel.value = None if is_pauzevlinder(naam) else attr
                 boven_cel.alignment = center_align
                 boven_cel.border = thin_border
                 cel = ws_pauze.cell(pv_row, col)
@@ -2313,7 +2322,8 @@ def _move_short_pause(naam, from_row, from_col, to_row, to_col):
     header = ws_pauze.cell(1, to_col).value
     uur = parse_header_uur(header)
     attr = vind_attractie_op_uur(naam, uur)
-    ws_pauze.cell(to_row-1, to_col).value = attr
+    # Voor PV korte pauze: laat boven leeg
+    ws_pauze.cell(to_row-1, to_col).value = None if is_pauzevlinder(naam) else attr
     ws_pauze.cell(to_row-1, to_col).alignment = center_align
     ws_pauze.cell(to_row-1, to_col).border = thin_border
     ws_pauze.cell(to_row, to_col).value = naam
