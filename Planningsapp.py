@@ -1133,12 +1133,15 @@ def plaats_student(student, harde_mode=False):
                                 else:
                                     opties_lt_10.append((afstand, j, uur_kort, col_kort, pv_row, attr_kort))
                         gekozen = None
+                        import random
                         if opties_gte_10:
-                            # Kies de optie met de kleinste afstand >= 10
-                            gekozen = min(opties_gte_10, key=lambda x: x[0])
+                            min_afstand = min(x[0] for x in opties_gte_10)
+                            beste_opties = [x for x in opties_gte_10 if x[0] == min_afstand]
+                            gekozen = random.choice(beste_opties)
                         elif opties_lt_10:
-                            # Kies de optie met de grootste afstand < 10
-                            gekozen = max(opties_lt_10, key=lambda x: x[0])
+                            max_afstand = max(x[0] for x in opties_lt_10)
+                            beste_opties = [x for x in opties_lt_10 if x[0] == max_afstand]
+                            gekozen = random.choice(beste_opties)
                         if gekozen:
                             _afstand, _j, uur_kort, col_kort, pv_row, attr_kort = gekozen
                             boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
