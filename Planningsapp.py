@@ -1649,6 +1649,27 @@ names_with_long.sort(reverse=True)  # laatste eerst
 for _end, naam in names_with_long:
     _place_short_pause_for(naam)
 
+# Zorg dat latere rondes deze personen overslaan: recompute korte_pauze_ontvangers nu
+korte_pauze_ontvangers = set()
+for pv, pv_row in pv_rows:
+    for idx, col in enumerate(pauze_cols):
+        cel = ws_pauze.cell(pv_row, col)
+        if cel.value and str(cel.value).strip() != "":
+            # korte pauze = enkel blok
+            is_lange = False
+            if idx+1 < len(pauze_cols):
+                next_col = pauze_cols[idx+1]
+                cel_next = ws_pauze.cell(pv_row, next_col)
+                if cel_next.value == cel.value:
+                    is_lange = True
+            if idx > 0:
+                prev_col = pauze_cols[idx-1]
+                prev_cel = ws_pauze.cell(pv_row, prev_col)
+                if prev_cel.value == cel.value:
+                    is_lange = True
+            if not is_lange:
+                korte_pauze_ontvangers.add(str(cel.value).strip())
+
 # Bepaal wie geen lange pauze heeft gekregen
 studenten_zonder_lange_pauze = []
 for s in studenten:
@@ -1673,7 +1694,7 @@ for s in studenten:
 # Eerst: korte pauze toewijzen aan studenten zonder lange pauze
 def korte_pauze_toewijzen(studenten_lijst):
     for s in studenten_lijst:
-        if s["naam"] in korte_pauze_ontvangers:
+        if s["naam"] in korte_pauze_ontvangers or _has_short_pause(s["naam"]):
             continue
         naam = s["naam"]
         werk_uren = get_student_work_hours(naam)
