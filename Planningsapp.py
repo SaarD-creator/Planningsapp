@@ -2425,20 +2425,8 @@ def _enforce_min_gap_for_short_pauses(desired_gap=10, max_passes=5):
 _enforce_min_gap_for_short_pauses(desired_gap=10, max_passes=6)
 
 # Optionele samenvatting in Streamlit
-def _global_min_gap_summary():
-    per_student = {}
-    for s in studenten:
-        naam = s["naam"]
-        cols = _get_student_pause_cols(naam)
-        mg = _min_gap(cols)
-        if mg != 10**9:
-            per_student[naam] = mg
-    if per_student:
-        overall = min(per_student.values())
-        ok_cnt = sum(1 for v in per_student.values() if v >= 10)
-        st.info(f"Minimale afstand tussen pauzes: globaal min={overall} blokken; {ok_cnt}/{len(per_student)} personen halen ≥10.")
-
-_global_min_gap_summary()
+# Debug samenvatting (globale minimale pauze-afstand) verwijderd om UI schoon te houden.
+# Indien opnieuw nodig: functie _global_min_gap_summary() herstellen.
 
 # --- FEEDBACK SHEET ---
 ws_feedback = wb_out.create_sheet("Feedback")
