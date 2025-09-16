@@ -1,6 +1,6 @@
 #tussenstap (15/09) enkel nog te kort tijd tussen pauzes pauzevlinders 
 
-shit
+
 # tussenstapje
 # niet random, geen extra's, kleurtjes!
 
