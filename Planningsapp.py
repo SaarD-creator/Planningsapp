@@ -1130,6 +1130,9 @@ def plaats_student(student, harde_mode=False):
                                 attr_kort = vind_attractie_op_uur(naam, uur_kort)
                                 if not attr_kort:
                                     continue
+                                # Belangrijk: alleen op deze PV-rij plaatsen als de pauzevlinder deze attractie kan, behalve bij EXTRA
+                                if (not pv_kan_attr(pv, attr_kort)) and (not is_student_extra(naam)):
+                                    continue
                                 # Alleen zoeken in dezelfde rij als de lange pauze (dus bij dezelfde pauzevlinder)
                                 cel_kort = ws_pauze.cell(pv_row, col_kort)
                                 boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
