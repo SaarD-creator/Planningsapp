@@ -1151,20 +1151,6 @@ def plaats_student(student, harde_mode=False):
                             cel_kort.border = thin_border
                             reg["korte"] = True
                             return True
-                                elif harde_mode:
-                                    occupant = str(cel_kort.value).strip() if cel_kort.value else ""
-                                    if occupant not in lange_werkers_names:
-                                        boven_cel_kort.value = attr_kort
-                                        boven_cel_kort.alignment = center_align
-                                        boven_cel_kort.border = thin_border
-                                        cel_kort.value = naam
-                                        cel_kort.alignment = center_align
-                                        cel_kort.border = thin_border
-                                        reg["korte"] = True
-                                        found = True
-                                        return True
-                            if found:
-                                break
                     # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
                 elif harde_mode:
