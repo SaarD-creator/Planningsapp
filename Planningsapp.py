@@ -1144,15 +1144,15 @@ def plaats_student(student, harde_mode=False):
                                 if cel_kort.value not in [None, ""]:
                                     continue
                                 # Bereken afstand in kwartieren/tijd, niet in kolomindex
-                                afstand = uur_kort - uur2  # uur2 is het tweede uur van de lange pauze
-                                alle_korte_pauze_opties.append((afstand, uur_kort, col_kort, pv_row2, attr_kort))
+                                afstand = idx_p - lange_pauze_einde_idx
+                                alle_korte_pauze_opties.append((afstand, uur_kort, col_kort, pv_row2, attr_kort, idx_p))
                             # DEBUG: print alle opties voor korte pauze
                             if alle_korte_pauze_opties:
                                 import streamlit as st
                                 st.write(f"Korte pauze-opties voor {naam} na lange pauze op {uur2}:")
                                 for opt in alle_korte_pauze_opties:
-                                    afstand, uur_kort, col_kort, pv_row2, attr_kort = opt
-                                    st.write(f"  afstand: {afstand}, uur: {uur_kort}, kolom: {col_kort}, rij: {pv_row2}, attractie: {attr_kort}")
+                                    afstand, uur_kort, col_kort, pv_row2, attr_kort, idx_p = opt
+                                    st.write(f"  afstand: {afstand}, uur: {uur_kort}, kolom: {col_kort}, rij: {pv_row2}, idx_p: {idx_p}, attractie: {attr_kort}")
                         # Implementeer afstandsstrategie: eerst 10, 11, 12, ..., dan 9, 8, ...
                         opties_per_afstand = {}
                         max_afstand = 0
@@ -1168,9 +1168,9 @@ def plaats_student(student, harde_mode=False):
                             opties = opties_per_afstand.get(afstand, [])
                             if opties:
                                 # Sorteer alle opties met deze afstand op kolomindex (meest rechts eerst)
-                                opties_sorted = sorted(opties, key=lambda x: x[2], reverse=True)
+                                opties_sorted = sorted(opties, key=lambda x: x[5], reverse=True)
                                 beste_optie = opties_sorted[0]
-                                _afstand, uur_kort, col_kort, pv_row2, attr_kort = beste_optie
+                                _afstand, uur_kort, col_kort, pv_row2, attr_kort, idx_p = beste_optie
                                 boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
                                 boven_cel_kort.value = attr_kort
                                 boven_cel_kort.alignment = center_align
