@@ -1359,7 +1359,9 @@ for s in random.sample(lange_werkers, len(lange_werkers)):
             cel2.fill = lichtgroen_fill
             lange_pauze_ontvangers.add(naam)
             geplaatst = True
-            pv_lange_pauze_count[pv["naam"]] += 1
+            # Fairness: niet meetellen als deze lange pauze (een van de twee blokken) een 'Extra' overname is
+            if (normalize_attr(attr1) != 'extra') and (normalize_attr(attr2) != 'extra'):
+                pv_lange_pauze_count[pv["naam"]] += 1
             break
     if not geplaatst:
         if not plaats_student(s, harde_mode=False):
