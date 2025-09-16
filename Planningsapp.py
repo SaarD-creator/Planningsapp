@@ -1453,9 +1453,20 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
         else:
             i += 1
 
-    # Als geen eigen lange pauze: laat algemene logica later plaatsen
+    # Geen eigen lange pauze: gebruik globale laatste dubbele blok over alle pv-rijen als anker
     if lange_blok_einde is None:
-        return False
+        last_double_end = -1
+        for _pv2, row2 in pv_rows:
+            j = 0
+            while j < len(pauze_cols)-1:
+                c1 = pauze_cols[j]
+                c2 = pauze_cols[j+1]
+                if ws_pauze.cell(row2, c1).value == _pv2["naam"] and ws_pauze.cell(row2, c2).value == _pv2["naam"]:
+                    last_double_end = max(last_double_end, j+1)
+                    j += 2
+                else:
+                    j += 1
+        anchor_idx = last_double_end if last_double_end >= 0 else None
     else:
         anchor_idx = lange_blok_einde
 
