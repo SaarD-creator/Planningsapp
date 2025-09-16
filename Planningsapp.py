@@ -1562,6 +1562,93 @@ for pv, pv_row in pv_rows:
 
 niet_geplaatste_korte_pauze = []
 
+# --- NIEUW: Eerst korte pauzes toewijzen aan iedereen met een LANGE pauze,
+# in volgorde van wie het LAATST z'n lange pauze had ---
+
+def _has_long_pause(naam):
+    for _pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols[:-1]):
+            if ws_pauze.cell(pv_row, col).value == naam and ws_pauze.cell(pv_row, pauze_cols[idx+1]).value == naam:
+                return True
+    return False
+
+def _last_long_pause_end_index(naam):
+    """Geef de hoogste kolomindex (in pauze_cols) die een tweede helft is van een dubbele blok voor deze naam; -1 indien geen lange pauze."""
+    last_idx = -1
+    for _pv, pv_row in pv_rows:
+        for idx in range(len(pauze_cols)-1):
+            c1 = pauze_cols[idx]
+            c2 = pauze_cols[idx+1]
+            if ws_pauze.cell(pv_row, c1).value == naam and ws_pauze.cell(pv_row, c2).value == naam:
+                last_idx = max(last_idx, idx+1)
+    return last_idx
+
+def _has_short_pause(naam):
+    for _pv, pv_row in pv_rows:
+        for idx, col in enumerate(pauze_cols):
+            if ws_pauze.cell(pv_row, col).value == naam:
+                # korte pauze: geen buur met dezelfde naam
+                left_same = (idx > 0 and ws_pauze.cell(pv_row, pauze_cols[idx-1]).value == naam)
+                right_same = (idx+1 < len(pauze_cols) and ws_pauze.cell(pv_row, pauze_cols[idx+1]).value == naam)
+                if not left_same and not right_same:
+                    return True
+    return False
+
+def _place_short_pause_for(naam):
+    if _has_short_pause(naam):
+        return True
+    werk_uren = get_student_work_hours(naam)
+    if not werk_uren:
+        return False
+    verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
+    # maak lijst van geldige (pv_row, col) slots op basis van uren en regels
+    candidates = []
+    for col in pauze_cols:
+        header = ws_pauze.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur not in werk_uren or uur in verboden_uren:
+            continue
+        if not is_korte_pauze_toegestaan_col(col):
+            continue
+        attr = vind_attractie_op_uur(naam, uur)
+        if not attr:
+            continue
+        for pv, pv_row in pv_rows:
+            if ws_pauze.cell(pv_row, col).value not in [None, ""]:
+                continue
+            if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                continue
+            candidates.append((pv, pv_row, col))
+    if not candidates:
+        return False
+    # fairness: kies pv met minst korte pauzes tot nu toe
+    candidates.sort(key=lambda x: (pv_korte_pauze_count[x[0]["naam"]], x[2]))
+    pv, pv_row, col = candidates[0]
+    # schrijf label boven cel en naam in cel
+    attr = vind_attractie_op_uur(naam, parse_header_uur(ws_pauze.cell(1, col).value))
+    ws_pauze.cell(pv_row-1, col).value = attr
+    ws_pauze.cell(pv_row-1, col).alignment = center_align
+    ws_pauze.cell(pv_row-1, col).border = thin_border
+    cel = ws_pauze.cell(pv_row, col)
+    cel.value = naam
+    cel.alignment = center_align
+    cel.border = thin_border
+    cel.fill = lichtpaars_fill
+    pv_korte_pauze_count[pv["naam"]] += 1
+    return True
+
+# verzamel alle namen met een lange pauze en sorteer op laatste einde (desc)
+names_with_long = []
+alle_studenten_namen = {s["naam"] for s in studenten if student_totalen.get(s["naam"], 0) > 0}
+for naam in alle_studenten_namen:
+    if _has_long_pause(naam):
+        end_idx = _last_long_pause_end_index(naam)
+        names_with_long.append((end_idx, naam))
+names_with_long.sort(reverse=True)  # laatste eerst
+
+for _end, naam in names_with_long:
+    _place_short_pause_for(naam)
+
 # Bepaal wie geen lange pauze heeft gekregen
 studenten_zonder_lange_pauze = []
 for s in studenten:
