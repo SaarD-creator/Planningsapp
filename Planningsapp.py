@@ -1453,27 +1453,32 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
         else:
             i += 1
 
-    # Als geen eigen lange pauze: gebruik globale laatste dubbele blok over alle pv-rijen
+    # Als geen eigen lange pauze: laat algemene logica later plaatsen
     if lange_blok_einde is None:
-        last_double_end = -1
-        for _pv2, row2 in pv_rows:
-            j = 0
-            while j < len(pauze_cols)-1:
-                c1 = pauze_cols[j]
-                c2 = pauze_cols[j+1]
-                if ws_pauze.cell(row2, c1).value == _pv2["naam"] and ws_pauze.cell(row2, c2).value == _pv2["naam"]:
-                    last_double_end = max(last_double_end, j+1)
-                    j += 2
-                else:
-                    j += 1
-        anchor_idx = last_double_end
+        return False
     else:
         anchor_idx = lange_blok_einde
 
     if anchor_idx is None or anchor_idx < 0:
         # Geen anchor beschikbaar: kies de eerste toegestane lege cel op eigen rij (zeldzaam)
+        werk_uren = get_student_work_hours(naam)
+        if len(werk_uren) > 2:
+            verboden_uren = {werk_uren[0], werk_uren[-1]}
+        else:
+            verboden_uren = set(werk_uren)
         for i, col in enumerate(pauze_cols):
+            header = ws_pauze.cell(1, col).value
+            uur = parse_header_uur(header)
+            if uur not in werk_uren or uur in verboden_uren:
+                continue
             if is_toegestaan_pv_col(col) and ws_pauze.cell(pv_row, col).value in [None, ""]:
+                # schrijf bovenliggende attr
+                attr = vind_attractie_op_uur(naam, uur)
+                if not attr:
+                    continue
+                ws_pauze.cell(pv_row-1, col).value = attr
+                ws_pauze.cell(pv_row-1, col).alignment = center_align
+                ws_pauze.cell(pv_row-1, col).border = thin_border
                 cel = ws_pauze.cell(pv_row, col)
                 cel.value = naam
                 cel.fill = lichtpaars_fill
@@ -1483,6 +1488,11 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
         return False
 
     # Eerst exact +10 blokken, dan +11, +12, ...
+    werk_uren = get_student_work_hours(naam)
+    if len(werk_uren) > 2:
+        verboden_uren = {werk_uren[0], werk_uren[-1]}
+    else:
+        verboden_uren = set(werk_uren)
     for d in range(target_gap, len(pauze_cols)-anchor_idx):
         idx = anchor_idx + d
         if idx >= len(pauze_cols):
@@ -1490,7 +1500,18 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
         col = pauze_cols[idx]
         if not is_toegestaan_pv_col(col):
             continue
+        header = ws_pauze.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur not in werk_uren or uur in verboden_uren:
+            continue
         if ws_pauze.cell(pv_row, col).value in [None, ""]:
+            # schrijf bovenliggende attr
+            attr = vind_attractie_op_uur(naam, uur)
+            if not attr:
+                continue
+            ws_pauze.cell(pv_row-1, col).value = attr
+            ws_pauze.cell(pv_row-1, col).alignment = center_align
+            ws_pauze.cell(pv_row-1, col).border = thin_border
             cel = ws_pauze.cell(pv_row, col)
             cel.value = naam
             cel.fill = lichtpaars_fill
@@ -1505,7 +1526,17 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
             col = pauze_cols[idx]
             if not is_toegestaan_pv_col(col):
                 continue
+            header = ws_pauze.cell(1, col).value
+            uur = parse_header_uur(header)
+            if uur not in werk_uren or uur in verboden_uren:
+                continue
             if ws_pauze.cell(pv_row, col).value in [None, ""]:
+                attr = vind_attractie_op_uur(naam, uur)
+                if not attr:
+                    continue
+                ws_pauze.cell(pv_row-1, col).value = attr
+                ws_pauze.cell(pv_row-1, col).alignment = center_align
+                ws_pauze.cell(pv_row-1, col).border = thin_border
                 cel = ws_pauze.cell(pv_row, col)
                 cel.value = naam
                 cel.fill = lichtpaars_fill
@@ -1750,6 +1781,9 @@ def korte_pauze_toewijzen(studenten_lijst):
                 continue
             geldige_slots = []
             for (pv, pv_row) in pv_rows:
+                        # Pauzevlinders: enkel op eigen rij
+                        if is_pauzevlinder(naam) and pv["naam"] != naam:
+                            continue
                 for col in pauze_cols:
                     col_header = ws_pauze.cell(1, col).value
                     col_uur = parse_header_uur(col_header)
