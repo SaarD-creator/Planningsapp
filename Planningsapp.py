@@ -1421,11 +1421,9 @@ for pv, pv_row in pv_rows:
             # Anders: kwartierpauze
             cel.fill = lichtpaars_fill
 
-# --- Afdrukweergave met kolom-wrap (na eerste 3 pauzevlinder-uren) ---
+# --- Afdrukweergave met kolom-wrap (eerste 3 kolommen boven, rest eronder) ---
 def _build_wrapped_print_sheet():
-    """Maak een printblad waarbij de tijdslijn na de eerste 3 pauzevlinder-uren naar beneden verder loopt.
-    Boven: eerste 3 uren (lange pauzes). Onder: korte pauze uren opnieuw vanaf kolom B.
-    Dit vermindert horizontale breedte bij lange dagen (>6u)."""
+    """Bij dagen > 6u: eerste 3 kolommen boven, kolom 4+ eronder voor compacte afdruk."""
     try:
         # Check of we langer dan 6u open zijn
         if required_pauze_hours:
@@ -1436,15 +1434,12 @@ def _build_wrapped_print_sheet():
         if _duur <= 6:
             return  # geen wrap nodig bij korte dag
         
-        # Split op basis van pauze_cols index: eerste 3 kolommen vs rest
+        # ALTIJD splitten vanaf kolom 4+ als er meer dan 3 kolommen zijn
         if len(pauze_cols) <= 3:
             return  # niet genoeg kolommen om te splitten
         
-        first_cols = pauze_cols[:3]  # eerste 3 pauzevlinder-kolommen
-        second_cols = pauze_cols[3:]  # rest (korte pauze kolommen)
-        
-        if not second_cols:
-            return  # niets te wrappen
+        first_cols = pauze_cols[:3]  # eerste 3 kolommen (lange pauzes)
+        second_cols = pauze_cols[3:]  # vanaf kolom 4 (korte pauzes)
         sheet_name = "Pauzevlinders_print"
         # Verwijder bestaande
         for ws_old in [ws for ws in wb_out.worksheets if ws.title == sheet_name]:
