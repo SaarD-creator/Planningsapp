@@ -1421,34 +1421,28 @@ for pv, pv_row in pv_rows:
             # Anders: kwartierpauze
             cel.fill = lichtpaars_fill
 
-# --- Afdrukweergave met kolom-wrap (na eerste 3 openingsuren) ---
+# --- Afdrukweergave met kolom-wrap (na eerste 3 pauzevlinder-uren) ---
 def _build_wrapped_print_sheet():
-    """Maak een printblad waarbij de tijdslijn na de eerste 3 openingsuren naar beneden verder loopt.
-    Boven: uren tot (start+3u). Onder: resterende uren opnieuw vanaf kolom B.
+    """Maak een printblad waarbij de tijdslijn na de eerste 3 pauzevlinder-uren naar beneden verder loopt.
+    Boven: eerste 3 uren (lange pauzes). Onder: korte pauze uren opnieuw vanaf kolom B.
     Dit vermindert horizontale breedte bij lange dagen (>6u)."""
     try:
-        # Bepaal openingsuren-range
-        headers = []
-        for col in pauze_cols:
-            headers.append(ws_pauze.cell(1, col).value)
-        if not headers:
-            return
-        start_hour = None
-        for h in headers:
-            ph = parse_header_uur(h)
-            if ph is not None:
-                start_hour = ph
-                break
-        if start_hour is None:
-            return
-        # Verzamel mapping col->hour
-        col_hour = {col: parse_header_uur(ws_pauze.cell(1, col).value) for col in pauze_cols}
-        max_hour = max(ch for ch in col_hour.values() if ch is not None)
-        if (max_hour - start_hour) <= 6:
-            return  # geen wrap nodig
-        cutoff_hour = start_hour + 3  # eerste segment = eerste 3 uren
-        first_cols = [c for c in pauze_cols if col_hour.get(c) is not None and col_hour[c] < cutoff_hour]
-        second_cols = [c for c in pauze_cols if col_hour.get(c) is not None and col_hour[c] >= cutoff_hour]
+        # Check of we langer dan 6u open zijn
+        if required_pauze_hours:
+            _open_sorted = sorted(required_pauze_hours)
+        else:
+            _open_sorted = sorted(open_uren)
+        _duur = (_open_sorted[-1] - _open_sorted[0]) if len(_open_sorted) > 1 else 0
+        if _duur <= 6:
+            return  # geen wrap nodig bij korte dag
+        
+        # Split op basis van pauze_cols index: eerste 3 kolommen vs rest
+        if len(pauze_cols) <= 3:
+            return  # niet genoeg kolommen om te splitten
+        
+        first_cols = pauze_cols[:3]  # eerste 3 pauzevlinder-kolommen
+        second_cols = pauze_cols[3:]  # rest (korte pauze kolommen)
+        
         if not second_cols:
             return  # niets te wrappen
         sheet_name = "Pauzevlinders_print"
