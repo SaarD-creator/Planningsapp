@@ -1530,8 +1530,6 @@ def maak_print_sheet_met_split():
     except Exception:
         pass  # stil falen
 
-maak_print_sheet_met_split()
-
 # ---- Korte pauze voor pauzevlinders zelf toevoegen (eerst, met afstandscriterium) ----
 def _pv_has_short_pause(naam, pv_row):
     for idx, col in enumerate(pauze_cols):
@@ -2538,6 +2536,9 @@ _enforce_min_gap_for_short_pauses(desired_gap=10, max_passes=6)
 # Optionele samenvatting in Streamlit
 # Debug samenvatting (globale minimale pauze-afstand) verwijderd om UI schoon te houden.
 # Indien opnieuw nodig: functie _global_min_gap_summary() herstellen.
+
+# Maak print-versie voor lange dagen
+maak_print_sheet_met_split()
 
 # --- FEEDBACK SHEET ---
 ws_feedback = wb_out.create_sheet("Feedback")
