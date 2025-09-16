@@ -1208,47 +1208,49 @@ def plaats_student(student, harde_mode=False):
                         return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     # Korte pauze alleen als nog niet toegekend
-    for uur in random.sample(werk_uren, len(werk_uren)):
-        if uur in verboden_uren:
-            continue
-        attr = vind_attractie_op_uur(naam, uur)
-        if not attr:
-            continue
-        for (pv, pv_row, col) in slot_order:
-            col_header = ws_pauze.cell(1, col).value
-            col_uur = parse_header_uur(col_header)
-            if col_uur != uur:
+    werk_uren = get_student_work_hours(naam)
+    if werk_uren:
+        for uur in random.sample(werk_uren, len(werk_uren)):
+            if uur in verboden_uren:
                 continue
-            if not is_korte_pauze_toegestaan_col(col):
+            attr = vind_attractie_op_uur(naam, uur)
+            if not attr:
                 continue
-            if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
-                continue
-            cel = ws_pauze.cell(pv_row, col)
-            boven_cel = ws_pauze.cell(pv_row - 1, col)
-            current_val = cel.value
-            if current_val in [None, ""]:
-                if not reg["korte"]:
-                    boven_cel.value = attr
-                    boven_cel.alignment = center_align
-                    boven_cel.border = thin_border
-                    cel.value = naam
-                    cel.alignment = center_align
-                    cel.border = thin_border
-                    reg["korte"] = True
-                    return True
-            else:
-                if harde_mode:
-                    occupant = str(current_val).strip()
-                    if occupant not in lange_werkers_names:
-                        if not reg["korte"]:
-                            boven_cel.value = attr
-                            boven_cel.alignment = center_align
-                            boven_cel.border = thin_border
-                            cel.value = naam
-                            cel.alignment = center_align
-                            cel.border = thin_border
-                            reg["korte"] = True
-                            return True
+            for (pv, pv_row, col) in slot_order:
+                col_header = ws_pauze.cell(1, col).value
+                col_uur = parse_header_uur(col_header)
+                if col_uur != uur:
+                    continue
+                if not is_korte_pauze_toegestaan_col(col):
+                    continue
+                if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                    continue
+                cel = ws_pauze.cell(pv_row, col)
+                boven_cel = ws_pauze.cell(pv_row - 1, col)
+                current_val = cel.value
+                if current_val in [None, ""]:
+                    if not reg["korte"]:
+                        boven_cel.value = attr
+                        boven_cel.alignment = center_align
+                        boven_cel.border = thin_border
+                        cel.value = naam
+                        cel.alignment = center_align
+                        cel.border = thin_border
+                        reg["korte"] = True
+                        return True
+                else:
+                    if harde_mode:
+                        occupant = str(current_val).strip()
+                        if occupant not in lange_werkers_names:
+                            if not reg["korte"]:
+                                boven_cel.value = attr
+                                boven_cel.alignment = center_align
+                                boven_cel.border = thin_border
+                                cel.value = naam
+                                cel.alignment = center_align
+                                cel.border = thin_border
+                                reg["korte"] = True
+                                return True
     return False
 
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
