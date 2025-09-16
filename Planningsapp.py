@@ -1429,8 +1429,8 @@ def _build_split_print_sheet():
         else:
             _open_sorted = sorted(open_uren)
         _duur = (_open_sorted[-1] - _open_sorted[0]) if len(_open_sorted) > 1 else 0
-        if _duur <= 6 or len(pv_rows) <= 3:
-            return  # geen split nodig
+        if _duur <= 6:
+            return  # geen split nodig bij korte dag
         sheet_name = "Pauzevlinders_print"
         # Verwijder oude versie als die bestaat
         old = [ws for ws in wb_out.worksheets if ws.title == sheet_name]
@@ -1463,14 +1463,17 @@ def _build_split_print_sheet():
                     dst.fill = src.fill
                     dst.alignment = src.alignment
                     dst.border = src.border
-        # Eerste 3
-        for idx_block, (pv, pv_row) in enumerate(pv_rows[:3]):
+        # Eerste blok: eerste 3 pauzevlinders (of minder als er minder zijn)
+        first_block_count = min(3, len(pv_rows))
+        for idx_block, (pv, pv_row) in enumerate(pv_rows[:first_block_count]):
             copy_block(pv, pv_row, idx_block, out_row)
             out_row += 3
-        out_row += 1  # scheidingsrij
-        for idx_block, (pv, pv_row) in enumerate(pv_rows[3:], start=3):
-            copy_block(pv, pv_row, idx_block, out_row)
-            out_row += 3
+        # Alleen scheidingsrij als er nog meer volgen
+        if len(pv_rows) > first_block_count:
+            out_row += 1
+            for idx_block, (pv, pv_row) in enumerate(pv_rows[first_block_count:], start=first_block_count):
+                copy_block(pv, pv_row, idx_block, out_row)
+                out_row += 3
         # Kolombreedtes kopiëren
         for col_letter, dim in ws_pauze.column_dimensions.items():
             if dim.width:
