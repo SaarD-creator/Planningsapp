@@ -1236,6 +1236,9 @@ def plaats_student(student, harde_mode=False):
                         return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     # Korte pauze alleen als nog niet toegekend
+    # Fallback: werk_uren ophalen als niet gedefinieerd
+    if 'werk_uren' not in locals():
+        werk_uren = get_student_work_hours(naam)
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
