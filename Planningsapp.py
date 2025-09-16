@@ -1167,9 +1167,10 @@ def plaats_student(student, harde_mode=False):
                         for afstand in afstanden:
                             opties = opties_per_afstand.get(afstand, [])
                             if opties:
-                                # Sorteer alle opties met deze afstand op kolomindex (meest rechts eerst)
-                                opties_sorted = sorted(opties, key=lambda x: x[5], reverse=True)
-                                beste_optie = opties_sorted[0]
+                                # Sorteer alleen op afstand, randomiseer bij gelijke afstand
+                                import random
+                                random.shuffle(opties)
+                                beste_optie = opties[0]
                                 _afstand, uur_kort, col_kort, pv_row2, attr_kort, idx_p = beste_optie
                                 boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
                                 boven_cel_kort.value = attr_kort
