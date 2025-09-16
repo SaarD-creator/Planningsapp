@@ -1236,8 +1236,13 @@ def plaats_student(student, harde_mode=False):
                         return True
     # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
     # Korte pauze alleen als nog niet toegekend
-    # Fallback: werk_uren opnieuw ophalen voor zekerheid
+    # Fallback: werk_uren en verboden_uren opnieuw ophalen voor zekerheid
     werk_uren = get_student_work_hours(naam)
+    werk_uren_set = set(werk_uren)
+    if len(werk_uren) > 2:
+        verboden_uren = {werk_uren[0], werk_uren[-1]}
+    else:
+        verboden_uren = set(werk_uren)
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
