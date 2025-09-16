@@ -1641,7 +1641,7 @@ for pv, pv_row in pv_rows:
 # Nieuwe logica: eerlijke verdeling van korte pauzes over pauzevlinders
 from collections import Counter
 
-# Tel per pauzevlinder het aantal korte pauzes dat al is toegekend
+# Tel per pauzevlinder het aantal korte pauzes dat al is toegekend (EXTRA niet meetellen)
 pv_korte_pauze_count = Counter()
 for pv, pv_row in pv_rows:
     for col in pauze_cols:
@@ -1661,7 +1661,10 @@ for pv, pv_row in pv_rows:
                 if prev_cel.value == cel.value:
                     is_lange = True
             if not is_lange:
-                pv_korte_pauze_count[pv["naam"]] += 1
+                # Kijk naar bovenliggende attractie; tel niet als dit 'Extra' is of leeg (zoals bij PV zelf)
+                attr_above = ws_pauze.cell(pv_row-1, col).value
+                if attr_above and normalize_attr(attr_above) != 'extra':
+                    pv_korte_pauze_count[pv["naam"]] += 1
 
 niet_geplaatste_korte_pauze = []
 
@@ -1752,7 +1755,9 @@ def _place_short_pause_for(naam):
         cel.alignment = center_align
         cel.border = thin_border
         cel.fill = lichtpaars_fill
-        pv_korte_pauze_count[pv["naam"]] += 1
+        # Niet meetellen als dit een EXTRA overname is of als de pauze voor een PV zelf is
+        if (not is_pauzevlinder(naam)) and (normalize_attr(attr) != 'extra'):
+            pv_korte_pauze_count[pv["naam"]] += 1
         return True
 
     # Als anchor bestaat, probeer exact +10, dan groter, anders lagere alternatieven
@@ -1801,7 +1806,9 @@ def _place_short_pause_for(naam):
     cel.alignment = center_align
     cel.border = thin_border
     cel.fill = lichtpaars_fill
-    pv_korte_pauze_count[pv["naam"]] += 1
+    # Niet meetellen als dit een EXTRA overname is of als de pauze voor een PV zelf is
+    if (not is_pauzevlinder(naam)) and (normalize_attr(attr) != 'extra'):
+        pv_korte_pauze_count[pv["naam"]] += 1
     return True
 
 # verzamel alle namen met een lange pauze en sorteer op laatste einde (desc)
@@ -1907,7 +1914,9 @@ def korte_pauze_toewijzen(studenten_lijst):
                 cel.border = thin_border
                 cel.fill = lichtpaars_fill
                 korte_pauze_ontvangers.add(naam)
-                pv_korte_pauze_count[pv["naam"]] += 1
+                # Niet meetellen als dit een EXTRA overname is of als de pauze voor een PV zelf is
+                if (not is_pauzevlinder(naam)) and (normalize_attr(attr) != 'extra'):
+                    pv_korte_pauze_count[pv["naam"]] += 1
                 geplaatst = True
                 break
             if geplaatst:
@@ -2170,8 +2179,10 @@ for _ in range(max_opt_passes):
         ws_pauze.cell(pv_row_min-1, col).border = thin_border
         cel_max.value = None
         ws_pauze.cell(pv_row_max-1, col).value = None
-        pv_korte_pauze_count[max_pv] -= 1
-        pv_korte_pauze_count[min_pv] += 1
+        # Pas telling aan enkel als dit geen EXTRA-overname is
+        if attr and normalize_attr(attr) != 'extra':
+            pv_korte_pauze_count[max_pv] -= 1
+            pv_korte_pauze_count[min_pv] += 1
         found = True
         break
     if not found:
