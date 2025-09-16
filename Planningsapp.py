@@ -1421,6 +1421,65 @@ for pv, pv_row in pv_rows:
             # Anders: kwartierpauze
             cel.fill = lichtpaars_fill
 
+# --- Gesplitste afdrukweergave (optioneel) ---
+def _build_split_print_sheet():
+    try:
+        if required_pauze_hours:
+            _open_sorted = sorted(required_pauze_hours)
+        else:
+            _open_sorted = sorted(open_uren)
+        _duur = (_open_sorted[-1] - _open_sorted[0]) if len(_open_sorted) > 1 else 0
+        if _duur <= 6 or len(pv_rows) <= 3:
+            return  # geen split nodig
+        sheet_name = "Pauzevlinders_print"
+        # Verwijder oude versie als die bestaat
+        old = [ws for ws in wb_out.worksheets if ws.title == sheet_name]
+        for ws_old in old:
+            wb_out.remove(ws_old)
+        ws_split = wb_out.create_sheet(sheet_name)
+        # Header kopiëren
+        for col in range(1, ws_pauze.max_column + 1):
+            src = ws_pauze.cell(1, col)
+            dst = ws_split.cell(1, col, src.value)
+            dst.fill = src.fill
+            dst.alignment = src.alignment
+            dst.border = src.border
+        out_row = 2
+        # Helper om blok te kopiëren
+        def copy_block(pv, pv_row, pv_index, dest_row):
+            title_val = f"Pauzevlinder {pv_index+1}"
+            tcell = ws_split.cell(dest_row, 1, title_val)
+            tcell.fill = light_fill
+            tcell.alignment = center_align
+            tcell.border = thin_border
+            ncell = ws_split.cell(dest_row+1, 1, pv["naam"])
+            ncell.fill = light_fill
+            ncell.alignment = center_align
+            ncell.border = thin_border
+            for col in pauze_cols:
+                for offset in (0,1):  # boven (attractie) en naamrij
+                    src = ws_pauze.cell(pv_row-1+offset, col)
+                    dst = ws_split.cell(dest_row+offset, col, src.value)
+                    dst.fill = src.fill
+                    dst.alignment = src.alignment
+                    dst.border = src.border
+        # Eerste 3
+        for idx_block, (pv, pv_row) in enumerate(pv_rows[:3]):
+            copy_block(pv, pv_row, idx_block, out_row)
+            out_row += 3
+        out_row += 1  # scheidingsrij
+        for idx_block, (pv, pv_row) in enumerate(pv_rows[3:], start=3):
+            copy_block(pv, pv_row, idx_block, out_row)
+            out_row += 3
+        # Kolombreedtes kopiëren
+        for col_letter, dim in ws_pauze.column_dimensions.items():
+            if dim.width:
+                ws_split.column_dimensions[col_letter].width = dim.width
+    except Exception:
+        pass
+
+_build_split_print_sheet()
+
 # ---- Korte pauze voor pauzevlinders zelf toevoegen (eerst, met afstandscriterium) ----
 def _pv_has_short_pause(naam, pv_row):
     for idx, col in enumerate(pauze_cols):
