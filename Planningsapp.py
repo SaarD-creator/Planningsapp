@@ -1450,52 +1450,55 @@ def _build_wrapped_print_sheet():
         for ws_old in [ws for ws in wb_out.worksheets if ws.title == sheet_name]:
             wb_out.remove(ws_old)
         ws_print = wb_out.create_sheet(sheet_name)
-        # Schrijf eerste header-segment
-        ws_print.cell(1,1,"").fill = light_fill
-        ws_print.cell(1,1).border = thin_border
-        for idx,c in enumerate(first_cols, start=2):
-            src = ws_pauze.cell(1,c)
-            dst = ws_print.cell(1, idx, src.value)
-            dst.fill = src.fill
-            dst.alignment = src.alignment
-            dst.border = src.border
-        row_out = 2
+        
         # Helper: kopieer PV blok (titel + 2 rijen) voor gegeven kolommen
-        def copy_block_segment(pv, pv_row, pv_index, dest_start_row, cols, col_offset):
+        def copy_block_segment(pv, pv_row, pv_index, dest_start_row, cols):
             title = f"Pauzevlinder {pv_index+1}"
             t = ws_print.cell(dest_start_row,1,title)
             t.fill = light_fill; t.alignment=center_align; t.border=thin_border
             n = ws_print.cell(dest_start_row+1,1,pv["naam"])
             n.fill = light_fill; n.alignment=center_align; n.border=thin_border
             for idx,c in enumerate(cols, start=2):
-                target_col = idx + col_offset
                 for offset in (0,1):
                     src = ws_pauze.cell(pv_row-1+offset, c)
-                    dst = ws_print.cell(dest_start_row+offset, target_col, src.value)
+                    dst = ws_print.cell(dest_start_row+offset, idx, src.value)
                     dst.fill = src.fill; dst.alignment = src.alignment; dst.border = src.border
-        # Eerste segment blokken
+        
+        # EERSTE BLOK: Lange pauze kolommen (eerste 3)
+        # Header
+        ws_print.cell(1,1,"").fill = light_fill; ws_print.cell(1,1).border = thin_border
+        for idx,c in enumerate(first_cols, start=2):
+            src = ws_pauze.cell(1,c)
+            dst = ws_print.cell(1, idx, src.value)
+            dst.fill = src.fill; dst.alignment = src.alignment; dst.border = src.border
+        # PV blokken
+        row_out = 2
         for pv_index,(pv,pv_row) in enumerate(pv_rows):
-            copy_block_segment(pv,pv_row,pv_index,row_out,first_cols,0)
+            copy_block_segment(pv,pv_row,pv_index,row_out,first_cols)
             row_out += 3
-        # Lege scheiding
+        
+        # SCHEIDING
         row_out += 1
-        # Tweede header-segment (reset columns vanaf B)
+        
+        # TWEEDE BLOK: Korte pauze kolommen (rest)
+        # Header
         base_row_second = row_out
-        ws_print.cell(base_row_second,1,"").fill = light_fill
-        ws_print.cell(base_row_second,1).border = thin_border
+        ws_print.cell(base_row_second,1,"").fill = light_fill; ws_print.cell(base_row_second,1).border = thin_border
         for idx,c in enumerate(second_cols, start=2):
             src = ws_pauze.cell(1,c)
             dst = ws_print.cell(base_row_second, idx, src.value)
             dst.fill = src.fill; dst.alignment = src.alignment; dst.border = src.border
+        # PV blokken
         row_out = base_row_second + 1
         for pv_index,(pv,pv_row) in enumerate(pv_rows):
-            copy_block_segment(pv,pv_row,pv_index,row_out,second_cols,0)
+            copy_block_segment(pv,pv_row,pv_index,row_out,second_cols)
             row_out += 3
-        # Kolombreedtes voor leesbaarheid
+            
+        # Kolombreedtes
         ws_print.column_dimensions['A'].width = ws_pauze.column_dimensions['A'].width or 12
-        for idx in range(2, len(first_cols)+2):
+        max_cols = max(len(first_cols), len(second_cols))
+        for idx in range(2, max_cols+2):
             ws_print.column_dimensions[get_column_letter(idx)].width = 10
-        # Tweede segment kolombreedtes (zelfde range omdat we resetten)
     except Exception:
         pass
 
