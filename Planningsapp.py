@@ -1411,77 +1411,61 @@ for pv, pv_row in pv_rows:
             # Anders: kwartierpauze
             cel.fill = lichtpaars_fill
 
-# ---- Korte pauze voor pauzevlinders zelf toevoegen ----
-for pv, pv_row in pv_rows:
-    # Zoek alle blokken met de naam van de pauzevlinder in deze rij
-    blokken = []  # lijst van (start_idx, lengte)
-    idx = 0
-    while idx < len(pauze_cols):
-        col = pauze_cols[idx]
-        cel = ws_pauze.cell(pv_row, col)
-        if cel.value == pv["naam"]:
-            # Kijk hoe lang het blok is
-            lengte = 1
-            while idx+lengte < len(pauze_cols) and ws_pauze.cell(pv_row, pauze_cols[idx+lengte]).value == pv["naam"]:
-                lengte += 1
-            blokken.append((idx, lengte))
-            idx += lengte
-        else:
-            idx += 1
-    # Zoek de index van het einde van de lange pauze (dubbel blok)
-    lange_blok_einde = None
-    for start, lengte in blokken:
-        if lengte >= 2:
-            lange_blok_einde = start + lengte - 1
-            break
-    # Zoek een vrij kwartierblok minstens 10 blokjes na de lange pauze, NIET in de eerste 12 kwartieren (tenzij <=6u open)
+# ---- Korte pauze voor pauzevlinders zelf toevoegen (eerst, met afstandscriterium) ----
+def _pv_has_short_pause(naam, pv_row):
+    for idx, col in enumerate(pauze_cols):
+        if ws_pauze.cell(pv_row, col).value == naam:
+            left_same = idx > 0 and ws_pauze.cell(pv_row, pauze_cols[idx-1]).value == naam
+            right_same = idx+1 < len(pauze_cols) and ws_pauze.cell(pv_row, pauze_cols[idx+1]).value == naam
+            if not left_same and not right_same:
+                return True
+    return False
+
+def _pv_place_best_short(pv, pv_row, target_gap=10):
+    naam = pv["naam"]
+    # Als er al een korte pauze staat, niets doen
+    if _pv_has_short_pause(naam, pv_row):
+        return False
+    # Verzamel alle eigen pauzecolumn-indices (lange + evt. bestaande korte)
+    taken_idx = []
+    for i, col in enumerate(pauze_cols):
+        if ws_pauze.cell(pv_row, col).value == naam:
+            taken_idx.append(i)
+    # Kandidaten: lege cellen op eigen rij, kolom toegestaan
     def is_toegestaan_pv_col(col):
         if len(open_uren) <= 6:
             return True
         return col not in get_verboden_korte_pauze_kolommen()
-    if lange_blok_einde is not None:
-        min_kort_idx = lange_blok_einde + 10
-        for idx in range(min_kort_idx, len(pauze_cols)):
-            col = pauze_cols[idx]
-            if not is_toegestaan_pv_col(col):
-                continue
-            cel = ws_pauze.cell(pv_row, col)
-            if cel.value in [None, ""]:
-                cel.value = pv["naam"]
-                cel.fill = lichtpaars_fill
-                cel.alignment = center_align
-                cel.border = thin_border
-                break
+    candidates = []
+    for i, col in enumerate(pauze_cols):
+        if not is_toegestaan_pv_col(col):
+            continue
+        if ws_pauze.cell(pv_row, col).value not in [None, ""]:
+            continue
+        # Bereken afstand tot dichtstbijzijnde eigen pauzecol
+        if taken_idx:
+            gap = min(abs(i - j) for j in taken_idx)
+        else:
+            gap = 10**9
+        candidates.append((gap, i, col))
+    if not candidates:
+        return False
+    # Kies beste: eerst die met gap >= target en grootste gap, anders max gap; tie-break: kleinste index
+    good = [c for c in candidates if c[0] >= target_gap]
+    if good:
+        best = max(good, key=lambda x: (x[0], -x[1]))
     else:
-        # Geen lange pauze: zoek het eerste vrije kwartierblok NA alle lange pauzes van de lange werkers
-        # Zoek globaal het laatste dubbele blok in de sheet (over alle pauzevlinders)
-        laatste_dubbel_idx = -1
-        for other_pv, other_pv_row in pv_rows:
-            idx2 = 0
-            while idx2 < len(pauze_cols):
-                col2 = pauze_cols[idx2]
-                cel2 = ws_pauze.cell(other_pv_row, col2)
-                if cel2.value == other_pv["naam"]:
-                    lengte2 = 1
-                    while idx2+lengte2 < len(pauze_cols) and ws_pauze.cell(other_pv_row, pauze_cols[idx2+lengte2]).value == other_pv["naam"]:
-                        lengte2 += 1
-                    if lengte2 >= 2 and idx2+lengte2-1 > laatste_dubbel_idx:
-                        laatste_dubbel_idx = idx2+lengte2-1
-                    idx2 += lengte2
-                else:
-                    idx2 += 1
-        min_kort_idx = laatste_dubbel_idx + 1 if laatste_dubbel_idx >= 0 else 0
-        for idx in range(min_kort_idx, len(pauze_cols)):
-            col = pauze_cols[idx]
-            if not is_toegestaan_pv_col(col):
-                continue
-            cel = ws_pauze.cell(pv_row, col)
-            if cel.value in [None, ""]:
-                cel.value = pv["naam"]
-                cel.fill = lichtpaars_fill
-                cel.alignment = center_align
-                cel.border = thin_border
-                break
+        best = max(candidates, key=lambda x: (x[0], -x[1]))
+    _, i, col = best
+    cel = ws_pauze.cell(pv_row, col)
+    cel.value = naam
+    cel.fill = lichtpaars_fill
+    cel.alignment = center_align
+    cel.border = thin_border
+    return True
+
+for pv, pv_row in pv_rows:
+    _pv_place_best_short(pv, pv_row, target_gap=10)
 
 
 # ---- Korte pauze voor ALLE studenten (ook <=6u, behalve pauzevlinders en lange werkers) ----
@@ -1614,6 +1598,9 @@ def _place_short_pause_for(naam):
         if not attr:
             continue
         for pv, pv_row in pv_rows:
+            # Als de persoon zelf een pauzevlinder is, plan korte pauze enkel in eigen rij
+            if is_pauzevlinder(naam) and pv["naam"] != naam:
+                continue
             if ws_pauze.cell(pv_row, col).value not in [None, ""]:
                 continue
             if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
@@ -2207,6 +2194,9 @@ def _enforce_min_gap_for_short_pauses(desired_gap=10, max_passes=5):
                 # zoek beste lege slot
                 best = None  # (best_gap, to_row, to_col)
                 for _pv, pv_row in pv_rows:
+                    # Pauzevlinders: korte pauze enkel op eigen rij verplaatsen/plaatsen
+                    if is_pauzevlinder(naam) and _pv["naam"] != naam:
+                        continue
                     for col in pauze_cols:
                         if not _can_place_short_pause(naam, pv_row, col):
                             continue
