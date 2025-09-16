@@ -1781,9 +1781,9 @@ def korte_pauze_toewijzen(studenten_lijst):
                 continue
             geldige_slots = []
             for (pv, pv_row) in pv_rows:
-                        # Pauzevlinders: enkel op eigen rij
-                        if is_pauzevlinder(naam) and pv["naam"] != naam:
-                            continue
+                # Pauzevlinders: enkel op eigen rij
+                if is_pauzevlinder(naam) and pv["naam"] != naam:
+                    continue
                 for col in pauze_cols:
                     col_header = ws_pauze.cell(1, col).value
                     col_uur = parse_header_uur(col_header)
