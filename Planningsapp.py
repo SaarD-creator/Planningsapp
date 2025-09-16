@@ -1167,8 +1167,9 @@ def plaats_student(student, harde_mode=False):
                         for afstand in afstanden:
                             opties = opties_per_afstand.get(afstand, [])
                             if opties:
-                                # Kies de meest rechtse optie qua tijd (hoogste uur_kort)
-                                beste_optie = max(opties, key=lambda x: x[1])
+                                # Sorteer alle opties met deze afstand op kolomindex (meest rechts eerst)
+                                opties_sorted = sorted(opties, key=lambda x: x[2], reverse=True)
+                                beste_optie = opties_sorted[0]
                                 _afstand, uur_kort, col_kort, pv_row2, attr_kort = beste_optie
                                 boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
                                 boven_cel_kort.value = attr_kort
