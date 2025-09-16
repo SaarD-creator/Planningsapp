@@ -1453,9 +1453,42 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
         else:
             i += 1
 
-    # Geen eigen lange pauze: geen plaatsing hier; laat algemene logica het later doen
+    # Geen eigen lange pauze: kies een rechtse, geldige plek op eigen rij (liefst index >= target_gap)
     if lange_blok_einde is None:
-        return False
+        werk_uren = get_student_work_hours(naam)
+        if len(werk_uren) > 2:
+            verboden_uren = {werk_uren[0], werk_uren[-1]}
+        else:
+            verboden_uren = set(werk_uren)
+        candidates = []  # (prefer, idx, col, uur)
+        for i, col in enumerate(pauze_cols):
+            header = ws_pauze.cell(1, col).value
+            uur = parse_header_uur(header)
+            if uur not in werk_uren or uur in verboden_uren:
+                continue
+            if not is_toegestaan_pv_col(col):
+                continue
+            if ws_pauze.cell(pv_row, col).value not in [None, ""]:
+                continue
+            prefer = 1 if i >= target_gap else 0
+            candidates.append((prefer, i, col, uur))
+        if not candidates:
+            return False
+        # Kies met voorkeur voor index >= target_gap, en verder meest rechts (grootste idx)
+        candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        _pref, i, col, uur = candidates[0]
+        attr = vind_attractie_op_uur(naam, uur)
+        if not attr:
+            return False
+        ws_pauze.cell(pv_row-1, col).value = attr
+        ws_pauze.cell(pv_row-1, col).alignment = center_align
+        ws_pauze.cell(pv_row-1, col).border = thin_border
+        cel = ws_pauze.cell(pv_row, col)
+        cel.value = naam
+        cel.fill = lichtpaars_fill
+        cel.alignment = center_align
+        cel.border = thin_border
+        return True
     else:
         anchor_idx = lange_blok_einde
 
