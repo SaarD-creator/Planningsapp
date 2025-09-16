@@ -1285,6 +1285,7 @@ def plaats_student(student, harde_mode=False):
                                 cel.border = thin_border
                                 reg["korte"] = True
                                 return True
+    return False
     # Verwijder dubbele fallback-lus en zorg dat alle 'continue' statements binnen een for-lus staan
     return False
 
