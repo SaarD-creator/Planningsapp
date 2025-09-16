@@ -1453,20 +1453,9 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
         else:
             i += 1
 
-    # Geen eigen lange pauze: gebruik globale laatste dubbele blok over alle pv-rijen als anker
+    # Geen eigen lange pauze: geen plaatsing hier; laat algemene logica het later doen
     if lange_blok_einde is None:
-        last_double_end = -1
-        for _pv2, row2 in pv_rows:
-            j = 0
-            while j < len(pauze_cols)-1:
-                c1 = pauze_cols[j]
-                c2 = pauze_cols[j+1]
-                if ws_pauze.cell(row2, c1).value == _pv2["naam"] and ws_pauze.cell(row2, c2).value == _pv2["naam"]:
-                    last_double_end = max(last_double_end, j+1)
-                    j += 2
-                else:
-                    j += 1
-        anchor_idx = last_double_end if last_double_end >= 0 else None
+        return False
     else:
         anchor_idx = lange_blok_einde
 
@@ -1678,33 +1667,90 @@ def _place_short_pause_for(naam):
     if not werk_uren:
         return False
     verboden_uren = {werk_uren[0], werk_uren[-1]} if len(werk_uren) > 2 else set(werk_uren)
-    # maak lijst van geldige (pv_row, col) slots op basis van uren en regels
-    candidates = []
-    for col in pauze_cols:
+    # Zoek anker = einde van eigen lange pauze (kolomindex in pauze_cols)
+    def _last_long_end_index_for(naam):
+        best = -1
+        for _pv, _row in pv_rows:
+            for idx in range(len(pauze_cols)-1):
+                if ws_pauze.cell(_row, pauze_cols[idx]).value == naam and ws_pauze.cell(_row, pauze_cols[idx+1]).value == naam:
+                    best = max(best, idx+1)
+        return best
+    anchor = _last_long_end_index_for(naam)
+
+    # Helper om te checken en plaatsen op gewenste col
+    def _try_place_at_col(col):
         header = ws_pauze.cell(1, col).value
         uur = parse_header_uur(header)
         if uur not in werk_uren or uur in verboden_uren:
-            continue
+            return False
         if not is_korte_pauze_toegestaan_col(col):
-            continue
+            return False
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
-            continue
+            return False
+        # verzamel geldige (pv_row) volgens regels
+        rows = []
         for pv, pv_row in pv_rows:
-            # Als de persoon zelf een pauzevlinder is, plan korte pauze enkel in eigen rij
             if is_pauzevlinder(naam) and pv["naam"] != naam:
                 continue
             if ws_pauze.cell(pv_row, col).value not in [None, ""]:
                 continue
             if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
                 continue
-            candidates.append((pv, pv_row, col))
-    if not candidates:
+            rows.append((pv, pv_row))
+        if not rows:
+            return False
+        # fairness op pv-rijen
+        rows.sort(key=lambda r: pv_korte_pauze_count[r[0]["naam"]])
+        pv, pv_row = rows[0]
+        ws_pauze.cell(pv_row-1, col).value = attr
+        ws_pauze.cell(pv_row-1, col).alignment = center_align
+        ws_pauze.cell(pv_row-1, col).border = thin_border
+        cel = ws_pauze.cell(pv_row, col)
+        cel.value = naam
+        cel.alignment = center_align
+        cel.border = thin_border
+        cel.fill = lichtpaars_fill
+        pv_korte_pauze_count[pv["naam"]] += 1
+        return True
+
+    # Als anchor bestaat, probeer exact +10, dan groter, anders lagere alternatieven
+    if anchor >= 0:
+        # +10 en verder
+        for d in range(10, len(pauze_cols)-anchor):
+            if _try_place_at_col(pauze_cols[anchor + d]):
+                return True
+        # lager
+        for d in range(9, 0, -1):
+            idx = anchor + d
+            if 0 <= idx < len(pauze_cols) and _try_place_at_col(pauze_cols[idx]):
+                return True
+
+    # Als geen anchor of niets gevonden: val terug op fairness, maar zonder links-bias
+    # Kies uit alle geldige (pv_row, col) paren, sorteer op pv fairness en dan op kolomindex die het verst ligt van begin (rechts-bias)
+    pairs = []
+    for col in pauze_cols:
+        if not is_korte_pauze_toegestaan_col(col):
+            continue
+        header = ws_pauze.cell(1, col).value
+        uur = parse_header_uur(header)
+        if uur not in werk_uren or uur in verboden_uren:
+            continue
+        attr = vind_attractie_op_uur(naam, uur)
+        if not attr:
+            continue
+        for pv, pv_row in pv_rows:
+            if is_pauzevlinder(naam) and pv["naam"] != naam:
+                continue
+            if ws_pauze.cell(pv_row, col).value not in [None, ""]:
+                continue
+            if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                continue
+            pairs.append((pv, pv_row, col))
+    if not pairs:
         return False
-    # fairness: kies pv met minst korte pauzes tot nu toe
-    candidates.sort(key=lambda x: (pv_korte_pauze_count[x[0]["naam"]], x[2]))
-    pv, pv_row, col = candidates[0]
-    # schrijf label boven cel en naam in cel
+    pairs.sort(key=lambda x: (pv_korte_pauze_count[x[0]["naam"]], -pauze_cols.index(x[2])))
+    pv, pv_row, col = pairs[0]
     attr = vind_attractie_op_uur(naam, parse_header_uur(ws_pauze.cell(1, col).value))
     ws_pauze.cell(pv_row-1, col).value = attr
     ws_pauze.cell(pv_row-1, col).alignment = center_align
