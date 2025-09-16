@@ -2442,11 +2442,10 @@ ws_feedback = wb_out.create_sheet("Feedback")
 row_fb = 1
 
 # 1. Lange werkers (>6u) zonder lange pauze
-lange_werkers_zonder_lange_pauze = []
-for s in lange_werkers:
-    naam = s["naam"]
-    # Zoek in ws_pauze of deze student een dubbele blok (lange pauze) heeft
-    heeft_lange = False
+lange_werkers_zonder_lange_pauze = set()
+
+def _heeft_lange_pauze_naam(naam: str) -> bool:
+    """Zoek in ws_pauze of deze persoon een dubbele blok (lange pauze) heeft."""
     for pv, pv_row in pv_rows:
         for idx, col in enumerate(pauze_cols):
             cel = ws_pauze.cell(pv_row, col)
@@ -2456,17 +2455,27 @@ for s in lange_werkers:
                     next_col = pauze_cols[idx+1]
                     cel_next = ws_pauze.cell(pv_row, next_col)
                     if cel_next.value == naam:
-                        heeft_lange = True
-                        break
-        if heeft_lange:
-            break
-    if not heeft_lange:
-        lange_werkers_zonder_lange_pauze.append(naam)
+                        return True
+    return False
+
+# a) reguliere lange werkers
+for s in lange_werkers:
+    naam = s["naam"]
+    if not _heeft_lange_pauze_naam(naam):
+        lange_werkers_zonder_lange_pauze.add(naam)
+
+# b) pauzevlinders die >6u werken meenemen
+for pv, _pv_row in pv_rows:
+    naam = pv["naam"]
+    werk_uren = get_student_work_hours(naam) or []
+    if len(werk_uren) > 6:
+        if not _heeft_lange_pauze_naam(naam):
+            lange_werkers_zonder_lange_pauze.add(naam)
 
 ws_feedback.cell(row_fb, 1, "Lange werkers (>6u) zonder lange pauze:")
 row_fb += 1
 if lange_werkers_zonder_lange_pauze:
-    for naam in lange_werkers_zonder_lange_pauze:
+    for naam in sorted(lange_werkers_zonder_lange_pauze):
         ws_feedback.cell(row_fb, 1, naam)
         row_fb += 1
 else:
