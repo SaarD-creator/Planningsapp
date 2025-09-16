@@ -1474,8 +1474,8 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
             candidates.append((prefer, i, col, uur))
         if not candidates:
             return False
-        # Kies met voorkeur voor index >= target_gap; binnen die groep de vroegste (kleinste index)
-        candidates.sort(key=lambda x: (x[0] == 0, x[1]))
+        # Kies met voorkeur voor index >= target_gap; binnen die groep de laatste (grootste index) om niet te vroeg te vallen
+        candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
         _pref, i, col, uur = candidates[0]
         attr = vind_attractie_op_uur(naam, uur)
         if not attr:
@@ -1584,7 +1584,7 @@ def _pv_place_best_short(pv, pv_row, target_gap=10):
     return False
 
 for pv, pv_row in pv_rows:
-    _pv_place_best_short(pv, pv_row, target_gap=10)
+    _pv_place_best_short(pv, pv_row, target_gap=8)
 
 
 # ---- Korte pauze voor ALLE studenten (ook <=6u, behalve pauzevlinders en lange werkers) ----
