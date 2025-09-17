@@ -740,6 +740,29 @@ ws_pauze.column_dimensions['A'].width = max(12, max_len_colA + 2)
 for col in range(2, len(uren_rij1) + 2):
     ws_pauze.column_dimensions[get_column_letter(col)].width = 10
 
+# -----------------------------
+# Herhaal pauzevlinder structuur ONDER de bestaande rijen, maar met gegevens vanaf kolom N
+# -----------------------------
+# Bepaal waar de nieuwe rijen moeten beginnen
+nieuwe_rij_start = rij_out + 1
+
+# Herhaal de pauzevlinder structuur
+for pv_idx, pv in enumerate(selected, start=1):
+    # Titel: Pauzevlinder X
+    title_cell = ws_pauze.cell(nieuwe_rij_start, 1, f"Pauzevlinder {pv_idx}")
+    title_cell.font = Font(bold=True)
+    title_cell.fill = light_fill
+    title_cell.alignment = center_align
+    title_cell.border = thin_border
+
+    # Naam eronder (zelfde stijl en kleur)
+    naam_cel = ws_pauze.cell(nieuwe_rij_start + 1, 1, pv["naam"])
+    naam_cel.fill = light_fill
+    naam_cel.alignment = center_align
+    naam_cel.border = thin_border
+
+    nieuwe_rij_start += 3  # lege rij ertussen
+
 # Gebruik exact dezelfde open_uren en headers als in deel 1 voor de pauzeplanning
 uren_rij1 = []
 for uur in sorted(open_uren):
@@ -2522,94 +2545,62 @@ else:
     row_fb += 1
 
 # -----------------------------
-# DUPLICEER PAUZEVLINDERS GEGEVENS VANAF KOLOM N
+# KOPIEER PAUZEGEGEVENS NAAR TWEEDE SECTIE (VANAF KOLOM N)
 # -----------------------------
-ws_pauze = wb_out["Pauzevlinders"]
+# Vind eerste en tweede sectie pauzevlinder rijen
+eerste_sectie_rows = []
+tweede_sectie_rows = []
 
-# Bepaal waar de eerste sectie eindigt (aantal uren + 1 voor kolom A)
-einde_eerste_sectie = len(uren_rij1) + 1  # +1 voor kolom A
-start_tweede_sectie = 14  # Kolom N
+# Alle pv_rows zijn nu gevuld, we moeten ze verdelen in eerste en tweede sectie
+pv_namen = [pv["naam"] for pv in selected]
+for pv_naam in pv_namen:
+    gevonden_rijen = []
+    for pv, row in pv_rows:
+        if pv["naam"] == pv_naam:
+            gevonden_rijen.append(row)
+    
+    # Sorteer op rij nummer
+    gevonden_rijen.sort()
+    if len(gevonden_rijen) >= 1:
+        eerste_sectie_rows.append(gevonden_rijen[0])
+    if len(gevonden_rijen) >= 2:
+        tweede_sectie_rows.append(gevonden_rijen[1])
 
-# Kopieer headers (rij 1) vanaf kolom N
-for col_offset, uur in enumerate(uren_rij1):
-    bron_col = 2 + col_offset  # Kolommen B, C, D, etc.
-    doel_col = start_tweede_sectie + col_offset  # Kolommen N, O, P, etc.
-    
-    # Kopieer de header cel
-    bron_cel = ws_pauze.cell(1, bron_col)
-    doel_cel = ws_pauze.cell(1, doel_col)
-    doel_cel.value = bron_cel.value
-    doel_cel.font = Font(bold=True) if bron_cel.font and bron_cel.font.bold else Font()
-    doel_cel.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-    doel_cel.alignment = Alignment(horizontal="center", vertical="center")
-    doel_cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-
-# Zoek alle rijen met pauzevlinder gegevens
-pauzevlinder_rijen = []
-for row in range(2, ws_pauze.max_row + 1):
-    cel_A = ws_pauze.cell(row, 1)
-    if cel_A.value and ("Pauzevlinder" in str(cel_A.value) or any(pv["naam"] == str(cel_A.value).strip() for pv in selected)):
-        pauzevlinder_rijen.append(row)
-
-# Voor elke pauzevlinder rij, kopieer de gegevens naar de tweede sectie
-for row in pauzevlinder_rijen:
-    # Kopieer kolom A naar kolom M (13)
-    bron_cel_A = ws_pauze.cell(row, 1)
-    doel_cel_M = ws_pauze.cell(row, 13)  # Kolom M
-    doel_cel_M.value = bron_cel_A.value
-    
-    # Maak nieuwe stijlobjecten voor kolom M
-    if bron_cel_A.font and bron_cel_A.font.bold:
-        doel_cel_M.font = Font(bold=True)
-    else:
-        doel_cel_M.font = Font()
-    
-    doel_cel_M.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-    doel_cel_M.alignment = Alignment(horizontal="center", vertical="center")
-    doel_cel_M.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-    
-    # Kopieer de pauzegegevens (kolommen B en verder naar N en verder)
-    for col_offset in range(len(uren_rij1)):
-        bron_col = 2 + col_offset  # Kolommen B, C, D, etc.
-        doel_col = start_tweede_sectie + col_offset  # Kolommen N, O, P, etc.
-        
-        bron_cel = ws_pauze.cell(row, bron_col)
-        doel_cel = ws_pauze.cell(row, doel_col)
-        
-        # Kopieer waarde
-        doel_cel.value = bron_cel.value
-        
-        # Maak nieuwe stijlobjecten gebaseerd op bron
-        doel_cel.font = Font()
-        doel_cel.alignment = Alignment(horizontal="center", vertical="center")
-        doel_cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-        
-        # Bepaal de juiste fill kleur gebaseerd op de inhoud
-        if doel_cel.value in [None, ""]:
-            doel_cel.fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")  # naam_leeg_fill
-        else:
-            # Check of het een lange pauze is (dubbele blok)
-            is_lange_pauze = False
-            if col_offset + 1 < len(uren_rij1):
-                next_bron_col = 2 + col_offset + 1
-                next_bron_cel = ws_pauze.cell(row, next_bron_col)
-                if next_bron_cel.value == bron_cel.value and bron_cel.value not in [None, ""]:
-                    is_lange_pauze = True
-            if col_offset > 0:
-                prev_bron_col = 2 + col_offset - 1
-                prev_bron_cel = ws_pauze.cell(row, prev_bron_col)
-                if prev_bron_cel.value == bron_cel.value and bron_cel.value not in [None, ""]:
-                    is_lange_pauze = True
+# Kopieer gegevens van eerste naar tweede sectie, maar dan vanaf kolom N
+start_col_n = 14  # Kolom N
+for i, (eerste_rij, tweede_rij) in enumerate(zip(eerste_sectie_rows, tweede_sectie_rows)):
+    # Kopieer alle pauzegegevens van kolommen B en verder naar kolommen N en verder
+    for col_offset, col in enumerate(pauze_cols):
+        if col < start_col_n:  # Alleen kopiëren van de eerste sectie kolommen
+            bron_cel = ws_pauze.cell(eerste_rij, col)
+            doel_col = start_col_n + col_offset
+            doel_cel = ws_pauze.cell(tweede_rij, doel_col)
             
-            if is_lange_pauze:
-                doel_cel.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen_fill
+            # Kopieer waarde en stijl
+            doel_cel.value = bron_cel.value
+            if bron_cel.value not in [None, ""]:
+                if hasattr(bron_cel, 'fill') and bron_cel.fill:
+                    # Kopieer de kleur van de originele cel
+                    if bron_cel.fill.start_color and hasattr(bron_cel.fill.start_color, 'rgb'):
+                        if bron_cel.fill.start_color.rgb:
+                            kleur = bron_cel.fill.start_color.rgb[2:] if bron_cel.fill.start_color.rgb.startswith('FF') else bron_cel.fill.start_color.rgb
+                            doel_cel.fill = PatternFill(start_color=kleur, end_color=kleur, fill_type="solid")
+                        else:
+                            doel_cel.fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")
+                    else:
+                        doel_cel.fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")
+                else:
+                    doel_cel.fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")
+                doel_cel.alignment = Alignment(horizontal="center", vertical="center")
+                doel_cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
             else:
-                doel_cel.fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # lichtpaars_fill
+                doel_cel.fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
+                doel_cel.alignment = Alignment(horizontal="center", vertical="center")
+                doel_cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
 
-# Stel kolombreedte in voor de tweede sectie
-ws_pauze.column_dimensions['M'].width = max(12, max_len_colA + 2)  # Kolom M voor pauzevlinder namen
-for col_offset in range(len(uren_rij1)):
-    doel_col = start_tweede_sectie + col_offset
+# Stel kolombreedte in voor kolommen vanaf N
+for col_offset in range(len([c for c in pauze_cols if c < start_col_n])):
+    doel_col = start_col_n + col_offset
     ws_pauze.column_dimensions[get_column_letter(doel_col)].width = 10
 
 wb_out.save(output)
