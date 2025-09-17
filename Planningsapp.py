@@ -2553,11 +2553,21 @@ tweede_sectie_rows = []
 
 # Alle pv_rows zijn nu gevuld, we moeten ze verdelen in eerste en tweede sectie
 pv_namen = [pv["naam"] for pv in selected]
+
+# Debug: print alle pv_rows
+print("DEBUG - Alle pv_rows:")
+for pv, row in pv_rows:
+    print(f"PV: {pv['naam']}, Row: {row}")
+
+print(f"DEBUG - PV namen: {pv_namen}")
+
 for pv_naam in pv_namen:
     gevonden_rijen = []
     for pv, row in pv_rows:
         if pv["naam"] == pv_naam:
             gevonden_rijen.append(row)
+    
+    print(f"DEBUG - Voor {pv_naam} gevonden rijen: {gevonden_rijen}")
     
     # Sorteer op rij nummer
     gevonden_rijen.sort()
@@ -2566,16 +2576,25 @@ for pv_naam in pv_namen:
     if len(gevonden_rijen) >= 2:
         tweede_sectie_rows.append(gevonden_rijen[1])
 
+print(f"DEBUG - Eerste sectie rows: {eerste_sectie_rows}")
+print(f"DEBUG - Tweede sectie rows: {tweede_sectie_rows}")
+print(f"DEBUG - Aantal pauze cols: {len(pauze_cols)}")
+print(f"DEBUG - Pauze cols: {pauze_cols}")
+
 # Kopieer gegevens van eerste naar tweede sectie, maar dan vanaf kolom N
 start_col_n = 14  # Kolom N
 originele_pauze_cols = [col for col in pauze_cols if col < start_col_n]  # Alleen B-M
+print(f"DEBUG - Originele pauze cols: {originele_pauze_cols}")
 
 for i, (eerste_rij, tweede_rij) in enumerate(zip(eerste_sectie_rows, tweede_sectie_rows)):
+    print(f"DEBUG - Kopieer van rij {eerste_rij} naar rij {tweede_rij}")
     # Kopieer alle pauzegegevens van kolommen B t/m M naar kolommen N en verder
     for col_offset, bron_col in enumerate(originele_pauze_cols):
         bron_cel = ws_pauze.cell(eerste_rij, bron_col)
         doel_col = start_col_n + col_offset
         doel_cel = ws_pauze.cell(tweede_rij, doel_col)
+        
+        print(f"DEBUG - Kopieer cel ({eerste_rij},{bron_col}) = '{bron_cel.value}' naar cel ({tweede_rij},{doel_col})")
         
         # Kopieer waarde en stijl
         doel_cel.value = bron_cel.value
