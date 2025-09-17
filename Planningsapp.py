@@ -2521,52 +2521,6 @@ else:
     vinkje_cel.font = Font(bold=True, color="006100")
     row_fb += 1
 
-# -----------------------------
-# VERPLAATS PAUZEGEGEVENS VAN KOLOMMEN B-M NAAR KOLOMMEN N+
-# -----------------------------
-ws_pauze = wb_out["Pauzevlinders"]
-
-# Vind alle rijen met pauzegegevens (pauzevlinder naam-rijen)
-pv_naam_rijen = []
-for pv in selected:
-    for row in range(2, ws_pauze.max_row + 1):
-        cel = ws_pauze.cell(row, 1)
-        if cel.value and str(cel.value).strip() == pv["naam"]:
-            pv_naam_rijen.append(row)
-            break
-
-# Voor elke pauzevlinder naam-rij: verplaats gegevens van B-M naar N+
-start_col_n = 14  # Kolom N
-for row in pv_naam_rijen:
-    # Kopieer van kolommen B-M (2-13) naar kolommen N+ (14+)
-    for col_offset in range(12):  # 12 kolommen (B t/m M)
-        bron_col = 2 + col_offset  # B=2, C=3, ..., M=13
-        doel_col = start_col_n + col_offset  # N=14, O=15, etc.
-        
-        # Kopieer cel van bron naar doel
-        bron_cel = ws_pauze.cell(row, bron_col)
-        doel_cel = ws_pauze.cell(row, doel_col)
-        
-        # Kopieer waarde en stijl
-        doel_cel.value = bron_cel.value
-        if hasattr(bron_cel, 'fill'):
-            doel_cel.fill = bron_cel.fill
-        if hasattr(bron_cel, 'alignment'):
-            doel_cel.alignment = bron_cel.alignment  
-        if hasattr(bron_cel, 'border'):
-            doel_cel.border = bron_cel.border
-            
-        # Maak bron cel leeg
-        bron_cel.value = None
-        bron_cel.fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
-        bron_cel.alignment = Alignment(horizontal="center", vertical="center")
-        bron_cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-
-# Stel kolombreedte in voor kolommen N+
-for col_offset in range(12):
-    doel_col = start_col_n + col_offset
-    ws_pauze.column_dimensions[get_column_letter(doel_col)].width = 10
-
 wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
 
