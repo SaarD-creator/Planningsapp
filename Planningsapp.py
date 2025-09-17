@@ -2521,6 +2521,72 @@ else:
     vinkje_cel.font = Font(bold=True, color="006100")
     row_fb += 1
 
+# -----------------------------
+# DUPLICEER PAUZEVLINDERS GEGEVENS VANAF KOLOM N
+# -----------------------------
+ws_pauze = wb_out["Pauzevlinders"]
+
+# Bepaal waar de eerste sectie eindigt (aantal uren + 1 voor kolom A)
+einde_eerste_sectie = len(uren_rij1) + 1  # +1 voor kolom A
+start_tweede_sectie = 14  # Kolom N
+
+# Kopieer headers (rij 1) vanaf kolom N
+for col_offset, uur in enumerate(uren_rij1):
+    bron_col = 2 + col_offset  # Kolommen B, C, D, etc.
+    doel_col = start_tweede_sectie + col_offset  # Kolommen N, O, P, etc.
+    
+    # Kopieer de header cel
+    bron_cel = ws_pauze.cell(1, bron_col)
+    doel_cel = ws_pauze.cell(1, doel_col)
+    doel_cel.value = bron_cel.value
+    doel_cel.font = bron_cel.font
+    doel_cel.fill = bron_cel.fill
+    doel_cel.alignment = bron_cel.alignment
+    doel_cel.border = bron_cel.border
+
+# Zoek alle rijen met pauzevlinder gegevens
+pauzevlinder_rijen = []
+for row in range(2, ws_pauze.max_row + 1):
+    cel_A = ws_pauze.cell(row, 1)
+    if cel_A.value and ("Pauzevlinder" in str(cel_A.value) or any(pv["naam"] == str(cel_A.value).strip() for pv in selected)):
+        pauzevlinder_rijen.append(row)
+
+# Voor elke pauzevlinder rij, kopieer de gegevens naar de tweede sectie
+for row in pauzevlinder_rijen:
+    # Kopieer kolom A naar kolom M (13)
+    bron_cel_A = ws_pauze.cell(row, 1)
+    doel_cel_M = ws_pauze.cell(row, 13)  # Kolom M
+    doel_cel_M.value = bron_cel_A.value
+    doel_cel_M.font = bron_cel_A.font
+    doel_cel_M.fill = bron_cel_A.fill
+    doel_cel_M.alignment = bron_cel_A.alignment
+    doel_cel_M.border = bron_cel_A.border
+    
+    # Kopieer de pauzegegevens (kolommen B en verder naar N en verder)
+    for col_offset in range(len(uren_rij1)):
+        bron_col = 2 + col_offset  # Kolommen B, C, D, etc.
+        doel_col = start_tweede_sectie + col_offset  # Kolommen N, O, P, etc.
+        
+        bron_cel = ws_pauze.cell(row, bron_col)
+        doel_cel = ws_pauze.cell(row, doel_col)
+        
+        # Kopieer alle eigenschappen
+        doel_cel.value = bron_cel.value
+        if bron_cel.font:
+            doel_cel.font = bron_cel.font
+        if bron_cel.fill:
+            doel_cel.fill = bron_cel.fill
+        if bron_cel.alignment:
+            doel_cel.alignment = bron_cel.alignment
+        if bron_cel.border:
+            doel_cel.border = bron_cel.border
+
+# Stel kolombreedte in voor de tweede sectie
+ws_pauze.column_dimensions['M'].width = max(12, max_len_colA + 2)  # Kolom M voor pauzevlinder namen
+for col_offset in range(len(uren_rij1)):
+    doel_col = start_tweede_sectie + col_offset
+    ws_pauze.column_dimensions[get_column_letter(doel_col)].width = 10
+
 wb_out.save(output)
 output.seek(0)  # Zorg dat lezen vanaf begin kan
 
