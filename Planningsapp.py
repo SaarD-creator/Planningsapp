@@ -2522,7 +2522,7 @@ else:
     row_fb += 1
 
 # -----------------------------
-# VERPLAATS PAUZEGEGEVENS VAN KOLOMMEN B-M NAAR KOLOMMEN N+ IN NIEUWE SECTIE
+# KOPIEER PAUZEGEGEVENS NAAR NIEUWE SECTIE ONDER, MAAR VANAF KOLOM N
 # -----------------------------
 ws_pauze = wb_out["Pauzevlinders"]
 
@@ -2545,15 +2545,6 @@ for pv in selected:
                 })
             originele_pv_data.append((row, pv["naam"], pauzegegevens))
             break
-
-# Maak de originele pauzegegevens leeg (kolommen B-M)
-for row, naam, _ in originele_pv_data:
-    for col in range(2, 14):  # B t/m M
-        cel = ws_pauze.cell(row, col)
-        cel.value = None
-        cel.fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
-        cel.alignment = Alignment(horizontal="center", vertical="center")
-        cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
 
 # Voeg nieuwe sectie toe onder de bestaande structuur
 laatste_rij = ws_pauze.max_row
