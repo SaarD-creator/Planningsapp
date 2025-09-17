@@ -2539,10 +2539,10 @@ for col_offset, uur in enumerate(uren_rij1):
     bron_cel = ws_pauze.cell(1, bron_col)
     doel_cel = ws_pauze.cell(1, doel_col)
     doel_cel.value = bron_cel.value
-    doel_cel.font = bron_cel.font
-    doel_cel.fill = bron_cel.fill
-    doel_cel.alignment = bron_cel.alignment
-    doel_cel.border = bron_cel.border
+    doel_cel.font = Font(bold=True) if bron_cel.font and bron_cel.font.bold else Font()
+    doel_cel.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    doel_cel.alignment = Alignment(horizontal="center", vertical="center")
+    doel_cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
 
 # Zoek alle rijen met pauzevlinder gegevens
 pauzevlinder_rijen = []
@@ -2557,10 +2557,16 @@ for row in pauzevlinder_rijen:
     bron_cel_A = ws_pauze.cell(row, 1)
     doel_cel_M = ws_pauze.cell(row, 13)  # Kolom M
     doel_cel_M.value = bron_cel_A.value
-    doel_cel_M.font = bron_cel_A.font
-    doel_cel_M.fill = bron_cel_A.fill
-    doel_cel_M.alignment = bron_cel_A.alignment
-    doel_cel_M.border = bron_cel_A.border
+    
+    # Maak nieuwe stijlobjecten voor kolom M
+    if bron_cel_A.font and bron_cel_A.font.bold:
+        doel_cel_M.font = Font(bold=True)
+    else:
+        doel_cel_M.font = Font()
+    
+    doel_cel_M.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    doel_cel_M.alignment = Alignment(horizontal="center", vertical="center")
+    doel_cel_M.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
     
     # Kopieer de pauzegegevens (kolommen B en verder naar N en verder)
     for col_offset in range(len(uren_rij1)):
@@ -2570,16 +2576,35 @@ for row in pauzevlinder_rijen:
         bron_cel = ws_pauze.cell(row, bron_col)
         doel_cel = ws_pauze.cell(row, doel_col)
         
-        # Kopieer alle eigenschappen
+        # Kopieer waarde
         doel_cel.value = bron_cel.value
-        if bron_cel.font:
-            doel_cel.font = bron_cel.font
-        if bron_cel.fill:
-            doel_cel.fill = bron_cel.fill
-        if bron_cel.alignment:
-            doel_cel.alignment = bron_cel.alignment
-        if bron_cel.border:
-            doel_cel.border = bron_cel.border
+        
+        # Maak nieuwe stijlobjecten gebaseerd op bron
+        doel_cel.font = Font()
+        doel_cel.alignment = Alignment(horizontal="center", vertical="center")
+        doel_cel.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+        
+        # Bepaal de juiste fill kleur gebaseerd op de inhoud
+        if doel_cel.value in [None, ""]:
+            doel_cel.fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")  # naam_leeg_fill
+        else:
+            # Check of het een lange pauze is (dubbele blok)
+            is_lange_pauze = False
+            if col_offset + 1 < len(uren_rij1):
+                next_bron_col = 2 + col_offset + 1
+                next_bron_cel = ws_pauze.cell(row, next_bron_col)
+                if next_bron_cel.value == bron_cel.value and bron_cel.value not in [None, ""]:
+                    is_lange_pauze = True
+            if col_offset > 0:
+                prev_bron_col = 2 + col_offset - 1
+                prev_bron_cel = ws_pauze.cell(row, prev_bron_col)
+                if prev_bron_cel.value == bron_cel.value and bron_cel.value not in [None, ""]:
+                    is_lange_pauze = True
+            
+            if is_lange_pauze:
+                doel_cel.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")  # lichtgroen_fill
+            else:
+                doel_cel.fill = PatternFill(start_color="E6DAF7", end_color="E6DAF7", fill_type="solid")  # lichtpaars_fill
 
 # Stel kolombreedte in voor de tweede sectie
 ws_pauze.column_dimensions['M'].width = max(12, max_len_colA + 2)  # Kolom M voor pauzevlinder namen
