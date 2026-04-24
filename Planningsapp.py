@@ -1,3 +1,8 @@
+# niet meer laden na elke verandering
+# Werkblad heropleidingen! Plus op de planning
+# LM: afkappingen is in orde (automatisch op planning) Maar: lange blokken (5 uur aan een stuk) kunnen precies voorkomen...
+# post-processing laat geen switches toe die een 1-uursblok achterlaten (ook niet in LM)
+# max van vier uur aaneensluitend is weg, maar lossere regels in post-processing (wel vaak vier uursblokken)
 # last minute afwezigen ziet er al goed uit!
 # uitschakelen pauzevlinderuren werkt!
 # volgorde verdeling met pauzevlinders laatst!
@@ -32,6 +37,7 @@ vandaag = datetime.date.today().strftime("%d-%m-%Y")
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
 
 if not uploaded_file:
+    st.session_state.pop("lm_base_bytes", None)   # ← reset bij nieuw bestand
     st.warning("Upload eerst het Excelbestand met de gegevens om verder te gaan.")
     st.stop()
 
@@ -499,6 +505,45 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
             uur = pv_pauze_uren[i]
             extra_assignments[uur].append(laatste_pv["naam"])
             afgekapte_pv_uren.add(uur)  # nieuw: registreer dit uur als afgeknipt
+
+
+def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
+    """
+    Herleidt afgekapte_pv_uren op basis van de huidige selected-lijst.
+    Raakt extra_assignments niet aan.
+    In last-minute context: geef absentees_set en base_maps mee voor
+    correcte pauzetelling (i.p.v. stale BP2/BQ2 cellen).
+    """
+    global afgekapte_pv_uren
+    afgekapte_pv_uren = set()
+
+    _aantal_pv = len(selected)
+    _aantal_pauze_uren = len(required_pauze_hours)
+    if _aantal_pv == 0 or _aantal_pauze_uren == 0:
+        return
+
+    _plaatsen = (_aantal_pauze_uren * 4 - 1) * _aantal_pv
+
+    if absentees_set is not None and base_maps is not None:
+        _lange, _korte = lm5_bereken_pauze_counts(absentees_set, base_maps)
+    else:
+        try:
+            _lange = int(ws["BP2"].value) if ws["BP2"].value else 0
+        except:
+            _lange = 0
+        try:
+            _korte = int(ws["BQ2"].value) if ws["BQ2"].value else 0
+        except:
+            _korte = 0
+
+    _open_spots = _plaatsen - (2 * _lange + _korte)
+    _overbodige = max(0, math.floor((_open_spots - _aantal_pv * 3) / 4))
+
+    if _overbodige > 0:
+        _pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
+        for uur in _pv_pauze_uren[:min(_overbodige, len(_pv_pauze_uren))]:
+            afgekapte_pv_uren.add(uur)
+
 
 
 
@@ -977,7 +1022,7 @@ def doorschuif_leegplek(uur, attr, pos_idx, student_naam, stap, max_stappen=5):
         return True
     return False
 
-max_iterations = 5
+max_iterations = 10
 for _ in range(max_iterations):
     changes_made = False
     for uur in open_uren:
@@ -1096,8 +1141,6 @@ def respects_student_attr_rules(student, attr):
     uren = get_hours_on_attr(student, attr)
     if len(uren) > 6:
         return False
-    if max_consecutive_hours(uren) > 4:
-        return False
     return True
 
 def can_swap_exact_block(student_a, attr_a, block_hours, student_b, attr_b):
@@ -1175,7 +1218,8 @@ def try_swap_specific_block(student, attr, block_hours):
     - het blok 2 of 3 uur lang is
     - de andere student op exact die uren ook één blok op één attractie heeft
     - alle regels geldig blijven
-    - max 1 extra wissel ontstaat
+    - geen geïsoleerde 1-uursblokken ontstaan
+    - max 2 extra wissels in totaal
     - het totaal aantal >4u-problemen niet stijgt
     - en liefst daalt
     """
@@ -1230,6 +1274,20 @@ def try_swap_specific_block(student, attr, block_hours):
 
         valid = True
 
+        # Geen geïsoleerde 1-uursblokken laten ontstaan
+        def heeft_geisoleerd_uur(s, a):
+            runs = get_runs_on_attr(s, a)
+            return any(len(r) == 1 for r in runs)
+
+        if heeft_geisoleerd_uur(student, attr):
+            valid = False
+        if heeft_geisoleerd_uur(student, attr_b):
+            valid = False
+        if heeft_geisoleerd_uur(andere_student, attr):
+            valid = False
+        if heeft_geisoleerd_uur(andere_student, attr_b):
+            valid = False
+
         # Regels voor beide studenten / beide attracties
         for s, a in [
             (student, attr),
@@ -1240,12 +1298,12 @@ def try_swap_specific_block(student, attr, block_hours):
             if not respects_student_attr_rules(s, a):
                 valid = False
 
-        # Max 1 extra wissel in totaal
+        # Max 2 extra wissels in totaal
         new_switches_a = count_attr_switches(student)
         new_switches_b = count_attr_switches(andere_student)
         extra_wissels = (new_switches_a - orig_switches_a) + (new_switches_b - orig_switches_b)
 
-        if extra_wissels > 1:
+        if extra_wissels > 2:
             valid = False
 
         # Problemen na swap
@@ -1297,6 +1355,7 @@ def try_swap_specific_block(student, attr, block_hours):
 
     return False
 
+
 def try_swap_last_or_first_block(student, attr):
     """
     Probeer het laatste of eerste blok op deze attractie te wisselen.
@@ -1342,7 +1401,7 @@ def try_swap_last_or_first_block(student, attr):
 
 
 # Iteratief toepassen tot er niets meer verandert
-max_block_swap_passes = 7
+max_block_swap_passes = 15
 for _ in range(max_block_swap_passes):
     wijziging = False
 
@@ -1829,14 +1888,16 @@ def student_kan_attr_in_analyse(student, attr):
     return all(onderdeel in student.get("attracties", []) for onderdeel in onderdelen)
 
 
-def actieve_analyse_attracties_op_uur(uur):
+def actieve_analyse_attracties_op_uur(uur, actieve_set=None):
     """
     Geeft attracties terug in de volgorde van Input!BL16:BL33,
     maar aangepast aan het specifieke uur:
     - losse attracties als ze actief zijn
     - samengevoegde attracties enkel als ze dat uur actief samengevoegd zijn
+    Optioneel: geef actieve_set mee om de globale actieve_attracties_per_uur te overschrijven.
     """
-    actieve_set = actieve_attracties_per_uur.get(uur, set())
+    if actieve_set is None:
+        actieve_set = actieve_attracties_per_uur.get(uur, set())
 
     input_volgorde_lokaal = []
     for rij_bl in range(16, 34):  # BL16 t.e.m. BL33
@@ -1859,7 +1920,6 @@ def actieve_analyse_attracties_op_uur(uur):
                 continue
             onderdelen = [x.strip() for x in str(actief_attr).split("+")]
             if attr in onderdelen and actief_attr not in gebruikte:
-                # pas invoegen na laatste onderdeel uit de inputvolgorde
                 if all(o in input_volgorde_lokaal for o in onderdelen):
                     laatst_idx = max(input_volgorde_lokaal.index(o) for o in onderdelen)
                     huidig_idx = input_volgorde_lokaal.index(attr)
@@ -1876,7 +1936,7 @@ def actieve_analyse_attracties_op_uur(uur):
     return resultaat
 
 
-def maak_analyse_sheet(wb_arg, am_arg, ea_arg, st_arg):
+def maak_analyse_sheet(wb_arg, am_arg, ea_arg, st_arg, actieve_attracties_override=None):
     # Verwijder oud sheet
     if "Analyse" in wb_arg.sheetnames:
         del wb_arg["Analyse"]
@@ -1884,6 +1944,12 @@ def maak_analyse_sheet(wb_arg, am_arg, ea_arg, st_arg):
     ws_analyse = wb_arg.create_sheet(title="Analyse")
     analyse_header_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
     witte_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+    # Gebruik override als die meegegeven is (last-minute), anders globale data
+    def actieve_set_voor_uur(uur):
+        if actieve_attracties_override is not None:
+            return actieve_attracties_override.get(uur, set())
+        return actieve_attracties_per_uur.get(uur, set())
 
     # Herdefinieer de hulpfunctie lokaal zodat ze de juiste data gebruikt
     def is_aanwezig(student, uur):
@@ -1906,11 +1972,17 @@ def maak_analyse_sheet(wb_arg, am_arg, ea_arg, st_arg):
 
     start_rij = 3
     for uur in sorted(open_uren):
+        actieve_set = actieve_set_voor_uur(uur)
+        analyse_attracties_uur = actieve_analyse_attracties_op_uur(uur, actieve_set)
+
         analyse_studenten_uur = sorted(
             [s for s in st_arg if is_aanwezig(s, uur)],
-            key=lambda s: naam_tie_break_key(s["naam"])
+            key=lambda s: (
+                sum(1 for attr in analyse_attracties_uur if student_kan_attr_in_analyse(s, attr)),
+                naam_tie_break_key(s["naam"])
+            )
         )
-        analyse_attracties_uur = actieve_analyse_attracties_op_uur(uur)
+
         if not analyse_studenten_uur or not analyse_attracties_uur:
             continue
 
@@ -2399,19 +2471,18 @@ def plaats_student(student, harde_mode=False):
     Plaats student bij een geschikte pauzevlinder in B..G op een uur waar student effectief werkt.
     - Overschrijven alleen in harde_mode én alleen als de huidige inhoud géén lange werker is.
     - Volgorde van slots is willekeurig (slot_order) zodat lege plekken random verdeeld blijven.
+    - Korte pauze blijft altijd in dezelfde rij als de lange pauze.
+    - Pauzevlinders krijgen hun korte pauze uitsluitend in hun eigen rij.
     """
     naam = student["naam"]
-    werk_uren = get_student_work_hours(naam)  # echte uren waarop student in 'Planning' staat
-    # Pauze mag niet in eerste of laatste werkuur vallen
+    werk_uren = get_student_work_hours(naam)
     werk_uren_set = set(werk_uren)
     if len(werk_uren) > 2:
         verboden_uren = {werk_uren[0], werk_uren[-1]}
     else:
-        verboden_uren = set(werk_uren)  # als maar 1 of 2 uur: geen pauze mogelijk
+        verboden_uren = set(werk_uren)
 
-    # Sorteer alle pauzekolommen op volgorde
     pauze_cols_sorted = sorted(pauze_cols)
-    # Zoek alle (uur, col) paren, filter verboden uren
     uur_col_pairs = []
     for col in pauze_cols_sorted:
         col_header = ws_pauze.cell(1, col).value
@@ -2419,12 +2490,10 @@ def plaats_student(student, harde_mode=False):
         if col_uur is not None and col_uur in werk_uren_set and col_uur not in verboden_uren:
             uur_col_pairs.append((col_uur, col))
 
-    # Houd bij of deze student al een lange/korte pauze heeft gekregen
     if not hasattr(plaats_student, "pauze_registry"):
         plaats_student.pauze_registry = {}
     reg = plaats_student.pauze_registry.setdefault(naam, {"lange": False, "korte": False})
 
-    # Eerst: zoek alle mogelijke dubbele blokjes voor de lange pauze
     lange_pauze_opties = []
     for i in range(len(uur_col_pairs)-1):
         uur1, col1 = uur_col_pairs[i]
@@ -2432,7 +2501,6 @@ def plaats_student(student, harde_mode=False):
         if col2 == col1 + 1:
             lange_pauze_opties.append((i, uur1, col1, uur2, col2))
 
-    # Probeer alle opties voor de lange pauze (max 1x per student)
     if not reg["lange"] and not heeft_al_lange_pauze(naam):
         for optie in lange_pauze_opties:
             i, uur1, col1, uur2, col2 = optie
@@ -2448,7 +2516,6 @@ def plaats_student(student, harde_mode=False):
                 boven_cel1 = ws_pauze.cell(pv_row-1, col1)
                 boven_cel2 = ws_pauze.cell(pv_row-1, col2)
                 if cel1.value in [None, ""] and cel2.value in [None, ""] and not heeft_al_lange_pauze(naam):
-                    # Vul beide blokjes voor lange pauze
                     boven_cel1.value = attr1
                     boven_cel1.alignment = center_align
                     boven_cel1.border = thin_border
@@ -2462,10 +2529,8 @@ def plaats_student(student, harde_mode=False):
                     cel2.alignment = center_align
                     cel2.border = thin_border
                     reg["lange"] = True
-                    # Nu: zoek een korte pauze, eerst exact 10 blokjes afstand, dan 11, 12, ... tot einde, daarna 9, 8, ... tot 1
                     if not reg["korte"]:
                         found = False
-                        # Eerst exact 10 blokjes afstand
                         for min_blokjes in list(range(10, len(uur_col_pairs)-i)) + list(range(9, 0, -1)):
                             for j in range(i+min_blokjes, len(uur_col_pairs)):
                                 uur_kort, col_kort = uur_col_pairs[j]
@@ -2474,10 +2539,9 @@ def plaats_student(student, harde_mode=False):
                                 attr_kort = vind_attractie_op_uur(naam, uur_kort)
                                 if not attr_kort:
                                     continue
-                                # Belangrijk: alleen op deze PV-rij plaatsen als de pauzevlinder deze attractie kan, behalve bij EXTRA
                                 if (not pv_kan_attr(pv, attr_kort)) and (not is_student_extra(naam)):
                                     continue
-                                # Alleen zoeken in dezelfde rij als de lange pauze (dus bij dezelfde pauzevlinder)
+                                # Altijd dezelfde rij als de lange pauze
                                 cel_kort = ws_pauze.cell(pv_row, col_kort)
                                 boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
                                 if cel_kort.value in [None, ""]:
@@ -2504,8 +2568,12 @@ def plaats_student(student, harde_mode=False):
                                         return True
                             if found:
                                 break
-                    # Geen korte pauze gevonden, maar lange pauze is wel gezet
                     return True
+
+                # -------------------------------------------------------
+                # FIX 1: harde_mode lange pauze – korte pauze vastpinnen
+                # aan pv_row, niet itereren over alle PV-rijen via slot_order
+                # -------------------------------------------------------
                 elif harde_mode:
                     occupant1 = str(cel1.value).strip() if cel1.value else ""
                     occupant2 = str(cel2.value).strip() if cel2.value else ""
@@ -2523,19 +2591,30 @@ def plaats_student(student, harde_mode=False):
                         cel2.alignment = center_align
                         cel2.border = thin_border
                         reg["lange"] = True
-                        # Nu: zoek een korte pauze minstens 6 blokjes verderop
                         if not reg["korte"]:
                             for j in range(i+6, len(uur_col_pairs)):
                                 uur_kort, col_kort = uur_col_pairs[j]
                                 attr_kort = vind_attractie_op_uur(naam, uur_kort)
                                 if not attr_kort:
                                     continue
-                                for (pv2, pv_row2, _) in slot_order:
-                                    if not pv_kan_attr(pv2, attr_kort) and not is_student_extra(naam):
-                                        continue
-                                    cel_kort = ws_pauze.cell(pv_row2, col_kort)
-                                    boven_cel_kort = ws_pauze.cell(pv_row2-1, col_kort)
-                                    if cel_kort.value in [None, ""]:
+                                # Was: for (pv2, pv_row2, _) in slot_order → vrije rij
+                                # Nu:  altijd pv_row (zelfde rij als lange pauze)
+                                if not pv_kan_attr(pv, attr_kort) and not is_student_extra(naam):
+                                    continue
+                                cel_kort = ws_pauze.cell(pv_row, col_kort)
+                                boven_cel_kort = ws_pauze.cell(pv_row-1, col_kort)
+                                if cel_kort.value in [None, ""]:
+                                    boven_cel_kort.value = attr_kort
+                                    boven_cel_kort.alignment = center_align
+                                    boven_cel_kort.border = thin_border
+                                    cel_kort.value = naam
+                                    cel_kort.alignment = center_align
+                                    cel_kort.border = thin_border
+                                    reg["korte"] = True
+                                    return True
+                                elif harde_mode:
+                                    occupant = str(cel_kort.value).strip() if cel_kort.value else ""
+                                    if occupant not in lange_werkers_names:
                                         boven_cel_kort.value = attr_kort
                                         boven_cel_kort.alignment = center_align
                                         boven_cel_kort.border = thin_border
@@ -2544,20 +2623,14 @@ def plaats_student(student, harde_mode=False):
                                         cel_kort.border = thin_border
                                         reg["korte"] = True
                                         return True
-                                    elif harde_mode:
-                                        occupant = str(cel_kort.value).strip() if cel_kort.value else ""
-                                        if occupant not in lange_werkers_names:
-                                            boven_cel_kort.value = attr_kort
-                                            boven_cel_kort.alignment = center_align
-                                            boven_cel_kort.border = thin_border
-                                            cel_kort.value = naam
-                                            cel_kort.alignment = center_align
-                                            cel_kort.border = thin_border
-                                            reg["korte"] = True
-                                            return True
                         return True
-    # Als geen geldige combinatie gevonden, probeer fallback (oude logica)
-    # Korte pauze alleen als nog niet toegekend
+
+    # -------------------------------------------------------
+    # FIX 2: fallback – pauzevlinders krijgen uitsluitend hun
+    # eigen rij; gewone studenten mogen elke vrije rij pakken
+    # -------------------------------------------------------
+    eigen_pv_row = next((row for (pv, row) in pv_rows if pv == naam), None)
+
     for uur in random.sample(werk_uren, len(werk_uren)):
         if uur in verboden_uren:
             continue
@@ -2572,6 +2645,9 @@ def plaats_student(student, harde_mode=False):
             if not is_korte_pauze_toegestaan_col(col, naam):
                 continue
             if not pv_kan_attr(pv, attr) and not is_student_extra(naam):
+                continue
+            # Pauzevlinder mag enkel in zijn eigen rij terechtkomen
+            if eigen_pv_row is not None and pv_row != eigen_pv_row:
                 continue
             cel = ws_pauze.cell(pv_row, col)
             boven_cel = ws_pauze.cell(pv_row - 1, col)
@@ -2600,7 +2676,7 @@ def plaats_student(student, harde_mode=False):
                             reg["korte"] = True
                             return True
     return False
-
+    
 # ---- Fase 1: zachte toewijzing (niet overschrijven) ----
 def heeft_al_lange_pauze(naam):
     # Check of student al een dubbele blok (lange pauze) heeft in het pauzeoverzicht
@@ -3916,18 +3992,24 @@ def maak_pp2_sheets(wb_arg, am_arg):
 
     ws_planning = wb_arg["Planning"]
 
+    # Bouw student_totalen vanuit de Planning-sheet van wb_arg,
+    # net zoals de globale versie dat doet vanuit ws_out.
+    # Dit is belangrijk voor pauzevlinders: hun pauzevlinderuren
+    # staan NIET in assigned_map, maar wél in de Planning-sheet.
     student_totalen = defaultdict(int)
-    for (_uur, _attr), namen in am_arg.items():
-        for naam in namen:
-            student_totalen[naam] += 1
+    _ws_plan_tmp = wb_arg["Planning"]
+    for row in _ws_plan_tmp.iter_rows(min_row=2, values_only=True):
+        for naam in row[1:]:
+            if naam and str(naam).strip() != "":
+                student_totalen[naam] += 1
 
-    for sheet_name in ["PP optie 2", "Feedback optie 2"]:
+    for sheet_name in ["Pauzeplanning", "Feedback PP"]:
         if sheet_name in wb_arg.sheetnames:
             wb_arg.remove(wb_arg[sheet_name])
 
     ws_pauze_basis = wb_arg["Pauzevlinders"]
     ws_pp2 = wb_arg.copy_worksheet(ws_pauze_basis)
-    ws_pp2.title = "PP optie 2"
+    ws_pp2.title = "Pauzeplanning"
 
     # ── hierna de rest van DEEL 5 geïndenteerd ──
 
@@ -6735,14 +6817,14 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # =============================
     # FEEDBACK SHEET - OPTIE 2
     # =============================
-    ws_feedback2 = wb_arg.create_sheet("Feedback optie 2")
+    ws_feedback2 = wb_arg.create_sheet("Feedback PP")
     
     groen_fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
     rood_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
     
     row_fb2 = 1
     
-    ws_feedback2.cell(row_fb2, 1, "Feedback PP optie 2").font = Font(bold=True)
+    ws_feedback2.cell(row_fb2, 1, "Feedback pauzeplanning").font = Font(bold=True)
     row_fb2 += 2
     
     # -----------------------------------
@@ -7460,6 +7542,31 @@ def maak_wisselplanning_sheet(wb_arg, am_arg):
 # ── oorspronkelijke aanroep (vervangt de oude losse code) ──
 maak_wisselplanning_sheet(wb_out, assigned_map)
 
+# -----------------------------
+# Werkblad Heropleidingen
+# -----------------------------
+from openpyxl.styles.proxy import StyleProxy
+from copy import copy
+
+ws_bron = wb.worksheets[[ws.title for ws in wb.worksheets].index("Heropleidingen")] if "Heropleidingen" in wb.sheetnames else None
+if ws_bron:
+    ws_hero = wb_out.create_sheet(title="Heropleidingen")
+    for rij in ws_bron.iter_rows():
+        for cel in rij:
+            nieuwe_cel = ws_hero.cell(row=cel.row, column=cel.column, value=cel.value)
+            if cel.has_style:
+                nieuwe_cel.font = copy(cel.font)
+                nieuwe_cel.fill = copy(cel.fill)
+                nieuwe_cel.border = copy(cel.border)
+                nieuwe_cel.alignment = copy(cel.alignment)
+                nieuwe_cel.number_format = cel.number_format
+    for kol, breedte in ws_bron.column_dimensions.items():
+        ws_hero.column_dimensions[kol].width = breedte.width
+        ws_hero.column_dimensions["A"].width = 11
+    for rij, hoogte in ws_bron.row_dimensions.items():
+        ws_hero.row_dimensions[rij].height = hoogte.height
+
+
 
 #NIEUWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
 #NIEUWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
@@ -7471,6 +7578,30 @@ for bladnaam in ["Pauzevlinders", "Feedback"]:
     if bladnaam in wb_out.sheetnames:
         ws_hide = wb_out[bladnaam]
         ws_hide.sheet_state = "veryHidden" 
+
+# Snapshot voor last-minute (zonder dringende heropleidingen)
+if "lm_base_bytes" not in st.session_state:
+    _buf = BytesIO()
+    wb_out.save(_buf)
+    st.session_state["lm_base_bytes"] = _buf.getvalue()
+
+output_lm_base = BytesIO(st.session_state["lm_base_bytes"])
+
+# -----------------------------
+# Dringende heropleidingen in Planning
+# -----------------------------
+ws_plan = wb_out["Planning"]
+laatste_rij = ws_plan.max_row
+invoegrij = laatste_rij + 2
+
+for rij in ws_hero.iter_rows():
+    if rij[0].value == "Belangrijk!":
+        naam = rij[1].value or ""
+        omschrijving = rij[2].value or ""
+        ws_plan.cell(invoegrij, 1).value = f"Dringende heropleiding: {naam}: {omschrijving}"
+        invoegrij += 1
+
+
 
 #ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 
@@ -7656,6 +7787,34 @@ def lm5_present_students_on_hour(base_maps, uur, absentees_set):
 def lm5_pv_names():
     return [str(pv["naam"]).strip() for pv in selected]
 
+def lm5_bereken_pauze_counts(absentees_set, base_maps):
+    """
+    Bereken lange_pauzes en korte_pauzes voor de last-minute planning
+    op basis van werkelijke werkuren (excl. afwezigen).
+
+    lange_pauzes = (studenten > 6u) + (minderjarige studenten >= 4u)
+    korte_pauzes = studenten >= 4u
+    """
+    uren_per_student = defaultdict(set)
+    for (naam, uur), _attr in base_maps["student_hour_attr"].items():
+        if naam not in absentees_set:
+            uren_per_student[naam].add(uur)
+
+    lange_pauzes = 0
+    korte_pauzes = 0
+    for naam, uren in uren_per_student.items():
+        n = len(uren)
+        is_minor = "-18" in str(naam)
+        if n > 6:
+            lange_pauzes += 1
+        if is_minor and n >= 4:
+            lange_pauzes += 1
+        if n >= 4:
+            korte_pauzes += 1
+
+    return lange_pauzes, korte_pauzes
+
+
 def lm5_extract_capacity_actions():
     result = []
 
@@ -7743,8 +7902,14 @@ def lm5_pick_pv_replacements(absent_pv_names, start_uur, base_maps, absentees_se
 def lm5_active_pv_assignment_for_hour(ctx, uur):
     if uur not in required_pauze_hours:
         return {}
+
+    vrijgegeven_uren = ctx.get("vrijgegeven_pv_uren", set())
+    vrijgegeven_pv   = ctx.get("vrijgegeven_pv_naam", None)
+
     result = {}
     for pvnaam in lm5_pv_names():
+        if uur in vrijgegeven_uren and pvnaam == vrijgegeven_pv:
+            continue
         if pvnaam in ctx["abs_set"]:
             vervanger = ctx["pv_replacements"].get(pvnaam)
             if vervanger:
@@ -7985,50 +8150,7 @@ def lm5_rebuild_hour_state(uur, available_attraction_students, capacity_actions)
         "second_spot_blocked": second_spot_blocked_lm,
         "debug_actions": debug_actions,
     }
-# ------------------------------------------------------------
-# Context
-# ------------------------------------------------------------
-def lm5_init_context(base_maps, absentees, start_uur):
-    abs_set = {str(x).strip() for x in absentees}
-    absent_pv = [n for n in abs_set if n in set(lm5_pv_names())]
 
-    pv_replacements = lm5_pick_pv_replacements(
-        absent_pv_names=absent_pv,
-        start_uur=start_uur,
-        base_maps=base_maps,
-        absentees_set=abs_set
-    )
-
-    student_states = {}
-    for s in studenten:
-        student_states[str(s["naam"]).strip()] = lm5_copy_student_state(s)
-
-    return {
-        "base_maps": base_maps,
-        "abs_set": abs_set,
-        "absent_pv": absent_pv,
-        "pv_replacements": pv_replacements,
-        "student_states": student_states,
-        "assigned_map": defaultdict(list),       # (uur, attr) -> [namen]
-        "extra_assignments": defaultdict(list),  # uur -> [namen]
-        "per_hour_assigned_counts": {uur: defaultdict(int) for uur in open_uren},
-        "hour_states": {},
-        "changes_count": defaultdict(int),
-        "prev_attr": {},
-    }
-
-def lm5_seed_hours_before_start(ctx, start_uur):
-    for (naam, uur), attr in ctx["base_maps"]["student_hour_attr"].items():
-        if uur >= start_uur:
-            continue
-        if naam in ctx["abs_set"]:
-            continue
-
-        ctx["assigned_map"][(uur, attr)].append(naam)
-        ctx["per_hour_assigned_counts"][uur][attr] += 1
-        ctx["student_states"][naam]["assigned_hours"].append(uur)
-        ctx["student_states"][naam]["assigned_attracties"].add(attr)
-        ctx["prev_attr"][naam] = attr
 
 # ------------------------------------------------------------
 # Toewijzingshelpers
@@ -8074,8 +8196,6 @@ def lm5_can_place_student_on_attr(ctx, student, attr, uren):
     totaal = sorted(set(bestaande) | set(uren))
 
     if len(totaal) > 6:
-        return False
-    if max_consecutive_hours(totaal) > 4:
         return False
 
     return True
@@ -8381,9 +8501,6 @@ def lm5_can_student_take_attr_block(ctx, student, attr, block_hours):
     totaal = sorted(set(bestaande) | set(block_hours))
     if len(totaal) > 6:
         return False
-    if max_consecutive_hours(totaal) > 4:
-        return False
-
     return True
 
 def lm5_try_chain_swap_for_block(ctx, released_student_name, target_attr, block_hours):
@@ -8447,7 +8564,7 @@ def lm5_try_chain_swap_for_block(ctx, released_student_name, target_attr, block_
         lm5_rebuild_student_attracties(ctx, andere_student)
 
         # harde 6u/4u check op betrokken attracties
-        if len(lm5_get_hours_on_attr(ctx, released_student_name, attr_b)) > 6 or max_consecutive_hours(lm5_get_hours_on_attr(ctx, released_student_name, attr_b)) > 4:
+        if len(lm5_get_hours_on_attr(ctx, released_student_name, attr_b)) > 6:
             ctx["assigned_map"] = saved_assigned_map
             ctx["per_hour_assigned_counts"] = saved_counts
             released_student["assigned_hours"] = saved_hours_r
@@ -8457,7 +8574,7 @@ def lm5_try_chain_swap_for_block(ctx, released_student_name, target_attr, block_
             ctx["prev_attr"] = saved_prev
             continue
 
-        if len(lm5_get_hours_on_attr(ctx, andere_naam, target_attr)) > 6 or max_consecutive_hours(lm5_get_hours_on_attr(ctx, andere_naam, target_attr)) > 4:
+        if len(lm5_get_hours_on_attr(ctx, andere_naam, target_attr)) > 6:
             ctx["assigned_map"] = saved_assigned_map
             ctx["per_hour_assigned_counts"] = saved_counts
             released_student["assigned_hours"] = saved_hours_r
@@ -8655,8 +8772,6 @@ def lm5_try_fill_empty_slots_from_extras(ctx, start_uur):
 
                     if len(totaal) > 6:
                         continue
-                    if max_consecutive_hours(totaal) > 4:
-                        continue
 
                     orig_attr = ctx["base_maps"]["student_hour_attr"].get((naam, uur), "")
                     kandidaten.append((
@@ -8738,6 +8853,41 @@ def lm5_init_context(base_maps, absentees, start_uur):
         "changes_count": defaultdict(int),
         "prev_attr": {},
     }
+
+
+def lm5_vrijgeven_afgekapte_pv_uren(ctx, start_uur):
+    """
+    Last-minute only: als de afgekapte PV-uren minstens 2 aaneensluitende
+    uren bevatten, worden die uren vrijgegeven zodat de laatste PV (of diens
+    vervanger) in die uren gewoon op de planning kan worden ingezet.
+    """
+    if not afgekapte_pv_uren or not selected:
+        return
+
+    # Alleen runs van >= 2 aaneensluitende uren vrijgeven
+    runs = contiguous_runs(sorted(afgekapte_pv_uren))
+    geschikte_uren = set()
+    for run in runs:
+        if len(run) >= 2:
+            geschikte_uren.update(run)
+
+    if not geschikte_uren:
+        return
+
+    laatste_pv_naam = str(selected[-1]["naam"]).strip()
+    # Bepaal de effectieve persoon (zelf of vervanger)
+    effectief_naam = ctx["pv_replacements"].get(laatste_pv_naam, laatste_pv_naam)
+
+    # Sla op in ctx zodat lm5_active_pv_assignment_for_hour het kan gebruiken
+    ctx["vrijgegeven_pv_uren"] = geschikte_uren
+    ctx["vrijgegeven_pv_naam"] = laatste_pv_naam   # originele PV-naam, niet vervanger
+
+    # Voeg de uren terug toe aan uren_beschikbaar van de effectieve persoon
+    if effectief_naam in ctx["student_states"]:
+        s = ctx["student_states"][effectief_naam]
+        for uur in sorted(geschikte_uren):
+            if uur >= start_uur and uur not in s["uren_beschikbaar"]:
+                s["uren_beschikbaar"].append(uur)
 
 
 def lm5_seed_hours_before_start(ctx, start_uur):
@@ -8881,12 +9031,265 @@ def lm5_extend_extra_rows_if_needed(base_maps, ctx):
     base_maps["extra_rows"] = extra_rows
 
 
-                                     
+# ------------------------------------------------------------
+# Post-processing: 5/6-uursblokken wisselen (last-minute versie)
+# ------------------------------------------------------------
+def lm5_postprocess_long_blocks(ctx, start_uur):
+    """
+    Equivalent van de hoofdplanning-postprocessing, maar voor de ctx-structuur.
+    Werkt alleen op uren >= start_uur (uren daarvoor zijn ingezaaid en vast).
+    """
+
+    am = ctx["assigned_map"]
+
+    # --- Hulpfuncties die werken op ctx ---
+
+    def lm5_pp_get_attr_on_hour(naam, uur):
+        for (u, a), namen in am.items():
+            if u == uur and naam in namen:
+                return a
+        return None
+
+    def lm5_pp_get_hours_on_attr(naam, attr):
+        return sorted(u for (u, a), namen in am.items() if a == attr and naam in namen)
+
+    def lm5_pp_get_runs_on_attr(naam, attr):
+        return contiguous_runs(lm5_pp_get_hours_on_attr(naam, attr))
+
+    def lm5_pp_count_attr_switches(naam):
+        uur_attr = sorted(
+            (u, lm5_pp_get_attr_on_hour(naam, u))
+            for u in sorted(set(ctx["student_states"][naam]["assigned_hours"]))
+            if lm5_pp_get_attr_on_hour(naam, u)
+        )
+        if not uur_attr:
+            return 0
+        switches = 0
+        prev = uur_attr[0][1]
+        for _, a in uur_attr[1:]:
+            if a != prev:
+                switches += 1
+            prev = a
+        return switches
+
+    def lm5_pp_count_problem_attrs(naam):
+        return sum(
+            1 for (_, a), namen in am.items()
+            if naam in namen and len(lm5_pp_get_hours_on_attr(naam, a)) > 4
+        )
+
+    def lm5_pp_total_overflow(naam):
+        seen = set()
+        overflow = 0
+        for (_, a), namen in am.items():
+            if naam in namen and a not in seen:
+                seen.add(a)
+                uren = len(lm5_pp_get_hours_on_attr(naam, a))
+                if uren > 4:
+                    overflow += uren - 4
+        return overflow
+
+    def lm5_pp_remove(naam, uur, attr):
+        key = (uur, attr)
+        if naam in am.get(key, []):
+            am[key].remove(naam)
+        s = ctx["student_states"][naam]
+        if uur in s["assigned_hours"]:
+            s["assigned_hours"].remove(uur)
+
+    def lm5_pp_add(naam, uur, attr):
+        am[(uur, attr)].append(naam)
+        ctx["student_states"][naam]["assigned_hours"].append(uur)
+        ctx["student_states"][naam]["assigned_attracties"].add(attr)
+
+    def lm5_pp_rebuild_attrs(naam):
+        s = ctx["student_states"][naam]
+        s["assigned_attracties"] = {
+            lm5_pp_get_attr_on_hour(naam, u)
+            for u in set(s["assigned_hours"])
+            if lm5_pp_get_attr_on_hour(naam, u)
+        }
+
+    def lm5_pp_is_valid(naam, attr, uren):
+        """Student mag attr op al die uren doen, en uren >= start_uur."""
+        if not all(u >= start_uur for u in uren):
+            return False
+        s = ctx["student_states"].get(naam)
+        if not s or not lm5_student_can_attr(s, attr):
+            return False
+        for u in uren:
+            hstate = ctx["hour_states"].get(u, {})
+            if attr not in hstate.get("active", set()):
+                return False
+        return True
+
+    def lm5_pp_respects_rules(naam, attr):
+        uren = lm5_pp_get_hours_on_attr(naam, attr)
+        if len(uren) > 6:
+            return False
+        if max_consecutive_hours(uren) > 4:
+            return False
+        return True
+
+    def lm5_pp_is_swap_target(naam, attr, block_hours):
+        """Staat naam op exact al die uren op attr?"""
+        return all(naam in am.get((u, attr), []) for u in block_hours)
+
+    def lm5_pp_try_swap_block(naam_a, attr_a, block_hours, all_names):
+        if len(block_hours) not in [2, 3]:
+            return False
+
+        orig_sw_a  = lm5_pp_count_attr_switches(naam_a)
+        orig_pr_a  = lm5_pp_count_problem_attrs(naam_a)
+        orig_ov_a  = lm5_pp_total_overflow(naam_a)
+        eerste_uur = block_hours[0]
+
+        for naam_b in all_names:
+            if naam_b == naam_a:
+                continue
+
+            attr_b = lm5_pp_get_attr_on_hour(naam_b, eerste_uur)
+            if not attr_b or attr_b == attr_a:
+                continue
+            if not lm5_pp_is_swap_target(naam_b, attr_b, block_hours):
+                continue
+            if not lm5_pp_is_valid(naam_a, attr_b, block_hours):
+                continue
+            if not lm5_pp_is_valid(naam_b, attr_a, block_hours):
+                continue
+
+            orig_sw_b = lm5_pp_count_attr_switches(naam_b)
+            orig_pr_b = lm5_pp_count_problem_attrs(naam_b)
+            orig_ov_b = lm5_pp_total_overflow(naam_b)
+
+            # Wissel uitvoeren
+            for u in block_hours:
+                lm5_pp_remove(naam_a, u, attr_a)
+                lm5_pp_remove(naam_b, u, attr_b)
+            for u in block_hours:
+                lm5_pp_add(naam_a, u, attr_b)
+                lm5_pp_add(naam_b, u, attr_a)
+            lm5_pp_rebuild_attrs(naam_a)
+            lm5_pp_rebuild_attrs(naam_b)
+
+            # Geen geïsoleerde 1-uursblokken laten ontstaan
+            def heeft_geisoleerd_uur(naam, attr):
+                runs = lm5_pp_get_runs_on_attr(naam, attr)
+                return any(len(r) == 1 for r in runs)
+
+            valid = all(
+                lm5_pp_respects_rules(n, a)
+                for n, a in [(naam_a, attr_a), (naam_a, attr_b),
+                             (naam_b, attr_a), (naam_b, attr_b)]
+            )
+
+            if heeft_geisoleerd_uur(naam_a, attr_a): valid = False
+            if heeft_geisoleerd_uur(naam_a, attr_b): valid = False
+            if heeft_geisoleerd_uur(naam_b, attr_a): valid = False
+            if heeft_geisoleerd_uur(naam_b, attr_b): valid = False
+
+            extra_sw = (
+                (lm5_pp_count_attr_switches(naam_a) - orig_sw_a) +
+                (lm5_pp_count_attr_switches(naam_b) - orig_sw_b)
+            )
+            if extra_sw > 2:
+                valid = False
+
+            new_pr = lm5_pp_count_problem_attrs(naam_a) + lm5_pp_count_problem_attrs(naam_b)
+            new_ov = lm5_pp_total_overflow(naam_a)      + lm5_pp_total_overflow(naam_b)
+            orig_pr = orig_pr_a + orig_pr_b
+            orig_ov = orig_ov_a + orig_ov_b
+
+            if new_pr > orig_pr:
+                valid = False
+            if new_pr == orig_pr and new_ov > orig_ov:
+                valid = False
+
+            verbetering = (
+                new_pr < orig_pr
+                or (new_pr == orig_pr and new_ov < orig_ov)
+            )
+            if not verbetering:
+                valid = False
+
+            if valid:
+                return True
+
+            # Rollback
+            for u in block_hours:
+                lm5_pp_remove(naam_a, u, attr_b)
+                lm5_pp_remove(naam_b, u, attr_a)
+            for u in block_hours:
+                lm5_pp_add(naam_a, u, attr_a)
+                lm5_pp_add(naam_b, u, attr_b)
+            lm5_pp_rebuild_attrs(naam_a)
+            lm5_pp_rebuild_attrs(naam_b)
+
+        return False
+
+    def lm5_pp_try_swap_long_attr(naam, attr, all_names):
+        if len(lm5_pp_get_hours_on_attr(naam, attr)) <= 4:
+            return False
+
+        runs = lm5_pp_get_runs_on_attr(naam, attr)
+        if not runs:
+            return False
+
+        def kandidaat_blokken(run):
+            blokken = []
+            if len(run) >= 3:
+                blokken.append(run[-3:])
+            if len(run) >= 2:
+                blokken.append(run[-2:])
+            if len(run) >= 3 and run[:3] != run[-3:]:
+                blokken.append(run[:3])
+            if len(run) >= 2 and run[:2] != run[-2:]:
+                blokken.append(run[:2])
+            return blokken
+
+        laatste_run = runs[-1]
+        eerste_run  = runs[0]
+
+        for blok in kandidaat_blokken(laatste_run):
+            if lm5_pp_try_swap_block(naam, attr, blok, all_names):
+                return True
+        if eerste_run != laatste_run:
+            for blok in kandidaat_blokken(eerste_run):
+                if lm5_pp_try_swap_block(naam, attr, blok, all_names):
+                    return True
+        return False
+
+    # --- Hoofdlus ---
+    all_names = [
+        naam for naam, s in ctx["student_states"].items()
+        if any(u >= start_uur for u in s["assigned_hours"])
+        and not s.get("is_pauzevlinder")
+    ]
+
+    for _ in range(7):
+        wijziging = False
+        for naam in all_names:
+            s = ctx["student_states"][naam]
+            probleem_attrs = sorted(
+                {a for a in s["assigned_attracties"]
+                 if len(lm5_pp_get_hours_on_attr(naam, a)) > 4},
+                key=lambda a: -len(lm5_pp_get_hours_on_attr(naam, a))
+            )
+            for attr in probleem_attrs:
+                if lm5_pp_try_swap_long_attr(naam, attr, all_names):
+                    wijziging = True
+                    break
+        if not wijziging:
+            break
+
+
+
 def lm5_build_lastminute_context(base_bytes, absentees, start_uur):
     base_maps = lm5_extract_base_maps(base_bytes)
     ctx = lm5_init_context(base_maps, absentees, start_uur)
+    herbereken_afgekapte_pv_uren(absentees_set=ctx["abs_set"], base_maps=base_maps)
+    lm5_vrijgeven_afgekapte_pv_uren(ctx, start_uur)
     lm5_seed_hours_before_start(ctx, start_uur)
-
     capacity_actions = lm5_extract_capacity_actions()
 
 
@@ -8969,10 +9372,12 @@ def lm5_build_lastminute_context(base_bytes, absentees, start_uur):
     # STAP 8: lege attractieplekken opvullen door Extra -> attractie
     lm5_try_fill_empty_slots_from_extras(ctx, start_uur)
 
-    lm5_extend_extra_rows_if_needed(base_maps, ctx) 
+    # STAP 9: post-processing 5/6-uursblokken wegwisselen
+    lm5_postprocess_long_blocks(ctx, start_uur)
+
+    lm5_extend_extra_rows_if_needed(base_maps, ctx)
 
     return ctx, base_maps
-
 
 
 # ------------------------------------------------------------
@@ -9003,6 +9408,21 @@ def lm5_write_lastminute_workbook(base_bytes, ctx, base_maps, start_uur, absente
     attr_rows  = list(base_maps["attr_rows"])
     pv_rows    = base_maps["pv_rows"]
     extra_rows = base_maps["extra_rows"]
+    # Samengevoegde attractierijen fysiek boven pauzevlinders plaatsen
+    if pv_rows and attr_rows:
+        eerste_pv_rij = min(row for row, _ in pv_rows)
+        nieuwe_attr = [(row, label) for row, label in attr_rows if row >= eerste_pv_rij]
+        if nieuwe_attr:
+            aantal = len(nieuwe_attr)
+            ws_plan.insert_rows(eerste_pv_rij, amount=aantal + 1)
+            verschuiving = aantal + 1
+            pv_rows    = [(row + verschuiving, label) for row, label in pv_rows]
+            extra_rows = [(row + verschuiving, label) for row, label in extra_rows]
+            hernummer  = {old: eerste_pv_rij + i for i, (old, _) in enumerate(nieuwe_attr)}
+            attr_rows  = [(hernummer[row], label) if row in hernummer else (row, label) for row, label in attr_rows]
+            base_maps["pv_rows"]    = pv_rows
+            base_maps["extra_rows"] = extra_rows
+            base_maps["attr_rows"]  = attr_rows
 
     center_align = Alignment(horizontal="center", vertical="center")
     thin_border  = Border(
@@ -9143,42 +9563,89 @@ def lm5_write_lastminute_workbook(base_bytes, ctx, base_maps, start_uur, absente
         s["assigned_hours"] = _hours_per_student.get(str(s["naam"]).strip(), [])
 
     # Herwerk Analyse
-    maak_analyse_sheet(wb_lm, ctx["assigned_map"], ctx["extra_assignments"], studenten_lm)
-
+    # Bouw actieve attracties per uur vanuit last-minute hour_states
+    lm_actieve_attracties = {
+        uur: hstate["active"]
+        for uur, hstate in ctx["hour_states"].items()
+    }
+    maak_analyse_sheet(
+        wb_lm,
+        ctx["assigned_map"],
+        ctx["extra_assignments"],
+        studenten_lm,
+        actieve_attracties_override=lm_actieve_attracties
+    )
     # Herwerk Wisselplanning
     maak_wisselplanning_sheet(wb_lm, ctx["assigned_map"])
 
-    # Herwerk PP optie 2 + Feedback optie 2
+    # Herwerk PP optie 2:
+    # Vervang eerst kolom A in Pauzevlinders én tijdelijk selected,
+    # zodat maak_pp2_sheets de vervanger als echte PV behandelt
+    # (juiste werkuren, eigen pauze op eigen rij).
+    selected_bak = [dict(pv) for pv in selected]
+    if ctx.get("pv_replacements"):
+        ws_pauze_lm = wb_lm["Pauzevlinders"]
+        for i, pv in enumerate(selected):
+            pvnaam    = str(pv["naam"]).strip()
+            vervanger = ctx["pv_replacements"].get(pvnaam)
+            if not vervanger:
+                continue
+            vervanger_student = next(
+                (s for s in studenten if str(s["naam"]).strip() == vervanger), None
+            )
+            if not vervanger_student:
+                continue
+            # Kolom A in Pauzevlinders bijwerken
+            for r in range(2, ws_pauze_lm.max_row + 1):
+                if str(ws_pauze_lm.cell(r, 1).value or "").strip() == pvnaam:
+                    ws_pauze_lm.cell(r, 1).value = vervanger
+                    break
+            # selected tijdelijk aanpassen zodat maak_pp2_sheets
+            # de vervanger als PV herkent en diens werkuren gebruikt
+            selected[i] = dict(vervanger_student)
+            selected[i]["is_pauzevlinder"] = True
+            selected[i]["pv_number"]       = pv.get("pv_number", i + 1)
+
+    herbereken_afgekapte_pv_uren(absentees_set=ctx["abs_set"], base_maps=base_maps)
     maak_pp2_sheets(wb_lm, ctx["assigned_map"])
 
+    for i in range(len(selected)):
+        if i < len(selected_bak):
+            selected[i] = selected_bak[i]
+    herbereken_afgekapte_pv_uren()  # ← zonder args: terug naar originele staat
+
     return wb_lm
-
-
+    
+    
 # ------------------------------------------------------------
 # UI
 # ------------------------------------------------------------
 st.markdown("### Last-minute afwezigen")
 
-base_bytes_lm5 = output.getvalue()
-base_maps_lm5 = lm5_extract_base_maps(base_bytes_lm5)
+
+@st.cache_data
+def _cached_base_maps(base_bytes):
+    return lm5_extract_base_maps(base_bytes)
+    
+base_bytes_lm5 = st.session_state["lm_base_bytes"]
+base_maps_lm5 = _cached_base_maps(base_bytes_lm5)   # ← slaat nu WEL aan
 werkende_studenten_vandaag_lm5 = lm5_working_students_today(base_maps_lm5)
 
 with st.expander("Last-minute afwezigen", expanded=False):
-    gekozen_afwezigen_lm5 = st.multiselect(
-        "Kies 1 tot 5 afwezige studenten",
-        options=werkende_studenten_vandaag_lm5,
-        default=[],
-        key="lm5_absentees"
-    )
+    with st.form("lm5_form"):
+        gekozen_afwezigen_lm5 = st.multiselect(
+            "Kies 1 tot 5 afwezige studenten",
+            options=werkende_studenten_vandaag_lm5,
+            default=[],
+        )
+        start_uur_lm5 = st.selectbox(
+            "Vanaf welk uur moet de nieuwe planning starten?",
+            options=sorted(open_uren),
+            format_func=lambda u: f"{u}:00",
+        )
+        submitted = st.form_submit_button("Maak last-minute planning")
 
-    start_uur_lm5 = st.selectbox(
-        "Vanaf welk uur moet de nieuwe planning starten?",
-        options=sorted(open_uren),
-        format_func=lambda u: f"{u}:00",
-        key="lm5_start_hour"
-    )
-
-    if st.button("Maak last-minute planning", key="lm5_make_button"):
+    if submitted:
         if not gekozen_afwezigen_lm5:
             st.warning("Kies eerst minstens 1 afwezige student.")
         elif len(gekozen_afwezigen_lm5) > 5:
@@ -9199,8 +9666,6 @@ with st.expander("Last-minute afwezigen", expanded=False):
                     absentees=gekozen_afwezigen_lm5
                 )
 
-                # Robuust: werkt zowel als de writer een Workbook teruggeeft
-                # als wanneer hij al bytes teruggeeft
                 if isinstance(lm5_result, (bytes, bytearray)):
                     lm5_file_bytes = bytes(lm5_result)
                 else:
@@ -9209,13 +9674,17 @@ with st.expander("Last-minute afwezigen", expanded=False):
                     lm5_output.seek(0)
                     lm5_file_bytes = lm5_output.getvalue()
 
-                st.success("Last-minute planning gemaakt.")
-                st.download_button(
-                    "Download last-minute planning",
-                    data=lm5_file_bytes,
-                    file_name=f"Planning_last_minute_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    key="lm5_download_button"
-                )
+                st.session_state["lm5_result_bytes"] = lm5_file_bytes
+                st.session_state["lm5_result_filename"] = f"Planning_last_minute_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
             except Exception as e:
                 st.error(f"Fout in last-minute planner: {e}")
+
+    if "lm5_result_bytes" in st.session_state:
+        st.success("Last-minute planning gemaakt.")
+        st.download_button(
+            "Download last-minute planning",
+            data=st.session_state["lm5_result_bytes"],
+            file_name=st.session_state.get("lm5_result_filename", "Planning_last_minute.xlsx"),
+            key="lm5_download_button"
+        )
