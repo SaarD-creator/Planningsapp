@@ -37,12 +37,19 @@ vandaag = datetime.date.today().strftime("%d-%m-%Y")
 uploaded_file = st.file_uploader("Upload Excel bestand", type=["xlsx"])
 
 if not uploaded_file:
+    st.session_state.pop("lm_base_bytes", None)   # ← reset bij nieuw bestand
     st.warning("Upload eerst het Excelbestand met de gegevens om verder te gaan.")
     st.stop()
 
-wb = load_workbook(BytesIO(uploaded_file.read()), data_only=True)
+file_bytes = uploaded_file.read()
 
+# Workbook met berekende waarden voor de gewone planning
+wb = load_workbook(BytesIO(file_bytes), data_only=True)
 ws = wb["Input"]
+
+# Extra workbook met ruwe celinhoud / formules
+wb_raw = load_workbook(BytesIO(file_bytes), data_only=False)
+ws_raw = wb_raw["Input"]
 
 # -----------------------------
 
@@ -7573,9 +7580,12 @@ for bladnaam in ["Pauzevlinders", "Feedback"]:
         ws_hide.sheet_state = "veryHidden" 
 
 # Snapshot voor last-minute (zonder dringende heropleidingen)
-output_lm_base = BytesIO()
-wb_out.save(output_lm_base)
-output_lm_base.seek(0)
+if "lm_base_bytes" not in st.session_state:
+    _buf = BytesIO()
+    wb_out.save(_buf)
+    st.session_state["lm_base_bytes"] = _buf.getvalue()
+
+output_lm_base = BytesIO(st.session_state["lm_base_bytes"])
 
 # -----------------------------
 # Dringende heropleidingen in Planning
@@ -7809,9 +7819,9 @@ def lm5_extract_capacity_actions():
     result = []
 
     # CD = 82, CE = 83
-    for rij in range(2, ws.max_row + 1):
-        left_source = ws.cell(rij, 82).value
-        right_source = ws.cell(rij, 83).value
+    for rij in range(2, ws_raw.max_row + 1):
+        left_source = ws_raw.cell(rij, 82).value
+        right_source = ws_raw.cell(rij, 83).value
 
         left = str(left_source).strip() if left_source is not None and str(left_source).strip() != "" else ""
         right = str(right_source).strip() if right_source is not None and str(right_source).strip() != "" else ""
@@ -9613,8 +9623,12 @@ def lm5_write_lastminute_workbook(base_bytes, ctx, base_maps, start_uur, absente
 st.markdown("### Last-minute afwezigen")
 
 
-base_bytes_lm5 = output_lm_base.getvalue()
-base_maps_lm5 = lm5_extract_base_maps(base_bytes_lm5)
+@st.cache_data
+def _cached_base_maps(base_bytes):
+    return lm5_extract_base_maps(base_bytes)
+    
+base_bytes_lm5 = st.session_state["lm_base_bytes"]
+base_maps_lm5 = _cached_base_maps(base_bytes_lm5)   # ← slaat nu WEL aan
 werkende_studenten_vandaag_lm5 = lm5_working_students_today(base_maps_lm5)
 
 with st.expander("Last-minute afwezigen", expanded=False):
