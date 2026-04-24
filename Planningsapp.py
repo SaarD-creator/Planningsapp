@@ -7809,9 +7809,9 @@ def lm5_extract_capacity_actions():
     result = []
 
     # CD = 82, CE = 83
-    for rij in range(2, ws_raw.max_row + 1):
-        left_source = ws_raw.cell(rij, 82).value
-        right_source = ws_raw.cell(rij, 83).value
+    for rij in range(2, ws.max_row + 1):
+        left_source = ws.cell(rij, 82).value
+        right_source = ws.cell(rij, 83).value
 
         left = str(left_source).strip() if left_source is not None and str(left_source).strip() != "" else ""
         right = str(right_source).strip() if right_source is not None and str(right_source).strip() != "" else ""
