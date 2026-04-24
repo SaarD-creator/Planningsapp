@@ -44,10 +44,6 @@ wb = load_workbook(BytesIO(uploaded_file.read()), data_only=True)
 
 ws = wb["Input"]
 
-# Extra workbook met ruwe celinhoud / formules
-wb_raw = load_workbook(BytesIO(file_bytes), data_only=False)
-ws_raw = wb_raw["Input"]
-
 # -----------------------------
 
 # Hulpfuncties
