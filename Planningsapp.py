@@ -1089,6 +1089,9 @@ def assign_student(s):
         for h in unplaced:
             extra_assignments[h].append(s["naam"])
 
+for s in studenten_sorted:
+    assign_student(s)
+
 
 # -----------------------------
 # Post-processing: lege plekken opvullen door doorschuiven
