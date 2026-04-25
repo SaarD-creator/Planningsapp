@@ -1,3 +1,4 @@
+# samengevoegde attracties als 1 --> fix in plaatsing! maar nog vaak 2x drie uur bij 1 attractie
 # niet meer laden na elke verandering
 # Werkblad heropleidingen! Plus op de planning
 # LM: afkappingen is in orde (automatisch op planning) Maar: lange blokken (5 uur aan een stuk) kunnen precies voorkomen...
@@ -932,6 +933,74 @@ def _try_place_block_samenvoeging_transitie(student, block_hours):
     return False
 
 
+def _try_place_block_with_forced_split(student, block_hours):
+    """
+    Probeer een blok te plaatsen op een attractie die een sowieso-opsplitser heeft:
+    een uur binnen het blok waarop de attractie niet meer beschikbaar is.
+    Plaatst alleen de uren VOOR de split. De rest wordt teruggegeven als ongeplaatst.
+    Straf: 8 — meer dan 0 (niet standaard), maar minder dan fairness_straf van 25.
+    Geeft None terug als niets kon geplaatst worden.
+    """
+    GEDWONGEN_SPLIT_STRAF = 8
+
+    eerste_uur = block_hours[0]
+
+    def beschikbare_prefix(attr):
+        """Opeenvolgende uren vanaf het begin waarop attr beschikbaar is."""
+        for i, h in enumerate(block_hours):
+            if not _has_capacity(attr, h):
+                return block_hours[:i]
+        return block_hours  # geen split
+
+    def split_score(attr, prefix):
+        bestaande_uren = set(
+            h for h in student["assigned_hours"]
+            if student["naam"] in assigned_map.get((h, attr), [])
+        )
+        totaal = len(bestaande_uren | set(prefix))
+        breedte = student.get("aantal_attracties", len(student.get("attracties", [])))
+
+        fairness_straf = 0
+        if totaal > 4:
+            if breedte >= 6: fairness_straf = 100
+            elif breedte >= 5: fairness_straf = 60
+            elif breedte >= 4: fairness_straf = 25
+
+        hergebruik = 1 if attr in student["assigned_attracties"] else 0
+        schaarste = sum(1 for s in studenten_workend if attr in s["attracties"])
+
+        return (fairness_straf, GEDWONGEN_SPLIT_STRAF, hergebruik, len(bestaande_uren), schaarste, attr)
+
+    kandidaten = []
+    for attr in attracties_te_plannen:
+        if not student_kan_attr(student, attr):
+            continue
+        if not _has_capacity(attr, eerste_uur):
+            continue
+
+        prefix = beschikbare_prefix(attr)
+        if len(prefix) < 2:
+            continue  # minder dan 2 uur heeft geen zin
+        if len(prefix) == len(block_hours):
+            continue  # geen split aanwezig → gewone logica is al geprobeerd
+
+        kandidaten.append((attr, prefix, split_score(attr, prefix)))
+
+    if not kandidaten:
+        return None
+
+    kandidaten.sort(key=lambda x: x[2])
+    attr, prefix, _ = kandidaten[0]
+
+    for h in prefix:
+        assigned_map[(h, attr)].append(student["naam"])
+        per_hour_assigned_counts[h][attr] += 1
+        student["assigned_hours"].append(h)
+    student["assigned_attracties"].add(attr)
+
+    return [h for h in block_hours if h not in set(prefix)]
+
+
 def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
     if not hours_seq:
         return []
@@ -947,7 +1016,6 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
         eerste_uur = block[0]
         laatste_uur = block[-1]
 
-        # Check eerste én laatste uur van dit specifieke blok
         heeft_samenvoeging = size > 1 and (
             any(" + " in attr and student_kan_attr(student, attr)
                 for attr in actieve_attracties_per_uur.get(eerste_uur, set()))
@@ -966,7 +1034,6 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
                 min(kritieke_score(a, studenten_workend) for a in sameng_kandidaten)
                 if sameng_kandidaten else float("inf")
             )
-
             reguliere_kandidaten = [
                 a for a in attracties_te_plannen
                 if student_kan_attr(student, a)
@@ -987,10 +1054,24 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
                 if _try_place_block_samenvoeging_transitie(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+
+            # Forced split ook proberen bij samenvoeging-blokken
+            if size > 1:
+                rest = _try_place_block_with_forced_split(student, block)
+                if rest is not None:
+                    return _place_block_with_fallback(student, rest + list(hours_seq[size:]), preferred_sizes)
+
         else:
             if _try_place_block_any_attr(student, block):
                 return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
 
+            # Forced split: na normale plaatsing mislukt, vóór kleinere size
+            if size > 1:
+                rest = _try_place_block_with_forced_split(student, block)
+                if rest is not None:
+                    return _place_block_with_fallback(student, rest + list(hours_seq[size:]), preferred_sizes)
+
+    # Helemaal niks paste: schuif 1 uur op
     return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:], preferred_sizes)
 
 
