@@ -890,24 +890,55 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
     if preferred_sizes is None:
         preferred_sizes = [3, 2, 1]
 
-    # ── NIEUW: samenvoeging-transitie als eerste uur een samenvoegingsuur is ──
     eerste_uur = hours_seq[0]
-    heeft_samenvoeging = any(
-        " + " in attr
-        for attr in actieve_attracties_per_uur.get(eerste_uur, set())
-    )
-    if heeft_samenvoeging:
-        for size in preferred_sizes:
-            if size > 1 and len(hours_seq) >= size:
-                if _try_place_block_samenvoeging_transitie(student, hours_seq[:size]):
-                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
-    # ── EINDE NIEUW ──
 
-    # Bestaande logica (ongewijzigd)
     for size in preferred_sizes:
-        if len(hours_seq) >= size:
-            first_block = hours_seq[:size]
-            if _try_place_block_any_attr(student, first_block):
+        if len(hours_seq) < size:
+            continue
+        block = hours_seq[:size]
+
+        # Bepaal of er een samenvoeging-transitie mogelijk is voor dit blok
+        kan_samenvoeging = size > 1 and any(
+            " + " in attr and student_kan_attr(student, attr)
+            for attr in actieve_attracties_per_uur.get(eerste_uur, set())
+        )
+
+        if kan_samenvoeging:
+            # Vergelijk kritieke score van beste samenvoeging vs beste reguliere kandidaat
+            sameng_kandidaten = [
+                attr for attr in actieve_attracties_per_uur.get(eerste_uur, set())
+                if " + " in attr and student_kan_attr(student, attr)
+            ]
+            beste_sameng_score = min(
+                kritieke_score(a, studenten_workend) for a in sameng_kandidaten
+            )
+
+            reguliere_kandidaten = [
+                a for a in attracties_te_plannen
+                if student_kan_attr(student, a)
+                and all(_has_capacity(a, h) for h in block)
+            ]
+            beste_regulier_score = (
+                min(kritieke_score(a, studenten_workend) for a in reguliere_kandidaten)
+                if reguliere_kandidaten else float("inf")
+            )
+
+            if beste_sameng_score <= beste_regulier_score:
+                # Samenvoeging is kritieker of even kritiek → eerst proberen
+                if _try_place_block_samenvoeging_transitie(student, block):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+                if _try_place_block_any_attr(student, block):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+            else:
+                # Reguliere attractie is kritieker → eerst proberen
+                if _try_place_block_any_attr(student, block):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+                if _try_place_block_samenvoeging_transitie(student, block):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+
+        else:
+            # Geen samenvoeging mogelijk: gewone logica
+            if _try_place_block_any_attr(student, block):
                 return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
 
     return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:], preferred_sizes)
