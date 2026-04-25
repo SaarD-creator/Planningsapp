@@ -934,23 +934,15 @@ def _try_place_block_samenvoeging_transitie(student, block_hours):
 
 
 def _try_place_block_with_forced_split(student, block_hours):
-    """
-    Probeer een blok te plaatsen op een attractie die een sowieso-opsplitser heeft:
-    een uur binnen het blok waarop de attractie niet meer beschikbaar is.
-    Plaatst alleen de uren VOOR de split. De rest wordt teruggegeven als ongeplaatst.
-    Straf: 8 — meer dan 0 (niet standaard), maar minder dan fairness_straf van 25.
-    Geeft None terug als niets kon geplaatst worden.
-    """
     GEDWONGEN_SPLIT_STRAF = 8
 
     eerste_uur = block_hours[0]
 
     def beschikbare_prefix(attr):
-        """Opeenvolgende uren vanaf het begin waarop attr beschikbaar is."""
         for i, h in enumerate(block_hours):
             if not _has_capacity(attr, h):
                 return block_hours[:i]
-        return block_hours  # geen split
+        return block_hours
 
     def split_score(attr, prefix):
         bestaande_uren = set(
@@ -979,18 +971,30 @@ def _try_place_block_with_forced_split(student, block_hours):
             continue
 
         prefix = beschikbare_prefix(attr)
-        if len(prefix) < 2:
-            continue  # minder dan 2 uur heeft geen zin
+        if len(prefix) < 1:
+            continue
         if len(prefix) == len(block_hours):
-            continue  # geen split aanwezig → gewone logica is al geprobeerd
+            continue  # geen split → gewone logica
 
-        kandidaten.append((attr, prefix, split_score(attr, prefix)))
+        rest_uren = [h for h in block_hours if h not in set(prefix)]
+
+        # ── LOOKAHEAD: kan de rest als blok ergens naartoe? ──
+        if rest_uren:
+            kan_rest = any(
+                student_kan_attr(student, a)
+                and all(_has_capacity(a, h) for h in rest_uren)
+                for a in attracties_te_plannen
+            )
+            if not kan_rest:
+                continue  # zou geïsoleerd blok creëren → overslaan
+
+        kandidaten.append((attr, prefix, rest_uren, split_score(attr, prefix)))
 
     if not kandidaten:
         return None
 
-    kandidaten.sort(key=lambda x: x[2])
-    attr, prefix, _ = kandidaten[0]
+    kandidaten.sort(key=lambda x: x[3])
+    attr, prefix, rest_uren, _ = kandidaten[0]
 
     for h in prefix:
         assigned_map[(h, attr)].append(student["naam"])
@@ -998,8 +1002,7 @@ def _try_place_block_with_forced_split(student, block_hours):
         student["assigned_hours"].append(h)
     student["assigned_attracties"].add(attr)
 
-    return [h for h in block_hours if h not in set(prefix)]
-
+    return rest_uren
 
 def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
     if not hours_seq:
