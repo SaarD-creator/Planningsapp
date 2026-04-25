@@ -66,23 +66,91 @@ def max_consecutive_hours(urenlijst):
         maxr = max(maxr, huidig)
     return maxr
 
-def partition_run_lengths(L):
-    """Flexibele blokken: prioritair 3 uur, dan 2,4,1 om shift te vullen."""
-    blocks = [3,2,4,1]
-    dp = [(10**9, [])]*(L+1)
-    dp[0] = (0, [])
-    for i in range(1, L+1):
-        best = (10**9, [])
-        for b in blocks:
-            if i-b < 0:
-                continue
-            prev_ones, prev_blocks = dp[i-b]
-            new_blocks = prev_blocks + [b]
-            ones = prev_ones + (1 if b==1 else 0)
-            if ones < best[0]:
-                best = (ones, new_blocks)
-        dp[i] = best
-    return dp[L][1]
+
+
+def compute_ideal_moments(open_uren):
+    """
+    Bereken ideaalmomenten o.b.v. vaste blokken van 3 uur startend bij het
+    vroegste openingsuur. Het resultaat zijn de starturen van het 2e, 3e, ...
+    blok (= de wisselmomenten).
+
+    Voorbeeld: open_uren 10-18 → blokken [10,11,12] [13,14,15] [16,17,18]
+               → ideaalmomenten = {13, 16}
+    """
+    if not open_uren:
+        return set()
+    start = min(open_uren)
+    return {u for u in open_uren if (u - start) % 3 == 0 and u != start}
+
+
+def partition_run_lengths(L, start_hour=None, ideal_moments=None):
+    """
+    Splits L uur op in blokken uit [3, 2, 4, 1].
+
+    Standaard (L deelbaar door 3, of geen uurinfo):
+        → minimaliseer 1-uursblokken (prioriteit 3 > 2 > 4 > 1).
+
+    Als start_hour en ideal_moments meegegeven worden én L % 3 != 0:
+        → primair: maximaliseer wissels op ideaalmomenten
+        → secundair: minimaliseer 1-uursblokken
+    """
+    blocks = [3, 2, 4, 1]
+
+    use_ideal = (
+        start_hour is not None
+        and ideal_moments
+        and L % 3 != 0
+    )
+
+    if use_ideal:
+        # dp[i] = (neg_ideaal, ones, blokkenlijst)
+        # neg_ideaal is negatief zodat minimaliseren = meer ideale wissels
+        INF = 10 ** 9
+        dp = [(INF, INF, [])] * (L + 1)
+        dp[0] = (0, 0, [])
+
+        for i in range(1, L + 1):
+            best = (INF, INF, [])
+            for b in blocks:
+                if i - b < 0:
+                    continue
+                prev_neg, prev_ones, prev_blks = dp[i - b]
+                if prev_neg == INF:
+                    continue
+
+                # Startuur van dit blok in de echte planning
+                blok_start = start_hour + (i - b)
+                # Eerste blok heeft geen wissel (i-b == 0)
+                is_ideal = (i - b > 0) and (blok_start in ideal_moments)
+
+                cand = (
+                    prev_neg - (1 if is_ideal else 0),   # meer ideaal = beter
+                    prev_ones + (1 if b == 1 else 0),    # minder 1-uur = beter
+                    prev_blks + [b],
+                )
+                if (cand[0], cand[1]) < (best[0], best[1]):
+                    best = cand
+
+            dp[i] = best
+
+        return dp[L][2]
+
+    else:
+        # Originele logica: minimaliseer 1-uursblokken
+        dp = [(10 ** 9, [])] * (L + 1)
+        dp[0] = (0, [])
+        for i in range(1, L + 1):
+            best = (10 ** 9, [])
+            for b in blocks:
+                if i - b < 0:
+                    continue
+                prev_ones, prev_blks = dp[i - b]
+                cand = (prev_ones + (1 if b == 1 else 0), prev_blks + [b])
+                if cand < best:
+                    best = cand
+            dp[i] = best
+        return dp[L][1]
+
 
 def contiguous_runs(sorted_hours):
     runs=[]
@@ -97,32 +165,6 @@ def contiguous_runs(sorted_hours):
             run=[h]
     runs.append(run)
     return runs
-
-
-def compute_global_blocks(open_uren):
-    """Verdeel de openingsuren in opeenvolgende blokken van 3."""
-    sorted_uren = sorted(open_uren)
-    blocks = []
-    i = 0
-    while i < len(sorted_uren):
-        blocks.append(sorted_uren[i:i+3])
-        i += 3
-    return blocks
-
-def split_run_by_global_blocks(run, global_blocks):
-    """
-    Splits een aaneengesloten run van uren op in sub-blokken
-    conform de globale tijdsindeling (wisselmomentgrenzen).
-    Bvb run=[11,12,13,14,15,16], global_blocks=[[10,11,12],[13,14,15],[16,17,18]]
-    → [[11,12], [13,14,15], [16]]
-    """
-    result = []
-    for block in global_blocks:
-        block_set = set(block)
-        sub = [h for h in run if h in block_set]
-        if sub:
-            result.append(sub)
-    return result
 
 # Helpers die in meerdere delen gebruikt worden
 def normalize_attr(name):
@@ -249,9 +291,7 @@ if not open_uren:
     open_uren=list(range(10,19))
 open_uren=sorted(set(open_uren))
 
-
-global_time_blocks = compute_global_blocks(open_uren)
-
+ideaalmomenten = compute_ideal_moments(open_uren)
 
 # -----------------------------
 # Sorteervolgorde studenten
@@ -1032,10 +1072,24 @@ eerste_blok_is_anderhalf_uur = as2_vinkje in [1, True, "WAAR", "X"]
 
 def assign_student(s):
     """
-    Plaats één student in de planning. De shift wordt altijd gesplitst
-    op de globale wisselmomentgrenzen (elke 3 openingsuren).
-    Binnen elk sub-blok wordt geprobeerd de student bij één attractie te houden.
+    Plaats één student in de planning volgens alle regels:
+    - Alleen uren waar de student beschikbaar is én open_uren zijn.
+    - Geen overlap met pauzevlinder-uren.
+    - Alleen attracties die de student kan.
+    - Standaard voorkeur: 3 uur, dan 2, dan 1.
+    - Speciaal geval begin van de dag:
+      * student met exact 4 effectieve werkuren
+      * én AS2 aangevinkt
+      * én run start op het eerste open uur
+      => probeer expliciet 1 + 3
+    - Speciaal geval einde van de dag:
+      * student met exact 4 effectieve werkuren
+      * én AR2 aangevinkt
+      * én run eindigt op het laatste open uur
+      => probeer expliciet 2 + 2
+    - Blokken die niet passen, gaan voorlopig naar extra_assignments.
     """
+    # Filter op effectieve inzetbare uren
     uren = sorted(u for u in s["uren_beschikbaar"] if u in open_uren)
     if s["is_pauzevlinder"]:
         uren = [u for u in uren if u not in required_pauze_hours]
@@ -1044,25 +1098,84 @@ def assign_student(s):
         return
 
     runs = contiguous_runs(uren)
+    eerste_open_uur = min(open_uren) if open_uren else None
+    laatste_open_uur = max(open_uren) if open_uren else None
 
     for run in runs:
-        # Splits de run op de globale wisselmomentgrenzen
-        sub_blokken = split_run_by_global_blocks(run, global_time_blocks)
+        # -----------------------------
+        # Speciaal geval einde van de dag:
+        # bij AR2 aangevinkt willen we voor een run van exact 4 uren
+        # die eindigt op het laatste open uur liever 2 + 2
+        # -----------------------------
+        if (
+            laatste_blok_is_anderhalf_uur
+            and len(run) == 4
+            and laatste_open_uur is not None
+            and run[-1] == laatste_open_uur
+        ):
+            eerste_blok = run[:2]
+            tweede_blok = run[2:]
 
-        for sub_blok in sub_blokken:
-            # Probeer het volledige sub-blok als één eenheid te plaatsen
-            geplaatst = _try_place_block_any_attr(s, sub_blok)
+            if _try_place_block_any_attr(s, eerste_blok):
+                if _try_place_block_any_attr(s, tweede_blok):
+                    unplaced = []
+                else:
+                    # Eerste 2 uur zijn al geplaatst, rest valt terug op normale logica
+                    unplaced = _place_block_with_fallback(s, tweede_blok)
+            else:
+                # Als 2+2 niet lukt, val volledig terug op normale logica
+                unplaced = _place_block_with_fallback(s, run)
 
-            if not geplaatst:
-                # Fallback: probeer via samenvoeging-transitie
-                geplaatst = _try_place_block_samenvoeging_transitie(s, sub_blok)
+        # -----------------------------
+        # Speciaal geval begin van de dag:
+        # bij AS2 aangevinkt telt het eerste blok als 1,5 uur (9u30-11u),
+        # dus voor een run van exact 4 uren die start op het eerste open uur
+        # proberen we eerst expliciet 1 + 3
+        # -----------------------------
+        elif (
+            eerste_blok_is_anderhalf_uur
+            and len(run) == 4
+            and eerste_open_uur is not None
+            and run[0] == eerste_open_uur
+        ):
+            eerste_blok = [run[0]]
+            rest_blok = run[1:]
 
-            if not geplaatst:
-                # Laatste redmiddel: splits het sub-blok verder op met de normale logica
-                unplaced = _place_block_with_fallback(s, sub_blok)
-                for h in unplaced:
-                    extra_assignments[h].append(s["naam"])
+            if _try_place_block_any_attr(s, eerste_blok):
+                if _try_place_block_any_attr(s, rest_blok):
+                    unplaced = []
+                else:
+                    # Eerste uur is al geplaatst, rest valt terug op normale logica
+                    unplaced = _place_block_with_fallback(s, rest_blok)
+            else:
+                # Als 1+3 niet lukt, val volledig terug op normale logica
+                unplaced = _place_block_with_fallback(s, run)
 
+        else:
+            # Bereken ideale blokvolgorde op basis van ideaalmomenten
+            L = len(run)
+            if L % 3 != 0 and ideaalmomenten:
+                blokken = partition_run_lengths(L, start_hour=run[0], ideal_moments=ideaalmomenten)
+                # Zet blokkenlijst om naar unieke voorkeursvolgorde
+                seen = []
+                for b in blokken:
+                    if b not in seen:
+                        seen.append(b)
+                for b in [3, 2, 4, 1]:
+                    if b not in seen:
+                        seen.append(b)
+                preferred_sizes = seen
+            else:
+                preferred_sizes = [3, 2, 4, 1]
+            unplaced = _place_block_with_fallback(s, run, preferred_sizes=preferred_sizes)
+
+        for h in unplaced:
+            extra_assignments[h].append(s["naam"])
+
+
+
+for s in studenten_sorted:
+    assign_student(s)
 
 # -----------------------------
 # Post-processing: lege plekken opvullen door doorschuiven
