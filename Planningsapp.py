@@ -827,16 +827,15 @@ def _try_place_block_any_attr(student, block_hours):
 
 def _try_place_block_samenvoeging_transitie(student, block_hours):
     """
-    Speciaal geval: het eerste uur is een samenvoegingsuur.
-    Probeer uur 1 op 'A+B' te plaatsen en de rest op 'A' of 'B'.
-    Behandelt dit als één logisch blok op dezelfde basisattractie.
+    Twee richtingen:
+    1. EERSTE uur samenvoeging → uur 1 op A+B, rest op A of B
+    2. LAATSTE uur/uren samenvoeging → eerste uren op A of B, laatste op A+B
     """
     if len(block_hours) < 2:
         return False
 
+    # ── Geval 1: eerste uur is samenvoeging ──
     eerste_uur = block_hours[0]
-    rest_uren = block_hours[1:]
-
     for sameng_attr in actieve_attracties_per_uur.get(eerste_uur, set()):
         if " + " not in sameng_attr:
             continue
@@ -846,16 +845,14 @@ def _try_place_block_samenvoeging_transitie(student, block_hours):
             continue
 
         onderdelen = [o.strip() for o in sameng_attr.split("+")]
+        rest_uren = block_hours[1:]
 
         for onderdeel in onderdelen:
             if not student_kan_attr(student, onderdeel):
                 continue
-
-            # Capaciteitscheck op het onderdeel voor alle resterende uren
             if not all(_has_capacity(onderdeel, h) for h in rest_uren):
                 continue
 
-            # Max 6u check: combineer uren op samenvoeging én onderdeel als één basis
             uren_bij_base = set()
             for h in student["assigned_hours"]:
                 if student["naam"] in assigned_map.get((h, sameng_attr), []):
@@ -865,18 +862,70 @@ def _try_place_block_samenvoeging_transitie(student, block_hours):
             if len(uren_bij_base | set(block_hours)) > 6:
                 continue
 
-            # Plaatsen: uur 1 op de samenvoeging
             assigned_map[(eerste_uur, sameng_attr)].append(student["naam"])
             per_hour_assigned_counts[eerste_uur][sameng_attr] += 1
             student["assigned_hours"].append(eerste_uur)
             student["assigned_attracties"].add(sameng_attr)
 
-            # Rest op het losse onderdeel
             for h in rest_uren:
                 assigned_map[(h, onderdeel)].append(student["naam"])
                 per_hour_assigned_counts[h][onderdeel] += 1
                 student["assigned_hours"].append(h)
             student["assigned_attracties"].add(onderdeel)
+
+            return True
+
+    # ── Geval 2: laatste uur/uren zijn samenvoeging ──
+    laatste_uur = block_hours[-1]
+    for sameng_attr in actieve_attracties_per_uur.get(laatste_uur, set()):
+        if " + " not in sameng_attr:
+            continue
+        if not student_kan_attr(student, sameng_attr):
+            continue
+
+        # Bepaal hoeveel opeenvolgende uren aan het einde samengevoegd zijn
+        sameng_uren = []
+        for h in reversed(block_hours):
+            if sameng_attr in actieve_attracties_per_uur.get(h, set()):
+                sameng_uren.insert(0, h)
+            else:
+                break
+
+        vroege_uren = [h for h in block_hours if h not in sameng_uren]
+        if not vroege_uren:
+            continue  # heel het blok is samenvoeging → gewone logica
+
+        if not all(_has_capacity(sameng_attr, h) for h in sameng_uren):
+            continue
+
+        onderdelen = [o.strip() for o in sameng_attr.split("+")]
+
+        for onderdeel in onderdelen:
+            if not student_kan_attr(student, onderdeel):
+                continue
+            if not all(_has_capacity(onderdeel, h) for h in vroege_uren):
+                continue
+
+            uren_bij_base = set()
+            for h in student["assigned_hours"]:
+                if student["naam"] in assigned_map.get((h, sameng_attr), []):
+                    uren_bij_base.add(h)
+                if student["naam"] in assigned_map.get((h, onderdeel), []):
+                    uren_bij_base.add(h)
+            if len(uren_bij_base | set(block_hours)) > 6:
+                continue
+
+            for h in vroege_uren:
+                assigned_map[(h, onderdeel)].append(student["naam"])
+                per_hour_assigned_counts[h][onderdeel] += 1
+                student["assigned_hours"].append(h)
+            student["assigned_attracties"].add(onderdeel)
+
+            for h in sameng_uren:
+                assigned_map[(h, sameng_attr)].append(student["naam"])
+                per_hour_assigned_counts[h][sameng_attr] += 1
+                student["assigned_hours"].append(h)
+            student["assigned_attracties"].add(sameng_attr)
 
             return True
 
@@ -890,27 +939,32 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
     if preferred_sizes is None:
         preferred_sizes = [3, 2, 1]
 
-    eerste_uur = hours_seq[0]
-
     for size in preferred_sizes:
         if len(hours_seq) < size:
             continue
         block = hours_seq[:size]
 
-        # Bepaal of er een samenvoeging-transitie mogelijk is voor dit blok
-        kan_samenvoeging = size > 1 and any(
-            " + " in attr and student_kan_attr(student, attr)
-            for attr in actieve_attracties_per_uur.get(eerste_uur, set())
+        eerste_uur = block[0]
+        laatste_uur = block[-1]
+
+        # Check eerste én laatste uur van dit specifieke blok
+        heeft_samenvoeging = size > 1 and (
+            any(" + " in attr and student_kan_attr(student, attr)
+                for attr in actieve_attracties_per_uur.get(eerste_uur, set()))
+            or any(" + " in attr and student_kan_attr(student, attr)
+                   for attr in actieve_attracties_per_uur.get(laatste_uur, set()))
         )
 
-        if kan_samenvoeging:
-            # Vergelijk kritieke score van beste samenvoeging vs beste reguliere kandidaat
+        if heeft_samenvoeging:
             sameng_kandidaten = [
-                attr for attr in actieve_attracties_per_uur.get(eerste_uur, set())
+                attr
+                for uur in [eerste_uur, laatste_uur]
+                for attr in actieve_attracties_per_uur.get(uur, set())
                 if " + " in attr and student_kan_attr(student, attr)
             ]
-            beste_sameng_score = min(
-                kritieke_score(a, studenten_workend) for a in sameng_kandidaten
+            beste_sameng_score = (
+                min(kritieke_score(a, studenten_workend) for a in sameng_kandidaten)
+                if sameng_kandidaten else float("inf")
             )
 
             reguliere_kandidaten = [
@@ -924,20 +978,16 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
             )
 
             if beste_sameng_score <= beste_regulier_score:
-                # Samenvoeging is kritieker of even kritiek → eerst proberen
                 if _try_place_block_samenvoeging_transitie(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
                 if _try_place_block_any_attr(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
             else:
-                # Reguliere attractie is kritieker → eerst proberen
                 if _try_place_block_any_attr(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
                 if _try_place_block_samenvoeging_transitie(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
-
         else:
-            # Geen samenvoeging mogelijk: gewone logica
             if _try_place_block_any_attr(student, block):
                 return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
 
