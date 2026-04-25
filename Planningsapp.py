@@ -751,14 +751,7 @@ def _try_place_block_on_attr(student, block_hours, attr):
 
 
 
-def _try_place_block_any_attr(student, block_hours):
-    """Probeer dit blok te plaatsen op eender welke attractie die student kan.
-    Fairness-regel:
-    - Studenten met veel mogelijke attracties moeten minder snel naar 5e/6e uur
-      op dezelfde attractie gaan.
-    - Studenten met weinig mogelijke attracties blijven soepeler behandeld.
-    """
-
+def _try_place_block_any_attr(student, block_hours, max_fairness_straf=None):
     def uren_bij_attr(student, attr):
         uren = set()
         for h in student["assigned_hours"]:
@@ -768,57 +761,33 @@ def _try_place_block_any_attr(student, block_hours):
         return uren
 
     def candidate_score(attr):
-        # Hoeveel studenten kunnen deze attractie? Lager = kritieker
         schaarste = sum(1 for s in studenten_workend if attr in s["attracties"])
-
         bestaande_uren = uren_bij_attr(student, attr)
         totaal_na_plaatsing = len(bestaande_uren | set(block_hours))
         reeds_gebruikt = attr in student["assigned_attracties"]
-
-        # Hoe breed is deze student inzetbaar?
-        # We nemen aantal_attracties als hoofdsignaal, met fallback op echte lijstlengte
         breedte_profiel = student.get("aantal_attracties", len(student.get("attracties", [])))
 
-        # Fairness-straf:
-        # - Studenten met veel attracties krijgen zware straf als ze naar uur 5/6
-        #   op dezelfde attractie gaan.
-        # - Studenten met weinig attracties krijgen weinig of geen straf.
         fairness_straf = 0
-
         if totaal_na_plaatsing > 4:
-            if breedte_profiel >= 6:
-                fairness_straf = 100
-            elif breedte_profiel >= 5:
-                fairness_straf = 60
-            elif breedte_profiel >= 4:
-                fairness_straf = 25
-            else:
-                fairness_straf = 0
+            if breedte_profiel >= 6: fairness_straf = 100
+            elif breedte_profiel >= 5: fairness_straf = 60
+            elif breedte_profiel >= 4: fairness_straf = 25
 
-        # Lichte voorkeur om eerst nieuwe attracties te gebruiken,
-        # maar minder belangrijk dan fairness boven 4 uur.
         hergebruik_straf = 1 if reeds_gebruikt else 0
-
-        # Eventueel nog mini-voorkeur voor attracties waar student nog 0 uur stond
-        # en pas daarna voor attracties met al wat uren.
         huidige_uren_op_attr = len(bestaande_uren)
 
-        return (
-            fairness_straf,
-            hergebruik_straf,
-            huidige_uren_op_attr,
-            schaarste,
-            attr
-        )
+        return (fairness_straf, hergebruik_straf, huidige_uren_op_attr, schaarste, attr)
 
     candidate_attrs = [
         a for a in attracties_te_plannen
         if student_kan_attr(student, a)
     ]
-
     candidate_attrs.sort(key=candidate_score)
 
     for attr in candidate_attrs:
+        # ── NIEUW: stop zodra de straf te hoog is ──
+        if max_fairness_straf is not None and candidate_score(attr)[0] > max_fairness_straf:
+            return False
         if _try_place_block_on_attr(student, block_hours, attr):
             return True
 
@@ -1026,6 +995,7 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
                    for attr in actieve_attracties_per_uur.get(laatste_uur, set()))
         )
 
+        # Stap 1: normale plaatsing zonder fairness straf
         if heeft_samenvoeging:
             sameng_kandidaten = [
                 attr
@@ -1050,6 +1020,26 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
             if beste_sameng_score <= beste_regulier_score:
                 if _try_place_block_samenvoeging_transitie(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+                if _try_place_block_any_attr(student, block, max_fairness_straf=0):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+            else:
+                if _try_place_block_any_attr(student, block, max_fairness_straf=0):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+                if _try_place_block_samenvoeging_transitie(student, block):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+        else:
+            if _try_place_block_any_attr(student, block, max_fairness_straf=0):
+                return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+
+        # Stap 2: forced split (straf=8, beter dan fairness straf van min. 25)
+        if size > 1:
+            rest = _try_place_block_with_forced_split(student, block)
+            if rest is not None:
+                return _place_block_with_fallback(student, rest + list(hours_seq[size:]), preferred_sizes)
+
+        # Stap 3: normale plaatsing mét fairness straf (laatste redmiddel voor deze size)
+        if heeft_samenvoeging:
+            if beste_sameng_score <= beste_regulier_score:
                 if _try_place_block_any_attr(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
             else:
@@ -1057,26 +1047,12 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
                 if _try_place_block_samenvoeging_transitie(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
-
-            # Forced split ook proberen bij samenvoeging-blokken
-            if size > 1:
-                rest = _try_place_block_with_forced_split(student, block)
-                if rest is not None:
-                    return _place_block_with_fallback(student, rest + list(hours_seq[size:]), preferred_sizes)
-
         else:
             if _try_place_block_any_attr(student, block):
                 return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
 
-            # Forced split: na normale plaatsing mislukt, vóór kleinere size
-            if size > 1:
-                rest = _try_place_block_with_forced_split(student, block)
-                if rest is not None:
-                    return _place_block_with_fallback(student, rest + list(hours_seq[size:]), preferred_sizes)
-
-    # Helemaal niks paste: schuif 1 uur op
+    # Noodventiel: eerste uur tijdelijk overslaan
     return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:], preferred_sizes)
-
 
 # -----------------------------
 # Vinkjes uitlezen voor bloklogica
