@@ -1054,16 +1054,6 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
     return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:], preferred_sizes)
 
 
-# -----------------------------
-# Vinkjes uitlezen voor bloklogica
-# AR = kolom 44, AS = kolom 45, rij 2
-# -----------------------------
-ar2_vinkje = ws.cell(2, 44).value
-as2_vinkje = ws.cell(2, 45).value
-
-laatste_blok_is_anderhalf_uur = ar2_vinkje in [1, True, "WAAR", "X"]
-eerste_blok_is_anderhalf_uur = as2_vinkje in [1, True, "WAAR", "X"]
-
     
 # -----------------------------
 # Nieuwe assign_student
@@ -1071,25 +1061,6 @@ eerste_blok_is_anderhalf_uur = as2_vinkje in [1, True, "WAAR", "X"]
 
 
 def assign_student(s):
-    """
-    Plaats één student in de planning volgens alle regels:
-    - Alleen uren waar de student beschikbaar is én open_uren zijn.
-    - Geen overlap met pauzevlinder-uren.
-    - Alleen attracties die de student kan.
-    - Standaard voorkeur: 3 uur, dan 2, dan 1.
-    - Speciaal geval begin van de dag:
-      * student met exact 4 effectieve werkuren
-      * én AS2 aangevinkt
-      * én run start op het eerste open uur
-      => probeer expliciet 1 + 3
-    - Speciaal geval einde van de dag:
-      * student met exact 4 effectieve werkuren
-      * én AR2 aangevinkt
-      * én run eindigt op het laatste open uur
-      => probeer expliciet 2 + 2
-    - Blokken die niet passen, gaan voorlopig naar extra_assignments.
-    """
-    # Filter op effectieve inzetbare uren
     uren = sorted(u for u in s["uren_beschikbaar"] if u in open_uren)
     if s["is_pauzevlinder"]:
         uren = [u for u in uren if u not in required_pauze_hours]
@@ -1098,84 +1069,26 @@ def assign_student(s):
         return
 
     runs = contiguous_runs(uren)
-    eerste_open_uur = min(open_uren) if open_uren else None
-    laatste_open_uur = max(open_uren) if open_uren else None
 
     for run in runs:
-        # -----------------------------
-        # Speciaal geval einde van de dag:
-        # bij AR2 aangevinkt willen we voor een run van exact 4 uren
-        # die eindigt op het laatste open uur liever 2 + 2
-        # -----------------------------
-        if (
-            laatste_blok_is_anderhalf_uur
-            and len(run) == 4
-            and laatste_open_uur is not None
-            and run[-1] == laatste_open_uur
-        ):
-            eerste_blok = run[:2]
-            tweede_blok = run[2:]
-
-            if _try_place_block_any_attr(s, eerste_blok):
-                if _try_place_block_any_attr(s, tweede_blok):
-                    unplaced = []
-                else:
-                    # Eerste 2 uur zijn al geplaatst, rest valt terug op normale logica
-                    unplaced = _place_block_with_fallback(s, tweede_blok)
-            else:
-                # Als 2+2 niet lukt, val volledig terug op normale logica
-                unplaced = _place_block_with_fallback(s, run)
-
-        # -----------------------------
-        # Speciaal geval begin van de dag:
-        # bij AS2 aangevinkt telt het eerste blok als 1,5 uur (9u30-11u),
-        # dus voor een run van exact 4 uren die start op het eerste open uur
-        # proberen we eerst expliciet 1 + 3
-        # -----------------------------
-        elif (
-            eerste_blok_is_anderhalf_uur
-            and len(run) == 4
-            and eerste_open_uur is not None
-            and run[0] == eerste_open_uur
-        ):
-            eerste_blok = [run[0]]
-            rest_blok = run[1:]
-
-            if _try_place_block_any_attr(s, eerste_blok):
-                if _try_place_block_any_attr(s, rest_blok):
-                    unplaced = []
-                else:
-                    # Eerste uur is al geplaatst, rest valt terug op normale logica
-                    unplaced = _place_block_with_fallback(s, rest_blok)
-            else:
-                # Als 1+3 niet lukt, val volledig terug op normale logica
-                unplaced = _place_block_with_fallback(s, run)
-
+        L = len(run)
+        if L % 3 != 0 and ideaalmomenten:
+            blokken = partition_run_lengths(L, start_hour=run[0], ideal_moments=ideaalmomenten)
+            seen = []
+            for b in blokken:
+                if b not in seen:
+                    seen.append(b)
+            for b in [3, 2, 4, 1]:
+                if b not in seen:
+                    seen.append(b)
+            preferred_sizes = seen
         else:
-            # Bereken ideale blokvolgorde op basis van ideaalmomenten
-            L = len(run)
-            if L % 3 != 0 and ideaalmomenten:
-                blokken = partition_run_lengths(L, start_hour=run[0], ideal_moments=ideaalmomenten)
-                # Zet blokkenlijst om naar unieke voorkeursvolgorde
-                seen = []
-                for b in blokken:
-                    if b not in seen:
-                        seen.append(b)
-                for b in [3, 2, 4, 1]:
-                    if b not in seen:
-                        seen.append(b)
-                preferred_sizes = seen
-            else:
-                preferred_sizes = [3, 2, 4, 1]
-            unplaced = _place_block_with_fallback(s, run, preferred_sizes=preferred_sizes)
+            preferred_sizes = [3, 2, 4, 1]
+        unplaced = _place_block_with_fallback(s, run, preferred_sizes=preferred_sizes)
 
         for h in unplaced:
             extra_assignments[h].append(s["naam"])
 
-
-
-for s in studenten_sorted:
-    assign_student(s)
 
 # -----------------------------
 # Post-processing: lege plekken opvullen door doorschuiven
