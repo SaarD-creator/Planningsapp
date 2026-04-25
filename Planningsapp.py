@@ -804,14 +804,24 @@ def _try_place_block_any_attr(student, block_hours):
     
 
 
-def _try_place_block_samenvoeging_transitie(student, block_hours):
-    """
-    Twee richtingen:
-    1. EERSTE uur samenvoeging → uur 1 op A+B, rest op A of B
-    2. LAATSTE uur/uren samenvoeging → eerste uren op A of B, laatste op A+B
-    """
+def _try_place_block_samenvoeging_transitie(student, block_hours, respecteer_fairness=True):
     if len(block_hours) < 2:
         return False
+
+    breedte_profiel = student.get("aantal_attracties", len(student.get("attracties", [])))
+
+    def fairness_ok(basis_attr, nieuwe_uren):
+        if not respecteer_fairness:
+            return True
+        bestaande = uren_bij_basis_attr(student, basis_attr)
+        totaal = len(bestaande | set(nieuwe_uren))
+        if totaal <= 4:
+            return True
+        # Zelfde drempels als candidate_score
+        if breedte_profiel >= 6: return False
+        if breedte_profiel >= 5: return False
+        if breedte_profiel >= 4: return False
+        return True  # weinig opties → toch toestaan
 
     # ── Geval 1: eerste uur is samenvoeging ──
     eerste_uur = block_hours[0]
@@ -832,13 +842,10 @@ def _try_place_block_samenvoeging_transitie(student, block_hours):
             if not all(_has_capacity(onderdeel, h) for h in rest_uren):
                 continue
 
-            uren_bij_base = set()
-            for h in student["assigned_hours"]:
-                if student["naam"] in assigned_map.get((h, sameng_attr), []):
-                    uren_bij_base.add(h)
-                if student["naam"] in assigned_map.get((h, onderdeel), []):
-                    uren_bij_base.add(h)
-            if len(uren_bij_base | set(block_hours)) > 6:
+            # ── AANGEPAST: gebruik uren_bij_basis_attr + fairness check ──
+            if len(uren_bij_basis_attr(student, onderdeel) | set(block_hours)) > 6:
+                continue
+            if not fairness_ok(onderdeel, block_hours):
                 continue
 
             assigned_map[(eerste_uur, sameng_attr)].append(student["naam"])
@@ -862,7 +869,6 @@ def _try_place_block_samenvoeging_transitie(student, block_hours):
         if not student_kan_attr(student, sameng_attr):
             continue
 
-        # Bepaal hoeveel opeenvolgende uren aan het einde samengevoegd zijn
         sameng_uren = []
         for h in reversed(block_hours):
             if sameng_attr in actieve_attracties_per_uur.get(h, set()):
@@ -872,7 +878,7 @@ def _try_place_block_samenvoeging_transitie(student, block_hours):
 
         vroege_uren = [h for h in block_hours if h not in sameng_uren]
         if not vroege_uren:
-            continue  # heel het blok is samenvoeging → gewone logica
+            continue
 
         if not all(_has_capacity(sameng_attr, h) for h in sameng_uren):
             continue
@@ -885,13 +891,10 @@ def _try_place_block_samenvoeging_transitie(student, block_hours):
             if not all(_has_capacity(onderdeel, h) for h in vroege_uren):
                 continue
 
-            uren_bij_base = set()
-            for h in student["assigned_hours"]:
-                if student["naam"] in assigned_map.get((h, sameng_attr), []):
-                    uren_bij_base.add(h)
-                if student["naam"] in assigned_map.get((h, onderdeel), []):
-                    uren_bij_base.add(h)
-            if len(uren_bij_base | set(block_hours)) > 6:
+            # ── AANGEPAST: gebruik uren_bij_basis_attr + fairness check ──
+            if len(uren_bij_basis_attr(student, onderdeel) | set(block_hours)) > 6:
+                continue
+            if not fairness_ok(onderdeel, block_hours):
                 continue
 
             for h in vroege_uren:
@@ -926,7 +929,6 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
         eerste_uur = block[0]
         laatste_uur = block[-1]
 
-        # Check eerste én laatste uur van dit specifieke blok
         heeft_samenvoeging = size > 1 and (
             any(" + " in attr and student_kan_attr(student, attr)
                 for attr in actieve_attracties_per_uur.get(eerste_uur, set()))
@@ -945,7 +947,6 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
                 min(kritieke_score(a, studenten_workend) for a in sameng_kandidaten)
                 if sameng_kandidaten else float("inf")
             )
-
             reguliere_kandidaten = [
                 a for a in attracties_te_plannen
                 if student_kan_attr(student, a)
@@ -957,19 +958,31 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
             )
 
             if beste_sameng_score <= beste_regulier_score:
+                # Stap 1: transitie mét fairness
                 if _try_place_block_samenvoeging_transitie(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+                # Stap 2: normaal mét fairness
                 if _try_place_block_any_attr(student, block):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+                # Stap 3: transitie zónder fairness (laatste redmiddel voor deze size)
+                if _try_place_block_samenvoeging_transitie(student, block, respecteer_fairness=False):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
             else:
+                # Stap 1: normaal mét fairness
                 if _try_place_block_any_attr(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+                # Stap 2: transitie mét fairness
                 if _try_place_block_samenvoeging_transitie(student, block):
                     return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+                # Stap 3: transitie zónder fairness (laatste redmiddel voor deze size)
+                if _try_place_block_samenvoeging_transitie(student, block, respecteer_fairness=False):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
         else:
+            # Stap 1: normaal mét fairness
             if _try_place_block_any_attr(student, block):
                 return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
 
+    # Noodventiel: eerste uur tijdelijk overslaan
     return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:], preferred_sizes)
 
 
