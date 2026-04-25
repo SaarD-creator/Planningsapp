@@ -714,38 +714,6 @@ def _has_capacity(attr, uur):
     return per_hour_assigned_counts[uur][attr] < _max_spots_for(attr, uur)
 
 
-def uren_bij_verwante_attrs(student_naam, attr):
-    """
-    Geef alle uren terug waarop student_naam bij `attr` stond,
-    inclusief uren bij samengestelde attracties die dezelfde basisonderdelen delen.
-
-    Voorbeelden:
-      - attr = "A"     → telt ook uren bij "A + B", "A + C", …
-      - attr = "A + B" → telt ook uren bij "A", "B", "A + C", "B + C", …
-
-    Zo weet de planner dat 1u bij "A + B" + 2u bij "A" = 3u bij dezelfde attractie.
-    """
-    # Bepaal de basisonderdelen van de gevraagde attractie
-    if " + " in attr:
-        onderdelen = set(a.strip() for a in attr.split("+"))
-    else:
-        onderdelen = {attr.strip()}
-
-    uren = set()
-    for (h, a), namen in assigned_map.items():
-        if student_naam not in namen:
-            continue
-        # Bepaal de onderdelen van de reeds ingeplande attractie
-        if " + " in a:
-            a_onderdelen = set(x.strip() for x in a.split("+"))
-        else:
-            a_onderdelen = {a.strip()}
-        # Overlap in onderdelen → zelfde basisattractie → uur meetellen
-        if onderdelen & a_onderdelen:
-            uren.add(h)
-    return uren
-
-
 def _try_place_block_on_attr(student, block_hours, attr):
     """Check capaciteit in alle uren en plaats dan in één keer.
     Regels:
@@ -757,10 +725,12 @@ def _try_place_block_on_attr(student, block_hours, attr):
         if not _has_capacity(attr, h):
             return False
 
-    # Verzamel alle uren waarop deze student al bij deze (of een verwante) attractie staat.
-    # "Verwant" = samengestelde attractie die minstens één zelfde basisonderdeel deelt.
-    # Zo telt 1u bij "A + B" + 2u bij "A" correct als 3u bij dezelfde basisattractie.
-    uren_bij_attr = uren_bij_verwante_attrs(student["naam"], attr)
+    # Verzamel alle uren waarop deze student al bij deze attractie staat
+    uren_bij_attr = set()
+    for h in student["assigned_hours"]:
+        namen = assigned_map.get((h, attr), [])
+        if student["naam"] in namen:
+            uren_bij_attr.add(h)
 
     # Check max 6 unieke uren per attractie per dag
     nieuwe_uren = set(block_hours)
@@ -789,9 +759,12 @@ def _try_place_block_any_attr(student, block_hours):
     """
 
     def uren_bij_attr(student, attr):
-        # Gebruik de verwante-attracties-logica zodat uren bij een samengestelde attractie
-        # meetellen voor de losse onderdelen (en vice versa).
-        return uren_bij_verwante_attrs(student["naam"], attr)
+        uren = set()
+        for h in student["assigned_hours"]:
+            namen = assigned_map.get((h, attr), [])
+            if student["naam"] in namen:
+                uren.add(h)
+        return uren
 
     def candidate_score(attr):
         # Hoeveel studenten kunnen deze attractie? Lager = kritieker
@@ -851,29 +824,92 @@ def _try_place_block_any_attr(student, block_hours):
     return False
     
 
+
+def _try_place_block_samenvoeging_transitie(student, block_hours):
+    """
+    Speciaal geval: het eerste uur is een samenvoegingsuur.
+    Probeer uur 1 op 'A+B' te plaatsen en de rest op 'A' of 'B'.
+    Behandelt dit als één logisch blok op dezelfde basisattractie.
+    """
+    if len(block_hours) < 2:
+        return False
+
+    eerste_uur = block_hours[0]
+    rest_uren = block_hours[1:]
+
+    for sameng_attr in actieve_attracties_per_uur.get(eerste_uur, set()):
+        if " + " not in sameng_attr:
+            continue
+        if not student_kan_attr(student, sameng_attr):
+            continue
+        if not _has_capacity(sameng_attr, eerste_uur):
+            continue
+
+        onderdelen = [o.strip() for o in sameng_attr.split("+")]
+
+        for onderdeel in onderdelen:
+            if not student_kan_attr(student, onderdeel):
+                continue
+
+            # Capaciteitscheck op het onderdeel voor alle resterende uren
+            if not all(_has_capacity(onderdeel, h) for h in rest_uren):
+                continue
+
+            # Max 6u check: combineer uren op samenvoeging én onderdeel als één basis
+            uren_bij_base = set()
+            for h in student["assigned_hours"]:
+                if student["naam"] in assigned_map.get((h, sameng_attr), []):
+                    uren_bij_base.add(h)
+                if student["naam"] in assigned_map.get((h, onderdeel), []):
+                    uren_bij_base.add(h)
+            if len(uren_bij_base | set(block_hours)) > 6:
+                continue
+
+            # Plaatsen: uur 1 op de samenvoeging
+            assigned_map[(eerste_uur, sameng_attr)].append(student["naam"])
+            per_hour_assigned_counts[eerste_uur][sameng_attr] += 1
+            student["assigned_hours"].append(eerste_uur)
+            student["assigned_attracties"].add(sameng_attr)
+
+            # Rest op het losse onderdeel
+            for h in rest_uren:
+                assigned_map[(h, onderdeel)].append(student["naam"])
+                per_hour_assigned_counts[h][onderdeel] += 1
+                student["assigned_hours"].append(h)
+            student["assigned_attracties"].add(onderdeel)
+
+            return True
+
+    return False
+
+
 def _place_block_with_fallback(student, hours_seq, preferred_sizes=None):
-    """
-    Probeer een reeks opeenvolgende uren te plaatsen.
-    - Standaard: eerst 3, dan 2, dan 1.
-    - Via preferred_sizes kan je lokaal een andere voorkeur afdwingen.
-    - Als niets lukt aan het begin van de reeks, schuif 1 uur op (dat uur gaat voorlopig naar extra),
-      en probeer verder; tweede pass zal het later alsnog proberen op te vullen.
-    Retourneert: lijst 'unplaced' uren die (voorlopig) niet geplaatst raakten.
-    """
     if not hours_seq:
         return []
 
     if preferred_sizes is None:
         preferred_sizes = [3, 2, 1]
 
-    # Probeer blok aan de voorkant volgens voorkeur
+    # ── NIEUW: samenvoeging-transitie als eerste uur een samenvoegingsuur is ──
+    eerste_uur = hours_seq[0]
+    heeft_samenvoeging = any(
+        " + " in attr
+        for attr in actieve_attracties_per_uur.get(eerste_uur, set())
+    )
+    if heeft_samenvoeging:
+        for size in preferred_sizes:
+            if size > 1 and len(hours_seq) >= size:
+                if _try_place_block_samenvoeging_transitie(student, hours_seq[:size]):
+                    return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
+    # ── EINDE NIEUW ──
+
+    # Bestaande logica (ongewijzigd)
     for size in preferred_sizes:
         if len(hours_seq) >= size:
             first_block = hours_seq[:size]
             if _try_place_block_any_attr(student, first_block):
                 return _place_block_with_fallback(student, hours_seq[size:], preferred_sizes)
 
-    # Helemaal niks paste aan de voorkant: markeer eerste uur tijdelijk als 'unplaced' en schuif door
     return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:], preferred_sizes)
 
 
@@ -1165,8 +1201,7 @@ def is_valid_attr_for_student_on_hours(student, attr, uren):
     return True
 
 def respects_student_attr_rules(student, attr):
-    # Gebruik verwante-attracties-teller: uren bij "A + B" tellen mee voor "A" en "B"
-    uren = uren_bij_verwante_attrs(student["naam"], attr)
+    uren = get_hours_on_attr(student, attr)
     if len(uren) > 6:
         return False
     return True
@@ -1206,46 +1241,25 @@ def can_swap_exact_block(student_a, attr_a, block_hours, student_b, attr_b):
 def count_problem_attrs(student):
     """
     Tel voor hoeveel attracties deze student meer dan 4 uur ingepland staat.
-    Uren bij een samengestelde attractie tellen mee voor de losse onderdelen.
     """
     count = 0
-    # Gebruik een genormaliseerde set van basisattracties om dubbeltelling te vermijden
-    gezien = set()
     for attr in list(student["assigned_attracties"]):
-        if " + " in attr:
-            basisattrs = [a.strip() for a in attr.split("+")]
-        else:
-            basisattrs = [attr.strip()]
-        for basis in basisattrs:
-            if basis in gezien:
-                continue
-            gezien.add(basis)
-            if len(uren_bij_verwante_attrs(student["naam"], basis)) > 4:
-                count += 1
+        if len(get_hours_on_attr(student, attr)) > 4:
+            count += 1
     return count
 
 def total_overflow_hours(student):
     """
     Tel hoeveel uren boven de limiet van 4 uur deze student in totaal heeft.
-    Uren bij een samengestelde attractie tellen mee voor de losse onderdelen.
     Voorbeeld:
     - 5 uur op een attractie => +1
     - 6 uur op een attractie => +2
     """
     overflow = 0
-    gezien = set()
     for attr in list(student["assigned_attracties"]):
-        if " + " in attr:
-            basisattrs = [a.strip() for a in attr.split("+")]
-        else:
-            basisattrs = [attr.strip()]
-        for basis in basisattrs:
-            if basis in gezien:
-                continue
-            gezien.add(basis)
-            uren = len(uren_bij_verwante_attrs(student["naam"], basis))
-            if uren > 4:
-                overflow += (uren - 4)
+        uren = len(get_hours_on_attr(student, attr))
+        if uren > 4:
+            overflow += (uren - 4)
     return overflow
 
 def can_use_block_as_swap_target(student, attr, block_hours):
