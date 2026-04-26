@@ -1,3 +1,4 @@
+# splitsing volgens ideaalmomenten
 # samengevoegde attracties als 1 --> fix in plaatsing! maar nog vaak 2x drie uur bij 1 attractie
 # niet meer laden na elke verandering
 # Werkblad heropleidingen! Plus op de planning
@@ -864,10 +865,29 @@ def _try_place_block_any_attr(student, block_hours):
     ]
     candidate_attrs.sort(key=candidate_score)
 
+    # ── DEBUG ──
+    DEBUG_NAAM = "NAAM_VAN_STUDENT"   # <-- vul hier de naam in van de student die vastzit
+    if student["naam"] == DEBUG_NAAM:
+        print(f"\n[DEBUG] Blok {block_hours} voor {student['naam']}:")
+        for a in candidate_attrs:
+            score = candidate_score(a)
+            print(f"  {a:30s}  score={score}")
+        if not candidate_attrs:
+            print("  (geen kandidaat-attracties beschikbaar)")
+    # ── EINDE DEBUG ──
+
     for attr in candidate_attrs:
         if _try_place_block_on_attr(student, block_hours, attr):
+            # ── DEBUG ──
+            if student["naam"] == DEBUG_NAAM:
+                print(f"  → GEPLAATST op {attr}")
+            # ── EINDE DEBUG ──
             return True
 
+    # ── DEBUG ──
+    if student["naam"] == DEBUG_NAAM:
+        print(f"  → NIEMAND paste, blok gaat naar extra")
+    # ── EINDE DEBUG ──
     return False
     
 
