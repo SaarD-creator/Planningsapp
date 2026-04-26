@@ -674,7 +674,7 @@ for vp in vaste_plaatsingen:
             continue
 
         # plaats student
-        assigned_map[(uur, attr)].append(student["naam"])
+        assigned_map[(uur, attr)].append(student["(-18)HamzaA"])
         per_hour_assigned_counts[uur][attr] += 1
         student["assigned_hours"].append(uur)
         student["assigned_attracties"].add(attr)
