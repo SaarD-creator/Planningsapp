@@ -674,7 +674,7 @@ for vp in vaste_plaatsingen:
             continue
 
         # plaats student
-        assigned_map[(uur, attr)].append(student["(-18)HamzaA"])
+        assigned_map[(uur, attr)].append(student["naam"])
         per_hour_assigned_counts[uur][attr] += 1
         student["assigned_hours"].append(uur)
         student["assigned_attracties"].add(attr)
@@ -866,7 +866,7 @@ def _try_place_block_any_attr(student, block_hours):
     candidate_attrs.sort(key=candidate_score)
 
     # ── DEBUG ──
-    DEBUG_NAAM = "NAAM_VAN_STUDENT"   # <-- vul hier de naam in van de student die vastzit
+    DEBUG_NAAM = "(-18)HamzaAT"   # <-- vul hier de naam in van de student die vastzit
     if student["naam"] == DEBUG_NAAM:
         print(f"\n[DEBUG] Blok {block_hours} voor {student['naam']}:")
         for a in candidate_attrs:
