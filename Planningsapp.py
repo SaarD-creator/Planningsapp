@@ -892,18 +892,30 @@ def _try_place_block_samenvoeging_transitie(student, block_hours, respecteer_fai
         if breedte_profiel >= 4: return False
         return True  # weinig opties → toch toestaan
 
-    # ── Geval 1: eerste uur is samenvoeging ──
+    # ── Geval 1: eerste uur/uren zijn samenvoeging ──
     eerste_uur = block_hours[0]
     for sameng_attr in actieve_attracties_per_uur.get(eerste_uur, set()):
         if " + " not in sameng_attr:
             continue
         if not student_kan_attr(student, sameng_attr):
             continue
-        if not _has_capacity(sameng_attr, eerste_uur):
+
+        # Hoeveel opeenvolgende uren is de samenvoeging actief vanaf het begin?
+        sameng_uren = []
+        for h in block_hours:
+            if sameng_attr in actieve_attracties_per_uur.get(h, set()):
+                sameng_uren.append(h)
+            else:
+                break
+
+        rest_uren = [h for h in block_hours if h not in sameng_uren]
+        if not rest_uren:
+            continue
+
+        if not all(_has_capacity(sameng_attr, h) for h in sameng_uren):
             continue
 
         onderdelen = [o.strip() for o in sameng_attr.split("+")]
-        rest_uren = block_hours[1:]
 
         for onderdeel in onderdelen:
             if not student_kan_attr(student, onderdeel):
@@ -911,15 +923,15 @@ def _try_place_block_samenvoeging_transitie(student, block_hours, respecteer_fai
             if not all(_has_capacity(onderdeel, h) for h in rest_uren):
                 continue
 
-            # ── AANGEPAST: gebruik uren_bij_basis_attr + fairness check ──
             if len(uren_bij_basis_attr(student, onderdeel) | set(block_hours)) > 6:
                 continue
             if not fairness_ok(onderdeel, block_hours):
                 continue
 
-            assigned_map[(eerste_uur, sameng_attr)].append(student["naam"])
-            per_hour_assigned_counts[eerste_uur][sameng_attr] += 1
-            student["assigned_hours"].append(eerste_uur)
+            for h in sameng_uren:
+                assigned_map[(h, sameng_attr)].append(student["naam"])
+                per_hour_assigned_counts[h][sameng_attr] += 1
+                student["assigned_hours"].append(h)
             student["assigned_attracties"].add(sameng_attr)
 
             for h in rest_uren:
