@@ -1,3 +1,4 @@
+# Last minute planning is vaak niet top + minderjarigen hun pauzes ook niet ok
 # Begin gemaakt overschakeling
 # splitsing volgens ideaalmomenten
 # samengevoegde attracties als 1 --> fix in plaatsing! maar nog vaak 2x drie uur bij 1 attractie
@@ -1218,26 +1219,7 @@ def assign_student(s):
 
 for s in studenten_sorted:
     assign_student(s)
-    # --- TIJDELIJKE DEBUG: verwijder na fixen ---
-    if studenten_sorted:
-        s_debug = studenten_sorted[0]
-        uren_debug = sorted(u for u in s_debug["uren_beschikbaar"] if u in open_uren)
-        runs_debug = contiguous_runs(uren_debug)
-        st.write(f"**DEBUG student:** {s_debug['naam']}")
-        st.write(f"open_uren: {open_uren}")
-        st.write(f"ideaalmomenten: {ideaalmomenten}")
-        st.write(f"uren_beschikbaar (gefilterd): {uren_debug}")
-        st.write(f"runs: {runs_debug}")
-        for run_d in runs_debug:
-            L_d = len(run_d)
-            st.write(f"  run={run_d}, L={L_d}, L%3={L_d%3}")
-            if L_d % 3 != 0 and ideaalmomenten:
-                blokken_d = partition_run_lengths(run_d, ideal_moments=ideaalmomenten)
-                st.write(f"  → partition geeft: {blokken_d}")
-            else:
-                st.write(f"  → geen partition (L%3=0 of geen ideaalmomenten)")
-    # --- EINDE DEBUG ---
-
+    
 # -----------------------------
 # Post-processing: lege plekken opvullen door doorschuiven
 # -----------------------------
