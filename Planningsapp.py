@@ -78,6 +78,34 @@ def parse_blok_duur(label_str):
     except ValueError:
         return 1.0
 
+
+def parse_uur_waarde(val):
+    """
+    Zet een celwaarde om naar een uur als float.
+    Werkt met: int (10), float (17.5), str ('10', '17,5', '17:30'),
+               datetime.time (10:00:00 → 10.0, 17:30:00 → 17.5)
+    Geeft None terug als de waarde niet parseerbaar is.
+    """
+    if val is None:
+        return None
+    import datetime as _dt
+    if isinstance(val, _dt.time):
+        return val.hour + val.minute / 60 + val.second / 3600
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            return int(parts[0]) + int(parts[1]) / 60
+        except:
+            return None
+    s = s.replace(",", ".").replace("u", "").strip()
+    try:
+        return float(s)
+    except:
+        return None
+
 # Blokduur per uur (uit I1:S1 van Input_speciaal)
 # Kolommen zonder label krijgen standaard 1.0 uur
 blok_durations = {}
