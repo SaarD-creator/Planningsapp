@@ -53,6 +53,8 @@ ws = wb["Input"]
 wb_raw = load_workbook(BytesIO(file_bytes), data_only=False)
 ws_raw = wb_raw["Input"]
 
+ws_speciaal = wb["Input_speciaal"]
+
 # -----------------------------
 
 # Hulpfuncties
@@ -287,10 +289,27 @@ for s in studenten:
 # -----------------------------
 # Openingsuren
 # -----------------------------
-open_uren=[int(str(ws.cell(1,kol).value).replace("u","").strip()) for kol in range(36,45) if ws.cell(2,kol).value in [1,True,"WAAR","X"]]
+# Openingsuren lezen vanuit Input_speciaal, I2:S2 (kolommen 9-19)
+open_uren = []
+uur_labels = {}  # uur -> korte info-tekst uit rij 1, voor gebruik op de planning
+
+for kol in range(9, 20):  # kolom I t/m S
+    val = ws_speciaal.cell(2, kol).value
+    try:
+        uur = int(val)
+    except (TypeError, ValueError):
+        continue
+    if uur == 0:
+        continue
+    open_uren.append(uur)
+    label = ws_speciaal.cell(1, kol).value
+    if label and str(label).strip():
+        uur_labels[uur] = str(label).strip()
+
 if not open_uren:
-    open_uren=list(range(10,19))
-open_uren=sorted(set(open_uren))
+    open_uren = list(range(10, 19))
+open_uren = sorted(set(open_uren))
+
 
 ideaalmomenten = compute_ideal_moments(open_uren)
 
@@ -343,19 +362,18 @@ def naam_tie_break_key(naam_raw):
 # -----------------------------
 pauzevlinder_namen=[ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
 
-def compute_pauze_hours(open_uren):
-    if 10 in open_uren and 18 in open_uren:
-        return [h for h in open_uren if 12 <= h <= 16]
-    elif 10 in open_uren and 17 in open_uren:
-        return [h for h in open_uren if 12 <= h <= 16]
-    elif 12 in open_uren and 18 in open_uren:
-        return [h for h in open_uren if 14 <= h <= 17]
-    elif 14 in open_uren and 18 in open_uren:
-        return [h for h in open_uren if 16 <= h <= 17]
-    else:
-        return list(open_uren)
+# Pauzevlinderuren lezen vanuit Input_speciaal, I3:S3 (kolommen 9-19)
+required_pauze_hours = []
+for kol in range(9, 20):
+    val = ws_speciaal.cell(3, kol).value
+    try:
+        uur = int(val)
+    except (TypeError, ValueError):
+        continue
+    if uur and uur in open_uren:
+        required_pauze_hours.append(uur)
+required_pauze_hours = sorted(set(required_pauze_hours))
 
-required_pauze_hours=compute_pauze_hours(open_uren)
 
 for idx,pvnaam in enumerate(pauzevlinder_namen,start=1):
     for s in studenten:
@@ -1836,7 +1854,9 @@ ws_out.cell(1, 1, vandaag).font = Font(bold=True)
 ws_out.cell(1, 1).fill = white_fill
 
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
-    ws_out.cell(1, col_idx, f"{uur}:00").font = Font(bold=True)
+    label = uur_labels.get(uur)
+    header_text = f"{uur}:00 ({label})" if label else f"{uur}:00"
+    ws_out.cell(1, col_idx, header_text).font = Font(bold=True)
     ws_out.cell(1, col_idx).fill = white_fill
     ws_out.cell(1, col_idx).alignment = center_align
     ws_out.cell(1, col_idx).border = thin_border
