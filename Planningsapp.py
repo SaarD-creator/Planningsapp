@@ -147,7 +147,7 @@ def compute_ideal_moments(open_uren):
     if not open_uren:
         return set()
     blokken = sorted(open_uren)
-    if len(blokken) % 3 == 0:
+    if len(blokken) < 4:
         return set()
     return {blokken[i] for i in range(3, len(blokken), 3)}
 
