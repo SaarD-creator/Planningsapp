@@ -380,15 +380,12 @@ for s in studenten:
 # -----------------------------
 # Openingsuren lezen vanuit Input_speciaal, I2:S2 (kolommen 9-19)
 open_uren = []
-uur_labels = {}  # uur -> korte info-tekst uit rij 1, voor gebruik op de planning
+uur_labels = {}
 
-for kol in range(9, 20):  # kolom I t/m S
+for kol in range(9, 20):
     val = ws_speciaal.cell(2, kol).value
-    try:
-        uur = int(val)
-    except (TypeError, ValueError):
-        continue
-    if uur == 0:
+    uur = parse_uur_waarde(val)
+    if uur is None or uur == 0:
         continue
     open_uren.append(uur)
     label = ws_speciaal.cell(1, kol).value
@@ -398,7 +395,7 @@ for kol in range(9, 20):  # kolom I t/m S
 if not open_uren:
     open_uren = list(range(10, 19))
 open_uren = sorted(set(open_uren))
-
+        
 
 ideaalmomenten = compute_ideal_moments(open_uren)
 
