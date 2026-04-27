@@ -138,17 +138,18 @@ def max_consecutive_hours(urenlijst):
 
 def compute_ideal_moments(open_uren):
     """
-    Bereken ideaalmomenten o.b.v. vaste blokken van 3 uur startend bij het
-    vroegste openingsuur. Het resultaat zijn de starturen van het 2e, 3e, ...
-    blok (= de wisselmomenten).
+    Ideaalmomenten vallen na elke 3 blokken (op basis van positie, niet uren).
+    Als het totaal aantal blokken deelbaar is door 3, zijn er geen ideaalmomenten nodig.
 
-    Voorbeeld: open_uren 10-18 → blokken [10,11,12] [13,14,15] [16,17,18]
-               → ideaalmomenten = {13, 16}
+    Voorbeeld: 9 blokken → deelbaar door 3 → lege set
+    Voorbeeld: 8 blokken → ideaalmomenten op blok 4 en blok 7 (index 3 en 6)
     """
     if not open_uren:
         return set()
-    start = min(open_uren)
-    return {u for u in open_uren if (u - start) % 3 == 0 and u != start}
+    blokken = sorted(open_uren)
+    if len(blokken) % 3 == 0:
+        return set()
+    return {blokken[i] for i in range(3, len(blokken), 3)}
 
 
 def partition_run_lengths(L, start_hour=None, ideal_moments=None):
@@ -1944,9 +1945,14 @@ student_kleuren = dict(zip(alle_namen, unique_colors))
 ws_out.cell(1, 1, vandaag).font = Font(bold=True)
 ws_out.cell(1, 1).fill = white_fill
 
+def formatteer_uur(u):
+    """10 → '10:00', 13.5 → '13:30', 9.75 → '9:45'"""
+    uren = int(u)
+    minuten = round((u - uren) * 60)
+    return f"{uren}:{minuten:02d}"
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
     label = uur_labels.get(uur)
-    header_text = f"{uur}:00 ({label})" if label else f"{uur}:00"
+    header_text = f"{formatteer_uur(uur)} ({label})" if label else formatteer_uur(uur)
     ws_out.cell(1, col_idx, header_text).font = Font(bold=True)
     ws_out.cell(1, col_idx).fill = white_fill
     ws_out.cell(1, col_idx).alignment = center_align
