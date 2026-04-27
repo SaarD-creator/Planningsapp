@@ -55,6 +55,18 @@ ws_raw = wb_raw["Input"]
 
 ws_speciaal = wb["Input_speciaal"]
 
+# Kolom→uur mapping vanuit Input_speciaal rij 2 (I2:S2)
+# Nodig voor samenvoeg-attracties en dichte uren, die vóór open_uren gelezen worden
+col_to_uur_speciaal = {}
+for _kol in range(9, 20):  # kolom I t/m S
+    _val = ws_speciaal.cell(2, _kol).value
+    try:
+        _uur = int(_val)
+        if _uur != 0:
+            col_to_uur_speciaal[_kol] = _uur
+    except (TypeError, ValueError):
+        pass
+
 # -----------------------------
 
 # Hulpfuncties
@@ -221,21 +233,19 @@ for rij in range(2,500):
     })
 
 
-# Nieuwe dictionary voor uren dat een attractie DICHT is
 dichte_uren_per_attr = defaultdict(set)
-# AJ t/m AR (kolom 36 t/m 44)
-uur_kolommen = list(range(36, 45)) 
+# Input_speciaal: rijen 17 t/m 22, vakjes in I-S (kol 9-19), attractienaam in T (kol 20)
 
-for rij in range(24, 30): # Rij 24 t/m 29
-    attr_naam_raw = ws.cell(rij, 45).value # Kolom AS
+for rij in range(17, 23):  # rij 17 t/m 22
+    attr_naam_raw = ws_speciaal.cell(rij, 20).value  # kolom T
     if attr_naam_raw:
-        # Belangrijk: Gebruik normalize_attr voor een eerlijke vergelijking [3]
         attr_naam = normalize_attr(attr_naam_raw)
-        for col_idx in uur_kolommen:
-            val = ws.cell(rij, col_idx).value
+        for col_idx in range(9, 20):  # kolom I t/m S
+            val = ws_speciaal.cell(rij, col_idx).value
             if val in [1, True, "WAAR", "X"]:
-                uur = 10 + (col_idx - 36)
-                dichte_uren_per_attr[attr_naam].add(uur)
+                uur = col_to_uur_speciaal.get(col_idx)
+                if uur:
+                    dichte_uren_per_attr[attr_naam].add(uur)
 
 # -----------------------------
 # Samenvoeg-attracties (per uur)
@@ -244,21 +254,21 @@ for rij in range(24, 30): # Rij 24 t/m 29
 
 # In DEEL 1 bij "Samenvoeg-attracties (per uur)"
 uur_samenvoegingen = defaultdict(list)
-uur_kolommen = list(range(36, 45)) 
+# Input_speciaal: rijen 10 t/m 15, vakjes in I-S (kol 9-19), attractienamen in T-U-V (kol 20-22)
 
-for rij in range(14, 22):  # Rij 14 t/m 21 voor samenvoegingen
-    # Lees de groep (AS, AT, AU)
+for rij in range(10, 16):  # rij 10 t/m 15
     groep = []
-    for col in range(45, 48): 
-        val = ws.cell(rij, col).value
-        if val: groep.append(str(val).strip())
-    
+    for col in range(20, 23):  # kolom T, U, V
+        val = ws_speciaal.cell(rij, col).value
+        if val:
+            groep.append(str(val).strip())
+
     if len(groep) > 1:
-        # Check per uur of de samenvoeging actief is (AJ t/m AR)
-        for col_idx in uur_kolommen:
-            if ws.cell(rij, col_idx).value in [1, True, "WAAR", "X"]:
-                uur = 10 + (col_idx - 36)
-                uur_samenvoegingen[uur].append(groep)
+        for col_idx in range(9, 20):  # kolom I t/m S
+            if ws_speciaal.cell(rij, col_idx).value in [1, True, "WAAR", "X"]:
+                uur = col_to_uur_speciaal.get(col_idx)
+                if uur:
+                    uur_samenvoegingen[uur].append(groep)
 
 
 # -----------------------------
@@ -360,7 +370,12 @@ def naam_tie_break_key(naam_raw):
 
 # Pauzevlinders
 # -----------------------------
-pauzevlinder_namen=[ws[f'BN{rij}'].value for rij in range(4,11) if ws[f'BN{rij}'].value]
+# Input_speciaal: C14 t/m C18 (kolom 3, rijen 14-18)
+pauzevlinder_namen = [
+    ws_speciaal.cell(rij, 3).value
+    for rij in range(14, 19)
+    if ws_speciaal.cell(rij, 3).value
+]
 
 # Pauzevlinderuren lezen vanuit Input_speciaal, I3:S3 (kolommen 9-19)
 required_pauze_hours = []
