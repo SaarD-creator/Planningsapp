@@ -56,28 +56,6 @@ ws_raw = wb_raw["Input"]
 
 ws_speciaal = wb["Input_speciaal"]
 
-# Kolom→uur mapping vanuit Input_speciaal rij 2 (I2:S2)
-# Nodig voor samenvoeg-attracties en dichte uren, die vóór open_uren gelezen worden
-col_to_uur_speciaal = {}
-for _kol in range(9, 20):  # kolom I t/m S
-    _val = ws_speciaal.cell(2, _kol).value
-    try:
-        _uur = int(_val)
-        if _uur != 0:
-            col_to_uur_speciaal[_kol] = _uur
-    except (TypeError, ValueError):
-        pass
-
-def parse_blok_duur(label_str):
-    """Parst '0,5h', '0,75h', '1,5h' → float. Geeft 1.0 als niet parseerbaar."""
-    if not label_str:
-        return 1.0
-    s = str(label_str).strip().replace(",", ".").replace("h", "").strip()
-    try:
-        return float(s)
-    except ValueError:
-        return 1.0
-
 
 def parse_uur_waarde(val):
     """
@@ -105,6 +83,28 @@ def parse_uur_waarde(val):
         return float(s)
     except:
         return None
+
+
+# Kolom→uur mapping vanuit Input_speciaal rij 2 (I2:S2)
+# Nodig voor samenvoeg-attracties en dichte uren, die vóór open_uren gelezen worden
+col_to_uur_speciaal = {}
+for _kol in range(9, 20):
+    _uur = parse_uur_waarde(ws_speciaal.cell(2, _kol).value)
+    if _uur is not None and _uur != 0:
+        col_to_uur_speciaal[_kol] = _uur
+        
+
+def parse_blok_duur(label_str):
+    """Parst '0,5h', '0,75h', '1,5h' → float. Geeft 1.0 als niet parseerbaar."""
+    if not label_str:
+        return 1.0
+    s = str(label_str).strip().replace(",", ".").replace("h", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 1.0
+
+
 
 # Blokduur per uur (uit I1:S1 van Input_speciaal)
 # Kolommen zonder label krijgen standaard 1.0 uur
