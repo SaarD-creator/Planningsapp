@@ -152,32 +152,19 @@ def compute_ideal_moments(open_uren):
     return {blokken[i] for i in range(3, len(blokken), 3)}
 
 
-def partition_run_lengths(L, start_hour=None, ideal_moments=None):
+def partition_run_lengths(run_hours, ideal_moments=None):
     """
-    Splits L uur op in blokken uit [3, 2, 4, 1].
-
-    Standaard (L deelbaar door 3, of geen uurinfo):
-        → minimaliseer 1-uursblokken (prioriteit 3 > 2 > 4 > 1).
-
-    Als start_hour en ideal_moments meegegeven worden én L % 3 != 0:
-        → primair: maximaliseer wissels op ideaalmomenten
-        → secundair: minimaliseer 1-uursblokken
+    Splits een run van blokken op in stukken van [3, 2, 4, 1].
+    Gebruikt blokposities (via run_hours lijst), niet uuraritmethiek.
     """
+    L = len(run_hours)
     blocks = [3, 2, 4, 1]
-
-    use_ideal = (
-        start_hour is not None
-        and ideal_moments
-        and L % 3 != 0
-    )
+    use_ideal = bool(ideal_moments) and L % 3 != 0
 
     if use_ideal:
-        # dp[i] = (neg_ideaal, ones, blokkenlijst)
-        # neg_ideaal is negatief zodat minimaliseren = meer ideale wissels
         INF = 10 ** 9
         dp = [(INF, INF, [])] * (L + 1)
         dp[0] = (0, 0, [])
-
         for i in range(1, L + 1):
             best = (INF, INF, [])
             for b in blocks:
@@ -186,26 +173,19 @@ def partition_run_lengths(L, start_hour=None, ideal_moments=None):
                 prev_neg, prev_ones, prev_blks = dp[i - b]
                 if prev_neg == INF:
                     continue
-
-                # Startuur van dit blok in de echte planning
-                blok_start = start_hour + (i - b)
-                # Eerste blok heeft geen wissel (i-b == 0)
-                is_ideal = (i - b > 0) and (blok_start in ideal_moments)
-
+                # Startuur van dit blok rechtstreeks uit run_hours
+                blok_start_uur = run_hours[i - b]
+                is_ideal = (i - b > 0) and (blok_start_uur in ideal_moments)
                 cand = (
-                    prev_neg - (1 if is_ideal else 0),   # meer ideaal = beter
-                    prev_ones + (1 if b == 1 else 0),    # minder 1-uur = beter
+                    prev_neg - (1 if is_ideal else 0),
+                    prev_ones + (1 if b == 1 else 0),
                     prev_blks + [b],
                 )
                 if (cand[0], cand[1]) < (best[0], best[1]):
                     best = cand
-
             dp[i] = best
-
         return dp[L][2]
-
     else:
-        # Originele logica: minimaliseer 1-uursblokken
         dp = [(10 ** 9, [])] * (L + 1)
         dp[0] = (0, [])
         for i in range(1, L + 1):
@@ -222,16 +202,18 @@ def partition_run_lengths(L, start_hour=None, ideal_moments=None):
 
 
 def contiguous_runs(sorted_hours):
-    runs=[]
+    runs = []
     if not sorted_hours:
         return runs
-    run=[sorted_hours[0]]
+    # Gebruik positie in open_uren, niet uur+1
+    blok_index = {u: i for i, u in enumerate(sorted(open_uren))}
+    run = [sorted_hours[0]]
     for h in sorted_hours[1:]:
-        if h==run[-1]+1:
+        if blok_index.get(h, -99) == blok_index.get(run[-1], -98) + 1:
             run.append(h)
         else:
             runs.append(run)
-            run=[h]
+            run = [h]
     runs.append(run)
     return runs
 
@@ -1208,7 +1190,7 @@ def assign_student(s):
     for run in runs:
         L = len(run)
         if L % 3 != 0 and ideaalmomenten:
-            blokken = partition_run_lengths(L, start_hour=run[0], ideal_moments=ideaalmomenten)
+            blokken = partition_run_lengths(run, ideal_moments=ideaalmomenten)
             seen = []
             for b in blokken:
                 if b not in seen:
