@@ -91,23 +91,6 @@ for _kol in range(9, 20):  # kolom I t/m S
 
 ws_studenten = wb["Studenten"]
 
-# Bouw lookup: naam → (begin_uur, eind_uur)
-# Kolom A = naam, B = aantal uren (info, niet direct gebruikt),
-# C = beginuur, D = einduur (als float, bv. 17.5 = 17u30)
-studenten_uren_lookup = {}
-for _rij in range(2, 500):
-    _naam = ws_studenten.cell(_rij, 1).value
-    if not _naam:
-        continue
-    try:
-        _begin = float(str(ws_studenten.cell(_rij, 3).value).replace(",", "."))
-    except (TypeError, ValueError):
-        continue
-    try:
-        _eind = float(str(ws_studenten.cell(_rij, 4).value).replace(",", "."))
-    except (TypeError, ValueError):
-        continue
-    studenten_uren_lookup[str(_naam).strip()] = (_begin, _eind)
 
 # -----------------------------
 
@@ -252,39 +235,54 @@ def parse_header_uur(header):
 # -----------------------------
 # Studenten inlezen
 # -----------------------------
-studenten=[]
-for rij in range(2,500):
-    naam = ws.cell(rij,12).value
+studenten = []
+
+# Lees attractienamen uit rij 1 van 'Studenten', kolommen G t/m X (7-24)
+attractie_namen_studenten = [
+    ws_studenten.cell(1, kol).value
+    for kol in range(7, 25)
+]
+
+for rij in range(2, 500):
+    naam = ws_studenten.cell(rij, 5).value  # kolom E
     if not naam:
         continue
-    _opzoek = studenten_uren_lookup.get(str(naam).strip())
-    if _opzoek:
-        _begin_uur, _eind_uur = _opzoek
-        # Een blok telt mee als:
-        #   - de student al begonnen is (begin_uur <= blokstart)
-        #   - het volledige blok binnen de werktijd valt (blokstart + duur <= eind_uur)
+
+    # Werkuren uit C (beginuur) en D (einduur)
+    _begin = parse_uur_waarde(ws_studenten.cell(rij, 3).value)
+    _eind  = parse_uur_waarde(ws_studenten.cell(rij, 4).value)
+    if _begin is None or _eind is None:
+        uren_beschikbaar = []
+    else:
         uren_beschikbaar = [
             u for u in col_to_uur_speciaal.values()
-            if _begin_uur <= u and u + blok_durations.get(u, 1.0) <= _eind_uur
+            if _begin <= u and u + blok_durations.get(u, 1.0) <= _eind
         ]
-    else:
-        uren_beschikbaar = []
-    attracties=[ws.cell(1,kol).value for kol in range(14,32) if ws.cell(rij,kol).value in [1,True,"WAAR","X"]]
+
+    # Attracties uit kolommen G-X (7-24), namen staan in rij 1
+    attracties = [
+        attractie_namen_studenten[kol - 7]
+        for kol in range(7, 25)
+        if ws_studenten.cell(rij, kol).value in [1, True, "WAAR", "X"]
+        and attractie_namen_studenten[kol - 7]
+    ]
+
+    # Aantal attracties uit kolom Z (26)
     try:
-        aantal_attracties=int(ws[f'AG{rij}'].value) if ws[f'AG{rij}'].value else len(attracties)
+        aantal_attracties = int(ws_studenten.cell(rij, 26).value) if ws_studenten.cell(rij, 26).value else len(attracties)
     except:
-        aantal_attracties=len(attracties)
+        aantal_attracties = len(attracties)
+
     studenten.append({
         "naam": naam,
         "uren_beschikbaar": sorted(uren_beschikbaar),
-        "attracties":[a for a in attracties if a],
-        "aantal_attracties":aantal_attracties,
-        "is_pauzevlinder":False,
-        "pv_number":None,
-        "assigned_attracties":set(),
-        "assigned_hours":[]
+        "attracties": attracties,
+        "aantal_attracties": aantal_attracties,
+        "is_pauzevlinder": False,
+        "pv_number": None,
+        "assigned_attracties": set(),
+        "assigned_hours": []
     })
-
 
 dichte_uren_per_attr = defaultdict(set)
 # Input_speciaal: rijen 17 t/m 22, vakjes in I-S (kol 9-19), attractienaam in T (kol 20)
