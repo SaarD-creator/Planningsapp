@@ -83,6 +83,15 @@ def parse_uur_waarde(val):
         return float(s)
     except:
         return None
+        
+
+def formatteer_uur(u):
+    """10 → '10u', 13.5 → '13u30', 9.25 → '9u15'"""
+    uren = int(u)
+    minuten = round((u - uren) * 60)
+    if minuten == 0:
+        return f"{uren}u"
+    return f"{uren}u{minuten:02d}"
 
 
 # Kolom→uur mapping vanuit Input_speciaal rij 2 (I2:S2)
@@ -1946,11 +1955,7 @@ student_kleuren = dict(zip(alle_namen, unique_colors))
 ws_out.cell(1, 1, vandaag).font = Font(bold=True)
 ws_out.cell(1, 1).fill = white_fill
 
-def formatteer_uur(u):
-    """10 → '10:00', 13.5 → '13:30', 9.75 → '9:45'"""
-    uren = int(u)
-    minuten = round((u - uren) * 60)
-    return f"{uren}:{minuten:02d}"
+
 for col_idx, uur in enumerate(sorted(open_uren), start=2):
     label = uur_labels.get(uur)
     header_text = f"{formatteer_uur(uur)} ({label})" if label else formatteer_uur(uur)
@@ -2263,7 +2268,7 @@ def maak_analyse_sheet(wb_arg, am_arg, ea_arg, st_arg, actieve_attracties_overri
         if not analyse_studenten_uur or not analyse_attracties_uur:
             continue
 
-        ws_analyse.cell(start_rij, 1, f"{uur}:00").font = Font(bold=True)
+        ws_analyse.cell(start_rij, 1, formatteer_uur(uur)).font = Font(bold=True)
         ws_analyse.cell(start_rij, 1).fill = analyse_header_fill
         ws_analyse.cell(start_rij, 1).alignment = center_align
         ws_analyse.cell(start_rij, 1).border = thin_border
@@ -2346,7 +2351,7 @@ if required_pauze_hours:
 else:
     # fallback: gebruik open_uren
     for uur in sorted(open_uren):
-        uren_rij1.append(f"{uur}u")
+        uren_rij1.append(formatteer_uur(uur))
 
 # Schrijf uren in rij 1, start in kolom B
 for col_idx, uur in enumerate(uren_rij1, start=2):
@@ -7774,7 +7779,7 @@ def maak_wisselplanning_sheet(wb_arg, am_arg):
     current_row = 1
     for uur in sorted(wissels_per_uur.keys()):
         # Titelrij per uur
-        title_cell = ws_wissels.cell(current_row, 1, f"Wissels om {uur}:00")
+        title_cell = ws_wissels.cell(current_row, 1, f"Wissels om {formatteer_uur(uur)}")
         title_cell.font      = Font(bold=True)
         title_cell.alignment = _center
         current_row += 1
@@ -9918,7 +9923,7 @@ with st.expander("Last-minute afwezigen", expanded=False):
         start_uur_lm5 = st.selectbox(
             "Vanaf welk uur moet de nieuwe planning starten?",
             options=sorted(open_uren),
-            format_func=lambda u: f"{u}:00",
+            format_func=formatteer_uur,
         )
         submitted = st.form_submit_button("Maak last-minute planning")
 
