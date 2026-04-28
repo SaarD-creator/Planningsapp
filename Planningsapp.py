@@ -9832,10 +9832,12 @@ def lm5_write_lastminute_workbook(base_bytes, ctx, base_maps, start_uur, absente
 
     # Herwerk Analyse
     # Bouw actieve attracties per uur vanuit last-minute hour_states
-    lm_actieve_attracties = {
-        uur: hstate["active"]
-        for uur, hstate in ctx["hour_states"].items()
-    }
+    lm_actieve_attracties = {}
+    for uur in open_uren:
+        if uur in ctx["hour_states"]:
+            lm_actieve_attracties[uur] = ctx["hour_states"][uur]["active"]
+        else:
+            lm_actieve_attracties[uur] = actieve_attracties_per_uur.get(uur, set())
     maak_analyse_sheet(
         wb_lm,
         ctx["assigned_map"],
