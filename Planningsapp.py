@@ -7910,23 +7910,25 @@ def lm5_parse_output_hour(header):
         return min(open_uren) if open_uren else 10
     if s == "18u-19u30":
         return max(open_uren) if open_uren else 18
-    # Parses "14u", "14u30", "9u30" etc. naar float (14.0, 14.5, 9.5)
-    if "u" in s:
-        parts = s.split("u")
+    # Strip label-gedeelte tussen haakjes, bv. "9u30 (0,5h)" → "9u30"
+    kern = s.split("(")[0].strip()
+    if "u" in kern:
+        delen = kern.split("u")
         try:
-            uren = int(parts[0])
-            minuten = int(parts[1]) if len(parts) > 1 and parts[1].strip() else 0
+            uren = int(delen[0])
+            min_str = delen[1].strip() if len(delen) > 1 else ""
+            minuten = int(min_str) if min_str.isdigit() else 0
             return uren + minuten / 60
         except:
             return None
-    if ":" in s:
-        parts = s.split(":")
+    if ":" in kern:
+        delen = kern.split(":")
         try:
-            return int(parts[0]) + int(parts[1]) / 60
+            return int(delen[0]) + int(delen[1]) / 60
         except:
             return None
     try:
-        return float(s)
+        return float(kern)
     except:
         return None
         
