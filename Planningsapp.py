@@ -1171,15 +1171,7 @@ def _place_block_with_fallback(student, hours_seq, preferred_sizes=None, reset_s
     # Noodventiel: eerste uur tijdelijk overslaan
     return [hours_seq[0]] + _place_block_with_fallback(student, hours_seq[1:], preferred_sizes=next_sizes)
 
-# -----------------------------
-# Vinkjes uitlezen voor bloklogica
-# AR = kolom 44, AS = kolom 45, rij 2
-# -----------------------------
-ar2_vinkje = ws.cell(2, 44).value
-as2_vinkje = ws.cell(2, 45).value
 
-laatste_blok_is_anderhalf_uur = ar2_vinkje in [1, True, "WAAR", "X"]
-eerste_blok_is_anderhalf_uur = as2_vinkje in [1, True, "WAAR", "X"]
 
     
 # -----------------------------
@@ -1946,15 +1938,6 @@ for col_idx, uur in enumerate(sorted(open_uren), start=2):
     ws_out.cell(1, col_idx).alignment = center_align
     ws_out.cell(1, col_idx).border = thin_border
 
-# --- NIEUWE LOGICA VOOR AS2 VINKJE ---
-# AS is de 45e kolom in de Input-sheet (ws)
-as2_vinkje = ws.cell(2, 45).value 
-if as2_vinkje in [1, True, "WAAR", "X"]:
-    # Cel B1 is kolom 2, rij 1
-    ws_out.cell(1, 2).value = "9u30-11u"
-    # Cel J1 is kolom 10, rij 1
-    ws_out.cell(1, 10).value = "18u-19u30"
-# -------------------------------------
     
 
 rij_out = 2
