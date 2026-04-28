@@ -7910,7 +7910,26 @@ def lm5_parse_output_hour(header):
         return min(open_uren) if open_uren else 10
     if s == "18u-19u30":
         return max(open_uren) if open_uren else 18
-    return parse_header_uur(header)
+    # Parses "14u", "14u30", "9u30" etc. naar float (14.0, 14.5, 9.5)
+    if "u" in s:
+        parts = s.split("u")
+        try:
+            uren = int(parts[0])
+            minuten = int(parts[1]) if len(parts) > 1 and parts[1].strip() else 0
+            return uren + minuten / 60
+        except:
+            return None
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            return int(parts[0]) + int(parts[1]) / 60
+        except:
+            return None
+    try:
+        return float(s)
+    except:
+        return None
+        
 
 def lm5_student_lookup():
     return {str(s["naam"]).strip(): s for s in studenten}
