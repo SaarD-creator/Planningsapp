@@ -4189,7 +4189,6 @@ else:
 ##### EXTRA INFO TOEVOEGEN AAN PAUZEPLANNING (A12 e.v.)
 ##### -------------------------------------------------------------
 ws_pauze_sheet = wb_out["Pauzevlinders"]
-
 witte_fill = PatternFill(start_color="FFFFFF", fill_type="solid")
 
 # --- VINKJE V3 + TEKST W3 in Aanpassingen ---
@@ -4198,10 +4197,14 @@ vinkje_aanpassingen = ws_aanpassingen.cell(row=3, column=22).value  # V3
 if vinkje_aanpassingen in [1, True, "WAAR", "X"]:
     waarde = ws_aanpassingen.cell(row=3, column=23).value  # W3 (samengevoegde cel)
     if waarde:
-        cel = ws_pauze_sheet.cell(row=14, column=1, value=waarde)
-        cel.fill = witte_fill
-        cel.border = thin_border
-        cel.alignment = Alignment(horizontal="left", vertical="center")
+        regels = str(waarde).split("\n")
+        for i, regel in enumerate(regels):
+            regel = regel.strip()
+            if regel:
+                cel = ws_pauze_sheet.cell(row=14 + i, column=1, value=regel)
+                cel.fill = witte_fill
+                cel.border = thin_border
+                cel.alignment = Alignment(horizontal="left", vertical="center")
 # -------------------------------------
 
 
