@@ -51,11 +51,9 @@ file_bytes = uploaded_file.read()
 wb = load_workbook(BytesIO(file_bytes), data_only=True)
 ws = wb["Input"]
 
-# Extra workbook met ruwe celinhoud / formules
-wb_raw = load_workbook(BytesIO(file_bytes), data_only=False)
-ws_raw = wb_raw["Input"]
 
 ws_speciaal = wb["Input_speciaal"]
+ws_aanpassingen = wb["Aanpassingen"]
 
 
 def parse_uur_waarde(val):
@@ -397,7 +395,7 @@ ideaalmomenten = compute_ideal_moments(open_uren)
 # Eerst op aantal attracties,
 # daarna op vaste tie-break regel uit BU2
 # -----------------------------
-bu2_waarde = ws["BU2"].value
+bu2_waarde = ws_speciaal.cell(3, 23).value  # W3 in Input_speciaal
 try:
     tie_break_mode = int(bu2_waarde)
 except:
@@ -476,11 +474,11 @@ selected = sorted(selected, key=lambda s: naam_tie_break_key(s["naam"]))
 # -----------------------------
 aantallen_raw = {}
 attracties_te_plannen = []
-for kol in range(47, 65):  # AU-BL
-    naam = ws.cell(1, kol).value
+for rij in range(3, 21):  # E3:F20 in Aanpassingen
+    naam = ws_aanpassingen.cell(rij, 5).value  # kolom E
     if naam:
         try:
-            aantal = int(ws.cell(2, kol).value)
+            aantal = int(ws_aanpassingen.cell(rij, 6).value)  # kolom F
         except:
             aantal = 0
         aantallen_raw[naam] = max(0, min(2, aantal))
@@ -489,8 +487,9 @@ for kol in range(47, 65):  # AU-BL
 
 # Priority order for second spots (column BA, rows 5-11)
 second_priority_order = [
-    ws["BA" + str(rij)].value for rij in range(5, 12)
-    if ws["BA" + str(rij)].value
+    ws_aanpassingen.cell(rij, 9).value  # kolom I
+    for rij in range(3, 13)             # I3:I12
+    if ws_aanpassingen.cell(rij, 9).value
 ]
 
 
@@ -615,16 +614,14 @@ studenten_workend = [
 # -----------------------------
 student_blacklist = defaultdict(set)
 
-for rij in range(16, 80):  # BB16 t/m BG79
-    naam = ws[f'BB{rij}'].value
+for rij in range(3, 26):  # O3:P25 in Aanpassingen
+    naam = ws_aanpassingen.cell(rij, 15).value  # kolom O
     if not naam:
         continue
     naam = str(naam).strip()
-    # attracties in BC t/m BG
-    for col in range(54, 60):  # BC=54, BD=55, ..., BG=59
-        attr = ws.cell(rij, col).value
-        if attr:
-            student_blacklist[naam].add(str(attr).strip().lower())
+    attr = ws_aanpassingen.cell(rij, 16).value  # kolom P (1 attractie)
+    if attr:
+        student_blacklist[naam].add(str(attr).strip().lower())
 
 
 # Sorteer attracties op "kritieke score" (hoeveel studenten ze kunnen doen)
@@ -656,11 +653,11 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
     plaatsen_pauzeplanning = (aantal_pauze_uren * 4 - 1) * aantal_pv
 
     try:
-        lange_pauzes = int(ws["BP2"].value) if ws["BP2"].value else 0
+        lange_pauzes = int(ws_speciaal.cell(15, 6).value) if ws_speciaal.cell(15, 6).value else 0  # F15
     except:
         lange_pauzes = 0
     try:
-        korte_pauzes = int(ws["BQ2"].value) if ws["BQ2"].value else 0
+        korte_pauzes = int(ws_speciaal.cell(16, 6).value) if ws_speciaal.cell(16, 6).value else 0  # F16
     except:
         korte_pauzes = 0
 
@@ -700,11 +697,11 @@ def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
         _lange, _korte = lm5_bereken_pauze_counts(absentees_set, base_maps)
     else:
         try:
-            _lange = int(ws["BP2"].value) if ws["BP2"].value else 0
+            _lange = int(ws_speciaal.cell(15, 6).value) if ws_speciaal.cell(15, 6).value else 0
         except:
             _lange = 0
         try:
-            _korte = int(ws["BQ2"].value) if ws["BQ2"].value else 0
+            _korte = int(ws_speciaal.cell(16, 6).value) if ws_speciaal.cell(16, 6).value else 0
         except:
             _korte = 0
 
@@ -729,16 +726,15 @@ MAX_PER_STUDENT_ATTR = 6
 
 vaste_plaatsingen = []  # lijst van dicts: {naam, attractie}
 
-for rij in range(5, 9):  # BG5 t.e.m. BI26
-    if ws[f"BG{rij}"].value in [1, True, "WAAR", "X"]:
-        naam = ws[f"BH{rij}"].value
-        attractie = ws[f"BI{rij}"].value
+for rij in range(3, 6):  # R3:T5 in Aanpassingen
+    if ws_aanpassingen.cell(rij, 18).value in [1, True, "WAAR", "X"]:  # kolom R
+        naam = ws_aanpassingen.cell(rij, 19).value       # kolom S
+        attractie = ws_aanpassingen.cell(rij, 20).value  # kolom T
         if naam and attractie:
             vaste_plaatsingen.append({
                 "naam": str(naam).strip(),
                 "attractie": str(attractie).strip()
             })
-
 
 # -----------------------------
 # Vaste plaatsingen toepassen
@@ -1685,8 +1681,8 @@ for _ in range(max_block_swap_passes):
 # Volgorde attracties uit Input!BL16:BL33
 # -----------------------------
 input_volgorde = []
-for rij in range(16, 34):  # 16 t.e.m. 33
-    waarde = ws[f"BL{rij}"].value
+for rij in range(3, 21):  # C3:C20 in Aanpassingen
+    waarde = ws_aanpassingen.cell(rij, 3).value  # kolom C
     if waarde:
         input_volgorde.append(str(waarde).strip())
 
@@ -4192,31 +4188,20 @@ else:
 
 ##### EXTRA INFO TOEVOEGEN AAN PAUZEPLANNING (A12 e.v.)
 ##### -------------------------------------------------------------
-### We gebruiken de 'Input' sheet van het geüploade bestand
-### en de 'Pauzevlinders' sheet van het resultaat
-ws_input_data = wb["Input"]
 ws_pauze_sheet = wb_out["Pauzevlinders"]
 
-### Definieer de witte achtergrond
 witte_fill = PatternFill(start_color="FFFFFF", fill_type="solid")
 
-# --- NIEUWE LOGICA VOOR BN15 VINKJE ---
-# BN is de 66e kolom in Excel. We controleren cel BN15.
-bn15_vinkje = ws_input_data.cell(row=15, column=66).value
+# --- VINKJE V3 + TEKST W3 in Aanpassingen ---
+vinkje_aanpassingen = ws_aanpassingen.cell(row=3, column=22).value  # V3
 
-if bn15_vinkje in [1, True, "WAAR", "X"]:
-    # Loop door de rijen 15 tot en met 30 van de Input-sheet
-    for i, input_rij in enumerate(range(15, 31)):
-        # Kolom BO is de 67e kolom in Excel
-        waarde = ws_input_data.cell(row=input_rij, column=67).value
-        
-        if waarde:
-            # Schrijf de waarde naar kolom A van de pauzeplanning, beginnend bij rij 14
-            target_rij = 14 + i
-            cel = ws_pauze_sheet.cell(row=target_rij, column=1, value=waarde)
-            cel.fill = witte_fill
-            cel.border = thin_border
-            cel.alignment = Alignment(horizontal="left", vertical="center")
+if vinkje_aanpassingen in [1, True, "WAAR", "X"]:
+    waarde = ws_aanpassingen.cell(row=3, column=23).value  # W3 (samengevoegde cel)
+    if waarde:
+        cel = ws_pauze_sheet.cell(row=14, column=1, value=waarde)
+        cel.fill = witte_fill
+        cel.border = thin_border
+        cel.alignment = Alignment(horizontal="left", vertical="center")
 # -------------------------------------
 
 
@@ -8086,10 +8071,10 @@ def lm5_bereken_pauze_counts(absentees_set, base_maps):
 def lm5_extract_capacity_actions():
     result = []
 
-    # CD = 82, CE = 83
-    for rij in range(2, ws_raw.max_row + 1):
-        left_source = ws_raw.cell(rij, 82).value
-        right_source = ws_raw.cell(rij, 83).value
+    # L3:M12 in Aanpassingen
+    for rij in range(3, 13):
+        left_source = ws_aanpassingen.cell(rij, 12).value   # kolom L
+        right_source = ws_aanpassingen.cell(rij, 13).value  # kolom M
 
         left = str(left_source).strip() if left_source is not None and str(left_source).strip() != "" else ""
         right = str(right_source).strip() if right_source is not None and str(right_source).strip() != "" else ""
