@@ -52,7 +52,7 @@ wb = load_workbook(BytesIO(file_bytes), data_only=True)
 ws = wb["Input"]
 
 
-ws_speciaal = wb["Input_speciaal"]
+ws_speciaal = wb["Input_"]
 ws_aanpassingen = wb["Aanpassingen"]
 
 
@@ -93,7 +93,7 @@ def formatteer_uur(u):
     return f"{uren}u{minuten:02d}"
 
 
-# Kolom→uur mapping vanuit Input_speciaal rij 2 (I2:S2)
+# Kolom→uur mapping vanuit Input_ rij 2 (I2:S2)
 # Nodig voor samenvoeg-attracties en dichte uren, die vóór open_uren gelezen worden
 col_to_uur_speciaal = {}
 for _kol in range(9, 20):
@@ -114,7 +114,7 @@ def parse_blok_duur(label_str):
 
 
 
-# Blokduur per uur (uit I1:S1 van Input_speciaal)
+# Blokduur per uur (uit I1:S1 van Input_)
 # Kolommen zonder label krijgen standaard 1.0 uur
 blok_durations = {}
 for _kol in range(9, 20):  # kolom I t/m S
@@ -304,7 +304,7 @@ for rij in range(2, 500):
     })
 
 dichte_uren_per_attr = defaultdict(set)
-# Input_speciaal: rijen 17 t/m 22, vakjes in I-S (kol 9-19), attractienaam in T (kol 20)
+# Input_: rijen 17 t/m 22, vakjes in I-S (kol 9-19), attractienaam in T (kol 20)
 
 for rij in range(17, 23):  # rij 17 t/m 22
     attr_naam_raw = ws_speciaal.cell(rij, 20).value  # kolom T
@@ -324,7 +324,7 @@ for rij in range(17, 23):  # rij 17 t/m 22
 
 # In DEEL 1 bij "Samenvoeg-attracties (per uur)"
 uur_samenvoegingen = defaultdict(list)
-# Input_speciaal: rijen 10 t/m 15, vakjes in I-S (kol 9-19), attractienamen in T-U-V (kol 20-22)
+# Input_: rijen 10 t/m 15, vakjes in I-S (kol 9-19), attractienamen in T-U-V (kol 20-22)
 
 for rij in range(10, 16):  # rij 10 t/m 15
     groep = []
@@ -369,7 +369,7 @@ for s in studenten:
 # -----------------------------
 # Openingsuren
 # -----------------------------
-# Openingsuren lezen vanuit Input_speciaal, I2:S2 (kolommen 9-19)
+# Openingsuren lezen vanuit Input_, I2:S2 (kolommen 9-19)
 open_uren = []
 uur_labels = {}
 
@@ -395,7 +395,7 @@ ideaalmomenten = compute_ideal_moments(open_uren)
 # Eerst op aantal attracties,
 # daarna op vaste tie-break regel uit BU2
 # -----------------------------
-bu2_waarde = ws_speciaal.cell(3, 23).value  # W3 in Input_speciaal
+bu2_waarde = ws_speciaal.cell(3, 23).value  # W3 in Input_
 try:
     tie_break_mode = int(bu2_waarde)
 except:
@@ -437,14 +437,14 @@ def naam_tie_break_key(naam_raw):
 
 # Pauzevlinders
 # -----------------------------
-# Input_speciaal: C14 t/m C18 (kolom 3, rijen 14-18)
+# Input_: C14 t/m C18 (kolom 3, rijen 14-18)
 pauzevlinder_namen = [
     ws_speciaal.cell(rij, 3).value
     for rij in range(14, 19)
     if ws_speciaal.cell(rij, 3).value
 ]
 
-# Pauzevlinderuren lezen vanuit Input_speciaal, I3:S3 (kolommen 9-19)
+# Pauzevlinderuren lezen vanuit Input_, I3:S3 (kolommen 9-19)
 required_pauze_hours = []
 for kol in range(9, 20):
     val = ws_speciaal.cell(3, kol).value
@@ -6494,17 +6494,37 @@ def maak_pp2_sheets(wb_arg, am_arg):
             # ---------------------------------------------------
             if toegewezen_naam is None:
                 for kandidaat in pp2_students_before_end_pending:
+                    is_minor_lw_p2 = (
+                        pp2_is_minderjarig(kandidaat)
+                        and student_totalen.get(kandidaat, 0) > 6
+                    )
+
+                    ankercol_p2 = None
+                    if is_minor_lw_p2:
+                        for _pv2, pv_row2 in pv_rows_pp2:
+                            for idx in range(len(pauze_cols_pp2) - 1):
+                                col1 = pauze_cols_pp2[idx]
+                                col2 = pauze_cols_pp2[idx + 1]
+                                if (
+                                    ws_pp2.cell(pv_row2, col1).value == kandidaat
+                                    and ws_pp2.cell(pv_row2, col2).value == kandidaat
+                                ):
+                                    if ankercol_p2 is None or col2 > ankercol_p2:
+                                        ankercol_p2 = col2
+
                     cols = pp2_find_needed_short_cols_for_student_on_row(
                         naam=kandidaat,
                         pv_row=pv_row,
                         ws_sheet=ws_pp2,
                         pauze_cols=pauze_cols_pp2,
-                        open_spots_set=pp2_open_spots
+                        open_spots_set=pp2_open_spots,
+                        min_col_exclusive=ankercol_p2,
+                        zoek_zo_laat_mogelijk=is_minor_lw_p2
                     )
-    
+
                     if not cols:
                         continue
-    
+
                     toegewezen_naam = kandidaat
                     toegewezen_cols = cols
                     break
