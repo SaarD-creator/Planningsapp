@@ -7297,7 +7297,10 @@ def extract_hourly_changes(student_per_uur, open_uren):
         all_attrs.update(aantallen.get(uur2, {}).keys())
 
     for uur in sorted(open_uren):
-        prev_uur = uur - 1
+        # VERVANGEN DOOR:
+        _sorted_open = sorted(open_uren)
+        _idx = _sorted_open.index(uur)
+        prev_uur = _sorted_open[_idx - 1] if _idx > 0 else None
 
         prev_students = {}
         curr_students = {}
@@ -7337,7 +7340,7 @@ def extract_hourly_changes(student_per_uur, open_uren):
                 })
 
         disappearing_sources = []
-        if prev_uur in open_uren:
+        if prev_uur is not None and prev_uur in open_uren:
             for attr in sorted(all_attrs):
                 prev_cap = capaciteit_op_uur(prev_uur, attr)
                 curr_cap = capaciteit_op_uur(uur, attr)
