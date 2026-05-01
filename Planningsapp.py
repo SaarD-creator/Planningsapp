@@ -6814,7 +6814,69 @@ def maak_pp2_sheets(wb_arg, am_arg):
         naam for naam in pp2_other_pending_short_breaks
         if naam not in pp2_late_start_minors_handled
     ]
-    
+
+    # -----------------------------------             
+    # 1C) Speciale behandeling:
+    #     minderjarigen >6u die tot het einduur werken
+    #     => korte pauze zo laat mogelijk, na het tweede halfuur
+    # -----------------------------------
+    pp2_minor_long_end_handled = set()
+
+    for naam in list(pp2_other_pending_short_breaks):
+        if not pp2_is_minderjarig(naam):
+            continue
+        if student_totalen.get(naam, 0) <= 6:
+            continue
+        if not pp2_student_works_until_day_end(naam):
+            continue
+
+        # Zoek ankercol = einde van het LAATSTE halfuur over alle rijen
+        ankercol = None
+        laatste_lange_rij = None
+        for _pv, pv_row in pv_rows_pp2:
+            for idx in range(len(pauze_cols_pp2) - 1):
+                col1 = pauze_cols_pp2[idx]
+                col2 = pauze_cols_pp2[idx + 1]
+                if (
+                    ws_pp2.cell(pv_row, col1).value == naam
+                    and ws_pp2.cell(pv_row, col2).value == naam
+                ):
+                    if ankercol is None or col2 > ankercol:
+                        ankercol = col2
+                        laatste_lange_rij = pv_row
+
+        # PV-rij volgorde: eerst rij van laatste halfuur, dan de rest
+        pv_volgorde = (
+            [(pv, pv_row) for pv, pv_row in pv_rows_pp2 if pv_row == laatste_lange_rij]
+            + [(pv, pv_row) for pv, pv_row in pv_rows_pp2 if pv_row != laatste_lange_rij]
+        )
+
+        geplaatst = False
+        for col in reversed(pauze_cols_pp2):
+            if ankercol is not None and col <= ankercol:
+                continue
+            for pv, pv_row in pv_volgorde:
+                if (pv_row, col) in pp2_open_spots:
+                    continue
+                if not pp2_is_beschikbaar(ws_pp2, pv_row, col):
+                    continue
+                if not pp2_is_valid_short_break_for_student(naam, col, ws_pp2):
+                    continue
+
+                pp2_place_short_break_cols_on_row(naam=naam, pv=pv, pv_row=pv_row, cols=[col])
+                pp2_minor_long_end_handled.add(naam)
+                geplaatst = True
+                break
+            if geplaatst:
+                break
+
+    # Verwijder uit de algemene pending lijst
+    pp2_other_pending_short_breaks = [
+        naam for naam in pp2_other_pending_short_breaks
+        if naam not in pp2_minor_long_end_handled
+    ]
+
+  
     # -----------------------------------
     # 2) Eerst alle "gewone" resterende korte kwartieren invullen
     #    inclusief:
