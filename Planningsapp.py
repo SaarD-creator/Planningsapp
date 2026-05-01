@@ -1,5 +1,5 @@
-# Last minute planning is vaak niet top + minderjarigen hun pauzes ook niet ok
-# Begin gemaakt overschakeling
+# Last minute planning is vaak niet top
+# overschakeling compleettt
 # splitsing volgens ideaalmomenten
 # samengevoegde attracties als 1 --> fix in plaatsing! maar nog vaak 2x drie uur bij 1 attractie
 # niet meer laden na elke verandering
@@ -30,10 +30,6 @@ from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
 
-# -----------------------------
-# Datum
-# -----------------------------
-vandaag = datetime.date.today().strftime("%d-%m-%Y")
 
 # -----------------------------
 # Excelbestand uploaden
@@ -54,6 +50,18 @@ ws = wb["Input"]
 
 ws_speciaal = wb["Input_"]
 ws_aanpassingen = wb["Aanpassingen"]
+
+# -----------------------------
+# Datum op basis van W4 in Input_
+# -----------------------------
+_vandaag_datum = datetime.date.today()
+_morgen_datum = _vandaag_datum + datetime.timedelta(days=1)
+_w4 = str(ws_speciaal.cell(4, 23).value or "").strip().lower()
+if _w4 == "morgen":
+    vandaag = _morgen_datum.strftime("%d-%m-%Y")
+else:
+    vandaag = _vandaag_datum.strftime("%d-%m-%Y")
+vandaag_altijd_vandaag = _vandaag_datum.strftime("%d-%m-%Y")  # altijd vandaag, voor last-minute
 
 
 def parse_uur_waarde(val):
@@ -9738,6 +9746,10 @@ def lm5_reconstruct_studenten(ctx_assigned_map):
 def lm5_write_lastminute_workbook(base_bytes, ctx, base_maps, start_uur, absentees):
     wb_lm = load_workbook(BytesIO(base_bytes))
     ws_plan = wb_lm["Planning"]
+    # Last-minute planning toont altijd datum van vandaag, ongeacht W4
+    ws_plan.cell(1, 1).value = vandaag_altijd_vandaag
+    ws_pauze_lm = wb_lm["Pauzevlinders"]
+    ws_pauze_lm.cell(1, 1).value = vandaag_altijd_vandaag
 
     gray_fill  = PatternFill(start_color="808080", end_color="808080", fill_type="solid")
     white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
