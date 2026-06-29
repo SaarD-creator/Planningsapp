@@ -1809,12 +1809,23 @@ alle_actieve_attracties = geordende_attracties + overige_attracties
 
 
 def stabiliseer_assigned_map_voor_output():
-    # Herschikt alleen de VOLGORDE in assigned_map[(uur, attr)]:
-    # index 0 = plek 1, index 1 = plek 2. Iedereen blijft op de plek
-    # die hij vorig uur had; wie nieuw is vult de eerste vrije plek.
+    gesorteerde_uren = sorted(open_uren)
+
+    def blijft_aantal_uren(naam, attr, vanaf_uur):
+        # aantal aaneensluitende uren vanaf vanaf_uur dat naam op deze attractie staat
+        teller = 0
+        for u in gesorteerde_uren:
+            if u < vanaf_uur:
+                continue
+            if naam in assigned_map.get((u, attr), []):
+                teller += 1
+            else:
+                break
+        return teller
+
     for attr in alle_actieve_attracties:
         vorige = []  # namen van vorig uur op plek-volgorde: vorige[0]=plek1, [1]=plek2
-        for uur in sorted(open_uren):
+        for uur in gesorteerde_uren:
             max_pos = aantallen[uur].get(attr, 1)
             if attr in second_spot_blocked.get(uur, set()):
                 max_pos = 1
@@ -1827,13 +1838,14 @@ def stabiliseer_assigned_map_voor_output():
                     plek = vorige.index(naam)
                     if plek < max_pos and slots[plek] is None:
                         slots[plek] = naam
-            # 2) de rest op de eerste vrije plek (te veel namen vallen weg)
-            for naam in namen:
-                if naam not in slots:
-                    for i in range(max_pos):
-                        if slots[i] is None:
-                            slots[i] = naam
-                            break
+            # 2) nieuwe namen: wie het langst blijft eerst -> krijgt de laagste vrije plek
+            nieuwe = [n for n in namen if n not in slots]
+            nieuwe.sort(key=lambda n: -blijft_aantal_uren(n, attr, uur))
+            for naam in nieuwe:
+                for i in range(max_pos):
+                    if slots[i] is None:
+                        slots[i] = naam
+                        break
 
             assigned_map[(uur, attr)] = [n for n in slots if n]
             vorige = slots
