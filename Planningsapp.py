@@ -1561,6 +1561,7 @@ def try_swap_specific_block(student, attr, block_hours):
     orig_switches_a = count_attr_switches(student)
     orig_problem_count_a = count_problem_attrs(student)
     orig_overflow_a = total_overflow_hours(student)
+    orig_max_blok_a = max_consecutive_hours(get_hours_on_attr(student, attr))
 
     eerste_uur = block_hours[0]
     kandidaten = []
@@ -1643,6 +1644,7 @@ def try_swap_specific_block(student, attr, block_hours):
         new_problem_count_b = count_problem_attrs(andere_student)
         new_overflow_a = total_overflow_hours(student)
         new_overflow_b = total_overflow_hours(andere_student)
+        new_max_blok_a = max_consecutive_hours(get_hours_on_attr(student, attr))
 
         orig_total_problem_count = orig_problem_count_a + orig_problem_count_b
         new_total_problem_count = new_problem_count_a + new_problem_count_b
@@ -1658,12 +1660,22 @@ def try_swap_specific_block(student, attr, block_hours):
         if new_total_problem_count == orig_total_problem_count and new_total_overflow > orig_total_overflow:
             valid = False
 
-        # Moet minstens iets verbeteren
+        # Moet minstens iets verbeteren.
+        # Normaal geval: minder problemen, of minder totaal overschot.
+        # Extra geval: bij PRECIES hetzelfde totaal overschot (dus de
+        # >4u-regel wordt niet slechter), mag het ook tellen als
+        # verbetering wanneer het aaneengesloten blok op 'attr' korter
+        # wordt -- bv. 6u aan één stuk wordt 3+3 met iets anders ertussen.
         verbetering = (
             (new_total_problem_count < orig_total_problem_count)
             or (
                 new_total_problem_count == orig_total_problem_count
                 and new_total_overflow < orig_total_overflow
+            )
+            or (
+                new_total_problem_count == orig_total_problem_count
+                and new_total_overflow == orig_total_overflow
+                and new_max_blok_a < orig_max_blok_a
             )
         )
 
