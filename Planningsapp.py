@@ -1594,6 +1594,18 @@ def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=
         orig_problem_count_b = count_problem_attrs(andere_student)
         orig_overflow_b = total_overflow_hours(andere_student)
 
+        def aantal_geisoleerde_uren(s, a):
+            runs = get_runs_on_attr(s, a)
+            return sum(1 for r in runs if len(r) == 1)
+
+        # Isolatie VOOR de wissel meten. Een al bestaand los uur, dat
+        # niets met deze wissel te maken heeft, mag een verder prima
+        # wissel niet blokkeren -- enkel een NIEUW los uur telt.
+        orig_iso_student_attr  = aantal_geisoleerde_uren(student, attr)
+        orig_iso_student_attrb = aantal_geisoleerde_uren(student, attr_b)
+        orig_iso_andere_attr   = aantal_geisoleerde_uren(andere_student, attr)
+        orig_iso_andere_attrb  = aantal_geisoleerde_uren(andere_student, attr_b)
+
         # --- tijdelijke swap uitvoeren ---
         for uur in block_hours:
             remove_assignment(student, uur, attr)
@@ -1608,20 +1620,15 @@ def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=
 
         valid = True
 
-        # Geen geïsoleerde 1-uursblokken laten ontstaan
-        def heeft_geisoleerd_uur(s, a):
-            runs = get_runs_on_attr(s, a)
-            return any(len(r) == 1 for r in runs)
-
-        if heeft_geisoleerd_uur(student, attr):
+        # Enkel weigeren bij een NIEUW geïsoleerd 1-uursblok
+        if aantal_geisoleerde_uren(student, attr) > orig_iso_student_attr:
             valid = False
-        if heeft_geisoleerd_uur(student, attr_b):
+        if aantal_geisoleerde_uren(student, attr_b) > orig_iso_student_attrb:
             valid = False
-        if heeft_geisoleerd_uur(andere_student, attr):
+        if aantal_geisoleerde_uren(andere_student, attr) > orig_iso_andere_attr:
             valid = False
-        if heeft_geisoleerd_uur(andere_student, attr_b):
+        if aantal_geisoleerde_uren(andere_student, attr_b) > orig_iso_andere_attrb:
             valid = False
-
         # Regels voor beide studenten / beide attracties
         for s, a in [
             (student, attr),
