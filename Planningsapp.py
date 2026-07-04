@@ -2526,6 +2526,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     ws_pauze_basis = wb_arg["Pauzevlinders"]
     ws_pp2 = wb_arg.copy_worksheet(ws_pauze_basis)
     ws_pp2.title = "Pauzeplanning"
+    roze_fill = PatternFill(start_color="FFD6E7", end_color="FFD6E7", fill_type="solid")
 
     # ── hierna de rest van DEEL 5 geïndenteerd ──
 
