@@ -1543,7 +1543,7 @@ def can_use_block_as_swap_target(student, attr, block_hours):
             return False
     return True
 
-def try_swap_specific_block(student, attr, block_hours):
+def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=False):
     """
     Probeer één specifiek blok (eerste OF laatste) van student/attr te wisselen.
     Alleen als:
@@ -1552,8 +1552,9 @@ def try_swap_specific_block(student, attr, block_hours):
     - alle regels geldig blijven
     - geen geïsoleerde 1-uursblokken ontstaan
     - max 2 extra wissels in totaal
-    - het totaal aantal >4u-problemen niet stijgt
-    - en liefst daalt
+    - het totaal aantal >4u-problemen niet stijgt (of, als sta_toe_overflow_andere
+      True is: enkel als laatste redmiddel, en enkel als het bij de andere
+      student opgesplitst blijft i.p.v. een nieuw lang aaneengesloten blok)
     """
     if len(block_hours) not in [2, 3]:
         return False
@@ -1652,20 +1653,29 @@ def try_swap_specific_block(student, attr, block_hours):
         orig_total_overflow = orig_overflow_a + orig_overflow_b
         new_total_overflow = new_overflow_a + new_overflow_b
 
-        # Geen nieuw probleem creëren
-        if new_total_problem_count > orig_total_problem_count:
+        # Is het eventuele nieuwe probleem bij de andere student wél opgesplitst
+        # (geen nieuw lang aaneengesloten blok), en lost het bij 'student' het
+        # aaneengesloten blok effectief op? Dan mag dit tellen als laatste redmiddel.
+        max_blok_andere_op_attr = max_consecutive_hours(get_hours_on_attr(andere_student, attr))
+        laatste_redmiddel_ok = (
+            sta_toe_overflow_andere
+            and new_max_blok_a <= 4
+            and max_blok_andere_op_attr <= 4
+        )
+
+        # Geen nieuw probleem creëren, TENZIJ dit het laatste redmiddel is
+        if new_total_problem_count > orig_total_problem_count and not laatste_redmiddel_ok:
             valid = False
 
-        # Geen grotere overschrijding creëren
-        if new_total_problem_count == orig_total_problem_count and new_total_overflow > orig_total_overflow:
+        # Geen grotere overschrijding creëren, TENZIJ dit het laatste redmiddel is
+        if (
+            new_total_problem_count == orig_total_problem_count
+            and new_total_overflow > orig_total_overflow
+            and not laatste_redmiddel_ok
+        ):
             valid = False
 
-        # Moet minstens iets verbeteren.
-        # Normaal geval: minder problemen, of minder totaal overschot.
-        # Extra geval: bij PRECIES hetzelfde totaal overschot (dus de
-        # >4u-regel wordt niet slechter), mag het ook tellen als
-        # verbetering wanneer het aaneengesloten blok op 'attr' korter
-        # wordt -- bv. 6u aan één stuk wordt 3+3 met iets anders ertussen.
+        # Moet minstens iets verbeteren
         verbetering = (
             (new_total_problem_count < orig_total_problem_count)
             or (
@@ -1677,6 +1687,7 @@ def try_swap_specific_block(student, attr, block_hours):
                 and new_total_overflow == orig_total_overflow
                 and new_max_blok_a < orig_max_blok_a
             )
+            or laatste_redmiddel_ok
         )
 
         if not verbetering:
@@ -1699,12 +1710,16 @@ def try_swap_specific_block(student, attr, block_hours):
 
     return False
 
-
 def try_swap_last_or_first_block(student, attr):
     """
     Probeer het laatste of eerste blok op deze attractie te wisselen.
     Als een run langer is dan 3, pak dan de laatste 3 of laatste 2 uur eruit.
     Alleen relevant als student >4 uur op deze attractie staat.
+
+    Fase 1: strikte ruil (mag NERGENS een nieuw >4u-probleem geven).
+    Fase 2 (enkel als fase 1 nergens lukt): laatste redmiddel, waarbij de
+    andere student wel over de 4 uur mag gaan, MITS opgesplitst (geen
+    nieuw lang aaneengesloten blok bij hem/haar).
     """
     uren_op_attr = get_hours_on_attr(student, attr)
     if len(uren_op_attr) <= 4:
@@ -1730,15 +1745,24 @@ def try_swap_last_or_first_block(student, attr):
             blokken.append(run[:2])   # eerste 2
         return blokken
 
-    # Probeer eerst blokken uit de laatste run
+    # ── Fase 1: strikte ruil ──
     for blok in kandidaat_blokken(laatste_run):
         if try_swap_specific_block(student, attr, blok):
             return True
 
-    # Dan blokken uit de eerste run (als die anders is)
     if eerste_run != laatste_run:
         for blok in kandidaat_blokken(eerste_run):
             if try_swap_specific_block(student, attr, blok):
+                return True
+
+    # ── Fase 2: laatste redmiddel ──
+    for blok in kandidaat_blokken(laatste_run):
+        if try_swap_specific_block(student, attr, blok, sta_toe_overflow_andere=True):
+            return True
+
+    if eerste_run != laatste_run:
+        for blok in kandidaat_blokken(eerste_run):
+            if try_swap_specific_block(student, attr, blok, sta_toe_overflow_andere=True):
                 return True
 
     return False
