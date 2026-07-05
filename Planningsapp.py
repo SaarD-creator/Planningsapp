@@ -1,3 +1,4 @@
+# pauzevlindercheck
 # gaten gevuld in post processing lange blokken
 # oude pauzeplanning weg!
 # mooiere blokken met tweede plekken
@@ -2611,13 +2612,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return None
 
     def pp2_pv_kan_dekken(pv, naam, start_col, eind_col, ws_sheet):
-        """
-        Checkt of pauzevlinder 'pv' student 'naam' kan dekken tijdens
-        het pauzeblok van start_col t/m eind_col:
-        - moet de attractie kunnen tijdens het blok zelf
-        - moet de attractie kunnen op (einde blok + 30 min), als marge
-          tegen uitloop van de pauzeplanning
-        """
         start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, start_col).value)
         eind_min  = pp2_parse_kwartier_header(ws_sheet.cell(1, eind_col).value)
         if start_min is None or eind_min is None:
@@ -2626,13 +2620,25 @@ def maak_pp2_sheets(wb_arg, am_arg):
         eind_blok_min = eind_min + 15
         momenten = [start_min, eind_blok_min + 30]
 
+        geen_echte_attractie = {normalize_attr("Extra"), normalize_attr("Pauzevlinder-vervanging")}
         pv_attracties = {normalize_attr(a) for a in pv.get("attracties", [])}
 
         for moment in momenten:
             attr = pp2_attractie_op_moment(naam, moment)
             if not attr:
                 continue
+            if normalize_attr(attr) in geen_echte_attractie:
+                continue
             if normalize_attr(attr) not in pv_attracties:
+                pp2_debug_kan_dekken_log.append({
+                    "pv": pv["naam"],
+                    "student": naam,
+                    "moment_uur": f"{moment // 60}u{moment % 60:02d}",
+                    "attr_gevonden": attr,
+                    "attr_genormaliseerd": normalize_attr(attr),
+                    "pv_attracties_ruw": list(pv.get("attracties", [])),
+                    "pv_attracties_genormaliseerd": sorted(pv_attracties),
+                })
                 return False
         return True
     
@@ -2980,6 +2986,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
 
     oranje_fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
     pp2_incapabele_dekkingen = []  # lijst van dicts voor Feedback PP
+    pp2_debug_kan_dekken_log = []  # TIJDELIJK: logt elke mislukte capaciteitscheck
     
     # Maak de grid leeg, maar behoud layout
     pp2_clear_pauze_grid(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
@@ -5894,6 +5901,26 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # FEEDBACK SHEET - OPTIE 2
     # =============================
     ws_feedback2 = wb_arg.create_sheet("Feedback PP")
+    
+    # TIJDELIJK: debug-tabblad voor capaciteitscheck
+    ws_debug_pp = wb_arg.create_sheet("Debug PP")
+    ws_debug_pp.cell(1, 1, "Pauzevlinder")
+    ws_debug_pp.cell(1, 2, "Student")
+    ws_debug_pp.cell(1, 3, "Moment")
+    ws_debug_pp.cell(1, 4, "Attractie gevonden")
+    ws_debug_pp.cell(1, 5, "Genormaliseerd")
+    ws_debug_pp.cell(1, 6, "PV attracties (genormaliseerd)")
+    ws_debug_pp.cell(1, 7, "PV attracties (ruw)")
+    r_debug = 2
+    for item in pp2_debug_kan_dekken_log:
+        ws_debug_pp.cell(r_debug, 1, item["pv"])
+        ws_debug_pp.cell(r_debug, 2, item["student"])
+        ws_debug_pp.cell(r_debug, 3, item["moment_uur"])
+        ws_debug_pp.cell(r_debug, 4, item["attr_gevonden"])
+        ws_debug_pp.cell(r_debug, 5, item["attr_genormaliseerd"])
+        ws_debug_pp.cell(r_debug, 6, ", ".join(item["pv_attracties_genormaliseerd"]))
+        ws_debug_pp.cell(r_debug, 7, ", ".join(item["pv_attracties_ruw"]))
+        r_debug += 1
     
     groen_fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
     rood_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
