@@ -1,3 +1,6 @@
+# gaten gevuld in post processing lange blokken
+# oude pauzeplanning weg!
+# mooiere blokken met tweede plekken
 # nieuwe verdeling van de blokken! drempel voorlopig op 60% voor ingesloten shiften + 18% voor vermijden éénuursblokken
 # kleine fix bij last minute qua layout + ontdekt dat afkapping uren niet altijd top werkt (PV staat niet bij extra of op planning)
 # nieuwe logica voor studenten die langer werken dan effectieve uren op planning
@@ -2586,6 +2589,52 @@ def maak_pp2_sheets(wb_arg, am_arg):
             return uur * 60 + mins
         except:
             return None
+
+    def pp2_attractie_op_moment(naam, moment_minuten):
+        """
+        Geeft de attractie terug waar 'naam' volgens Planning zou staan
+        op het exacte tijdstip 'moment_minuten' (minuten sinds middernacht).
+        Houdt rekening met blokken korter/langer dan een uur.
+        """
+        for col in range(2, ws_planning.max_column + 1):
+            header = ws_planning.cell(1, col).value
+            start_minuten = pp2_parse_kwartier_header(header)
+            if start_minuten is None:
+                continue
+            heel_uur = parse_header_uur(header)
+            duur_uren = blok_durations.get(heel_uur, 1.0)
+            eind_minuten = start_minuten + duur_uren * 60
+            if start_minuten <= moment_minuten < eind_minuten:
+                for row in range(2, ws_planning.max_row + 1):
+                    if ws_planning.cell(row, col).value == naam:
+                        return ws_planning.cell(row, 1).value
+        return None
+
+    def pp2_pv_kan_dekken(pv, naam, start_col, eind_col, ws_sheet):
+        """
+        Checkt of pauzevlinder 'pv' student 'naam' kan dekken tijdens
+        het pauzeblok van start_col t/m eind_col:
+        - moet de attractie kunnen tijdens het blok zelf
+        - moet de attractie kunnen op (einde blok + 30 min), als marge
+          tegen uitloop van de pauzeplanning
+        """
+        start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, start_col).value)
+        eind_min  = pp2_parse_kwartier_header(ws_sheet.cell(1, eind_col).value)
+        if start_min is None or eind_min is None:
+            return True
+
+        eind_blok_min = eind_min + 15
+        momenten = [start_min, eind_blok_min + 30]
+
+        pv_attracties = {normalize_attr(a) for a in pv.get("attracties", [])}
+
+        for moment in momenten:
+            attr = pp2_attractie_op_moment(naam, moment)
+            if not attr:
+                continue
+            if normalize_attr(attr) not in pv_attracties:
+                return False
+        return True
     
     def pp2_get_pauze_cols(ws_sheet):
         cols = []
@@ -2918,6 +2967,19 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # -----------------------------
     pauze_cols_pp2 = pp2_get_pauze_cols(ws_pp2)
     pv_rows_pp2 = pp2_get_pv_rows(ws_pp2, selected)
+
+    # Aparte volgorde: minst-capabele pauzevlinder eerst, bij gelijkstand eerlijkheidsvolgorde.
+    # pv_rows_pp2 zelf blijft ongewijzigd voor alle andere logica (eigen pauzes, enz.)
+    pv_rows_pp2_op_capaciteit = sorted(
+        pv_rows_pp2,
+        key=lambda item: (
+            len(item[0].get("attracties", [])),
+            naam_tie_break_key(item[0]["naam"])
+        )
+    )
+
+    oranje_fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
+    pp2_incapabele_dekkingen = []  # lijst van dicts voor Feedback PP
     
     # Maak de grid leeg, maar behoud layout
     pp2_clear_pauze_grid(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
@@ -3367,25 +3429,32 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     
     def pp2_find_first_valid_long_block_any_row(naam, ws_sheet, pv_rows, pauze_cols):
-        """
-        Zoek het vroegst mogelijke geldige halfuur voor deze student
-        over alle pauzevlinder-rijen heen, van links naar rechts.
-        Retourneert (pv_row, col1, col2) of None.
-        """
         blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
-    
+
+        # Ronde 1: enkel capabele pv's, minst-capabel eerst
+        for col1, col2 in blokken:
+            for pv, pv_row in pv_rows_pp2_op_capaciteit:
+                if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
+                    continue
+                if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
+                    continue
+                if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
+                    continue
+                if not pp2_pv_kan_dekken(pv, naam, col1, col2, ws_sheet):
+                    continue
+                return (pv_row, col1, col2, False)
+
+        # Ronde 2: niemand capabel -> toch plaatsen, gemarkeerd
         for col1, col2 in blokken:
             for _pv, pv_row in pv_rows:
                 if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
                     continue
                 if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
                     continue
-    
                 if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
                     continue
-    
-                return (pv_row, col1, col2)
-    
+                return (pv_row, col1, col2, True)
+
         return None
     
     
@@ -3472,19 +3541,12 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return True
         
     
-    def pp2_write_long_break(ws_sheet, pv_row, col1, col2, naam, leave_top_blank=False):
-        """
-        Schrijf een lange pauze van 2 kwartieren:
-        - normaal: attractie erboven
-        - voor pauzevlinder op eigen rij: bovenste cel leeg laten
-        - naam in beide vakjes
-        - groen kleuren
-        """
+    def pp2_write_long_break(ws_sheet, pv_row, col1, col2, naam, leave_top_blank=False, waarschuwing=False):
         for col in [col1, col2]:
             info_cel = ws_sheet.cell(pv_row - 1, col)
             info_cel.alignment = center_align
             info_cel.border = thin_border
-    
+
             if leave_top_blank:
                 info_cel.value = ""
             else:
@@ -3492,12 +3554,12 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 uur = parse_header_uur(header)
                 attr = vind_attractie_op_uur(naam, uur) if uur is not None else None
                 info_cel.value = attr if attr else ""
-    
+
             naam_cel = ws_sheet.cell(pv_row, col)
             naam_cel.value = naam
             naam_cel.alignment = center_align
             naam_cel.border = thin_border
-            naam_cel.fill = lichtgroen_fill
+            naam_cel.fill = oranje_fill if waarschuwing else lichtgroen_fill
     
     
     def pp2_halfuur_blokken(pauze_cols, ws_sheet):
@@ -3776,7 +3838,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         if gevonden is None:
             continue
     
-        pv_row, col1, col2 = gevonden
+        pv_row, col1, col2, is_waarschuwing = gevonden
     
         eigen_pv_row = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
         leave_top_blank = eigen_pv_row == pv_row
@@ -3787,8 +3849,16 @@ def maak_pp2_sheets(wb_arg, am_arg):
             col1=col1,
             col2=col2,
             naam=naam,
-            leave_top_blank=leave_top_blank
+            leave_top_blank=leave_top_blank,
+            waarschuwing=is_waarschuwing
         )
+
+        if is_waarschuwing:
+            pp2_incapabele_dekkingen.append({
+                "student": naam,
+                "tijd": f"{ws_pp2.cell(1, col1).value}-{ws_pp2.cell(1, col2).value}",
+                "type": "lange pauze"
+            })
     
         pp2_lange_pauze_ontvangers.add(naam)
         pp2_minderjarige_eerste_halfuur_rij[naam] = pv_row
@@ -4473,12 +4543,13 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return result
     
     
-    def pp2_write_short_break_regular(ws_sheet, pv_row, col, naam):
+    def pp2_write_short_break_regular(ws_sheet, pv_row, col, naam, waarschuwing=False):
         """
         Korte pauze voor gewone student:
         - bovenliggende cel = attractie
         - naamcel:
-            * lichtgeel voor minderjarigen die >4u werken
+            * oranje als de dekkende pv niet capabel was (noodgreep)
+            * lichtroze voor minderjarigen die >4u werken
             * lichtpaars voor alle andere korte pauzes
         """
         header = ws_sheet.cell(1, col).value
@@ -4496,7 +4567,9 @@ def maak_pp2_sheets(wb_arg, am_arg):
         cel.alignment = center_align
         cel.border = thin_border
     
-        if pp2_is_minderjarig(naam) and werkduur_voor_pauze(naam) > 4:
+        if waarschuwing:
+            cel.fill = oranje_fill
+        elif pp2_is_minderjarig(naam) and werkduur_voor_pauze(naam) > 4:
             cel.fill = roze_fill
         else:
             cel.fill = lichtpaars_fill
@@ -4649,7 +4722,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     
     
-    def pp2_place_short_break_cols_on_row(naam, pv, pv_row, cols):
+    def pp2_place_short_break_cols_on_row(naam, pv, pv_row, cols, waarschuwing=False):
         """
         Schrijf 1 of 2 korte kwartieren voor gewone student op een bepaalde rij.
         """
@@ -4658,7 +4731,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 ws_sheet=ws_pp2,
                 pv_row=pv_row,
                 col=col,
-                naam=naam
+                naam=naam,
+                waarschuwing=waarschuwing
             )
     
         pp2_regular_short_breaks_placed.append({
@@ -4669,7 +4743,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 naam, ws_pp2, pv_row, pauze_cols_pp2
             )
         })
-    
     
     
     
@@ -4864,43 +4937,73 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
         gekozen = None
     
-        # Bouw PV-rij volgorde: eerst de rij van het laatste halfuur, dan de rest
+        # Volgorde: eerst rij van laatste halfuur, dan de rest op capaciteit (minst-capabel eerst)
+        pv_volgorde_capaciteit = (
+            [(pv, pv_row) for pv, pv_row in pv_rows_pp2_op_capaciteit if pv_row == laatste_lange_rij]
+            + [(pv, pv_row) for pv, pv_row in pv_rows_pp2_op_capaciteit if pv_row != laatste_lange_rij]
+        )
         pv_volgorde = (
             [(pv, pv_row) for pv, pv_row in pv_rows_pp2 if pv_row == laatste_lange_rij]
             + [(pv, pv_row) for pv, pv_row in pv_rows_pp2 if pv_row != laatste_lange_rij]
         )
-    
+
+        is_waarschuwing = False
+
+        # Ronde 1: capabele pv, minst-capabel eerst
         for col in reversed(pauze_cols_pp2):
             if col <= laatste_lange_eindcol:
                 continue
-    
-            for pv, pv_row in pv_volgorde:
+            for pv, pv_row in pv_volgorde_capaciteit:
                 if (pv_row, col) in pp2_open_spots:
                     continue
-    
                 if not pp2_is_beschikbaar(ws_pp2, pv_row, col):
                     continue
-    
                 if not pp2_is_valid_short_break_for_student(naam, col, ws_pp2):
                     continue
-    
+                if not pp2_pv_kan_dekken(pv, naam, col, col, ws_pp2):
+                    continue
                 gekozen = (pv, pv_row, col)
                 break
-    
             if gekozen is not None:
                 break
-    
+
+        # Ronde 2: niemand capabel -> toch plaatsen, gemarkeerd
+        if gekozen is None:
+            for col in reversed(pauze_cols_pp2):
+                if col <= laatste_lange_eindcol:
+                    continue
+                for pv, pv_row in pv_volgorde:
+                    if (pv_row, col) in pp2_open_spots:
+                        continue
+                    if not pp2_is_beschikbaar(ws_pp2, pv_row, col):
+                        continue
+                    if not pp2_is_valid_short_break_for_student(naam, col, ws_pp2):
+                        continue
+                    gekozen = (pv, pv_row, col)
+                    is_waarschuwing = True
+                    break
+                if gekozen is not None:
+                    break
+
         if gekozen is None:
             continue
-    
+
         pv, pv_row, col = gekozen
-    
+
         pp2_place_short_break_cols_on_row(
             naam=naam,
             pv=pv,
             pv_row=pv_row,
-            cols=[col]
+            cols=[col],
+            waarschuwing=is_waarschuwing
         )
+
+        if is_waarschuwing:
+            pp2_incapabele_dekkingen.append({
+                "student": naam,
+                "tijd": ws_pp2.cell(1, col).value,
+                "type": "korte pauze"
+            })
     
     
     # ---------------------------------------
@@ -5714,6 +5817,24 @@ def maak_pp2_sheets(wb_arg, am_arg):
             ws_feedback2.cell(row_fb2, 1, naam)
             row_fb2 += 1
     
+        row_fb2 += 1
+
+    # -----------------------------------
+    # 1b) Niet-capabele dekkingen (pauzevlinder kon attractie niet)
+    # -----------------------------------
+    if not pp2_incapabele_dekkingen:
+        cel = ws_feedback2.cell(row_fb2, 1, "✓ Alle pauzes gedekt door capabele pauzevlinder")
+        cel.fill = groen_fill
+        cel.font = Font(bold=True, color="006100")
+        row_fb2 += 2
+    else:
+        cel = ws_feedback2.cell(row_fb2, 1, "⚠ Gedekt door niet-capabele pauzevlinder:")
+        cel.fill = oranje_fill
+        cel.font = Font(bold=True)
+        row_fb2 += 1
+        for item in pp2_incapabele_dekkingen:
+            ws_feedback2.cell(row_fb2, 1, f'{item["student"]} ({item["type"]}, {item["tijd"]})')
+            row_fb2 += 1
         row_fb2 += 1
     
     # -----------------------------------
