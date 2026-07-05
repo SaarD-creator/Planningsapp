@@ -5512,11 +5512,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
             [(pv, pv_row) for pv, pv_row in pv_rows_pp2 if pv_row == lange_pauze_rij]
             + [(pv, pv_row) for pv, pv_row in pv_rows_pp2 if pv_row != lange_pauze_rij]
         )
-    
-        pv_volgorde_cap = (
-            [(pv, pv_row) for pv, pv_row in pv_rows_pp2_op_capaciteit if pv_row == lange_pauze_rij]
-            + [(pv, pv_row) for pv, pv_row in pv_rows_pp2_op_capaciteit if pv_row != lange_pauze_rij]
-        )
 
 
         pv_volgorde_cap = (
@@ -5561,42 +5556,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 if geplaatst:
                     break
                     
-        geplaatst = False
-        for col in reversed(pauze_cols_pp2):
-            for pv, pv_row in pv_volgorde_cap:
-                if (pv_row, col) in pp2_open_spots:
-                    continue
-                if not pp2_is_beschikbaar(ws_pp2, pv_row, col):
-                    continue
-                if not pp2_is_valid_short_break_for_student(naam, col, ws_pp2):
-                    continue
-                if not pp2_pv_kan_dekken(pv, naam, col, col, ws_pp2):
-                    continue
-                pp2_place_short_break_cols_on_row(naam=naam, pv=pv, pv_row=pv_row, cols=[col])
-                pp2_late_start_minors_handled.add(naam)
-                geplaatst = True
-                break
-            if geplaatst:
-                break
-
-        if not geplaatst:
-            for col in reversed(pauze_cols_pp2):
-                for pv, pv_row in pv_volgorde:
-                    if (pv_row, col) in pp2_open_spots:
-                        continue
-                    if not pp2_is_beschikbaar(ws_pp2, pv_row, col):
-                        continue
-                    if not pp2_is_valid_short_break_for_student(naam, col, ws_pp2):
-                        continue
-                    pp2_place_short_break_cols_on_row(naam=naam, pv=pv, pv_row=pv_row, cols=[col], waarschuwing=True)
-                    pp2_incapabele_dekkingen.append({
-                        "student": naam, "tijd": ws_pp2.cell(1, col).value, "type": "korte pauze"
-                    })
-                    pp2_late_start_minors_handled.add(naam)
-                    geplaatst = True
-                    break
-                if geplaatst:
-                    break
+        
     
     # Verwijder deze studenten uit de gewone pending lijst
     pp2_other_pending_short_breaks = [
@@ -5685,8 +5645,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
                     break
                 if geplaatst:
                     break
-                geplaatst = True
-                break
+
             if geplaatst:
                 break
 
