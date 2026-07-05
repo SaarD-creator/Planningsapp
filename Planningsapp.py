@@ -1812,44 +1812,33 @@ for rij in range(3, 21):  # C3:C20 in Aanpassingen
     if waarde:
         input_volgorde.append(str(waarde).strip())
 
+# Prioriteit per naam = positie in de VOLLEDIGE Aanpassingen-lijst,
+# ook al is die attractie vandaag niet los actief (enkel via een
+# combinatie zoals "Klimmen + Archery").
+prioriteit_per_naam = {naam: i for i, naam in enumerate(input_volgorde)}
+default_prioriteit = len(input_volgorde) + 1000
+
+def attractie_prioriteit(attr):
+    attr_str = str(attr)
+    if attr_str in prioriteit_per_naam:
+        return prioriteit_per_naam[attr_str]
+    if " + " in attr_str:
+        onderdelen = [x.strip() for x in attr_str.split("+")]
+        indices = [prioriteit_per_naam[o] for o in onderdelen if o in prioriteit_per_naam]
+        if indices:
+            # net na het laatste onderdeel in de volledige inputvolgorde
+            return max(indices) + 0.5
+    return default_prioriteit
+
 # -----------------------------
-# Alle attracties die minstens één keer actief zijn (voor output)
+# Alle attracties die minstens één keer actief zijn (voor output),
+# gesorteerd op basis van de Aanpassingen-volgorde
 # -----------------------------
 alle_actieve_attracties = set()
 for uur in open_uren:
     alle_actieve_attracties |= actieve_attracties_per_uur.get(uur, set())
 
-# Eerst de gewone attracties in de volgorde van BL16:BL33
-geordende_attracties = [a for a in input_volgorde if a in alle_actieve_attracties]
-
-# Samengevoegde attracties slim invoegen:
-# bv. "A + B" direct na de laatste van A/B in de inputvolgorde
-samengestelde_attracties = [a for a in alle_actieve_attracties if " + " in str(a)]
-overige_attracties = [
-    a for a in alle_actieve_attracties
-    if a not in geordende_attracties and a not in samengestelde_attracties
-]
-
-for sameng in samengestelde_attracties:
-    onderdelen = [x.strip() for x in str(sameng).split("+")]
-
-    # Zoek de positie van het laatste onderdeel in de huidige lijst
-    laatst_gevonden_index = -1
-    for onderdeel in onderdelen:
-        if onderdeel in geordende_attracties:
-            idx = geordende_attracties.index(onderdeel)
-            laatst_gevonden_index = max(laatst_gevonden_index, idx)
-
-    if laatst_gevonden_index >= 0:
-        geordende_attracties.insert(laatst_gevonden_index + 1, sameng)
-    else:
-        # Als geen enkel onderdeel in de inputvolgorde staat,
-        # zet hem voorlopig bij de rest
-        overige_attracties.append(sameng)
-
-# Voeg tenslotte nog attracties toe die niet in BL16:BL33 stonden
-alle_actieve_attracties = geordende_attracties + overige_attracties
-
+alle_actieve_attracties = sorted(alle_actieve_attracties, key=attractie_prioriteit)
 
 def stabiliseer_assigned_map_voor_output():
     gesorteerde_uren = sorted(open_uren)
