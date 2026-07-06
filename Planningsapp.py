@@ -206,7 +206,7 @@ def compute_ideal_moments():
                 yield (eerste,) + staart
 
     def _kies_cuts(a, b):
-        n = b - a
+        n = int(round(b - a))
         k = -(-n // 3)                            # ceil(n/3)
         beste, beste_sleutel = None, None
         for comp in _composities(n, k):
@@ -269,10 +269,11 @@ def compute_ideal_moments():
         return {open_start, open_end} | _kies_cuts(a, m) | _kies_cuts(m, b)
 
     eenheden = [(aantal, "single", se) for se, aantal in shifts.items()]
+    _m_kandidaten = ({e for (s, e) in shifts if s == open_start}     # eindes van shiften die om open_start starten
+                     & {s for (s, e) in shifts if e == open_end})    # starts van shiften die op open_end eindigen
     paren = [
         ((open_start, m), (m, open_end), shifts[(open_start, m)] + shifts[(m, open_end)])
-        for m in range(open_start + 1, open_end)
-        if (open_start, m) in shifts and (m, open_end) in shifts
+        for m in _m_kandidaten
     ]
     beste_paar = max(paren, key=lambda p: p[2]) if paren else None
     if beste_paar:
