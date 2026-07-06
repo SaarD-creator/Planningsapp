@@ -290,7 +290,7 @@ def compute_ideal_moments():
     if beste_paar:
         kandidaat_grids.append(_half_grid((beste_paar[0], beste_paar[1])))
     return min(kandidaat_grids, key=_kwaliteit)
-
+    
 
 def partition_run_lengths(run_hours, ideal_moments=None):
     """
