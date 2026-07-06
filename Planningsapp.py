@@ -288,7 +288,13 @@ def compute_ideal_moments():
     if beste_paar:
         eenheden.append((beste_paar[2], "pair", (beste_paar[0], beste_paar[1])))
 
-    leider_aantal, leider_soort, leider_data = max(eenheden, key=lambda u: u[0])
+    def _eenheid_grid(u):
+        return _half_grid(u[2]) if u[1] == "pair" else _bouw_grid(u[2])
+
+    # hoogste aantal; bij gelijkspel de eenheid met de minste totale 1-uursblokken
+    leider_aantal, leider_soort, leider_data = max(
+        eenheden, key=lambda u: (u[0], -_kwaliteit(_eenheid_grid(u))[0])
+    )
 
     if leider_aantal / niet_pv_totaal >= DREMPEL:
         # duidelijke leider stuurt (half-paar via propere helften, losse shift optimaal gesplitst)
