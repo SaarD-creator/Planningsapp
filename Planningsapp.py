@@ -57,6 +57,11 @@ ws = wb["Input"]
 ws_speciaal = wb["Input_"]
 ws_aanpassingen = wb["Aanpassingen"]
 
+# --- VINKJE Y17: forceer perfect exhaustieve verdeling ---
+_vinkje_y17 = ws_aanpassingen.cell(row=17, column=25).value   # Y17 (kolom Y = 25)
+FORCEER_EXHAUSTIEF = _vinkje_y17 in [1, True, "WAAR", "X"]
+# ---------------------------------------------------------
+
 # -----------------------------
 # Datum op basis van W4 in Input_
 # -----------------------------
@@ -276,6 +281,10 @@ def compute_ideal_moments():
         for m in _m_kandidaten
     ]
     beste_paar = max(paren, key=lambda p: p[2]) if paren else None
+
+    # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften
+    if FORCEER_EXHAUSTIEF and beste_paar is not None:
+        return _half_grid((beste_paar[0], beste_paar[1]))
     if beste_paar:
         eenheden.append((beste_paar[2], "pair", (beste_paar[0], beste_paar[1])))
 
