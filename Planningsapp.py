@@ -3621,6 +3621,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 attr = vind_attractie_op_uur(naam, uur) if uur is not None else None
                 info_cel.value = attr if attr else ""
     
+            info_cel.fill = conflict_fill if conflict else PatternFill(fill_type=None)
             naam_cel = ws_sheet.cell(pv_row, col)
             naam_cel.value = naam
             naam_cel.alignment = center_align
