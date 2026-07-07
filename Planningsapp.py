@@ -3453,68 +3453,68 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     
     def pp2_find_first_valid_long_block_any_row(naam, ws_sheet, pv_rows, pauze_cols):
-    """
-    Zoekt het vroegst mogelijke geldige halfuur, met voorkeur voor een PV die
-    de attracties in het venster (+30 min speling) effectief aankan.
-    Geen enkele optie gekwalificeerd? Valt terug op de eerst tijdgeldige optie.
-    Retourneert (pv_row, col1, col2, conflict) of None.
-    """
-    blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
-    fallback = None
-
-    for col1, col2 in blokken:
-        for pv, pv_row in pv_rows:
+        """
+        Zoekt het vroegst mogelijke geldige halfuur, met voorkeur voor een PV die
+        de attracties in het venster (+30 min speling) effectief aankan.
+        Geen enkele optie gekwalificeerd? Valt terug op de eerst tijdgeldige optie.
+        Retourneert (pv_row, col1, col2, conflict) of None.
+        """
+        blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
+        fallback = None
+    
+        for col1, col2 in blokken:
+            for pv, pv_row in pv_rows:
+                if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
+                    continue
+                if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
+                    continue
+                if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
+                    continue
+    
+                if fallback is None:
+                    fallback = (pv_row, col1, col2)
+    
+                venster = pp2_tijdvenster_pauze([col1, col2], ws_sheet)
+                attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+                if pp2_pv_kan_overname(pv, attrs):
+                    return (pv_row, col1, col2, False)
+    
+        if fallback:
+            return (*fallback, True)
+        return None
+    
+    
+    def pp2_find_first_valid_long_block_on_fixed_row(naam, ws_sheet, pv_row, pauze_cols, pv=None):
+        """
+        Zoek het vroegst mogelijke geldige halfuur op één vaste PV-rij.
+        Retourneert (col1, col2, conflict) of None.
+        """
+        blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
+        fallback = None
+    
+        for col1, col2 in blokken:
             if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
                 continue
             if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
                 continue
             if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
                 continue
-
+    
             if fallback is None:
-                fallback = (pv_row, col1, col2)
-
-            venster = pp2_tijdvenster_pauze([col1, col2], ws_sheet)
-            attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
-            if pp2_pv_kan_overname(pv, attrs):
-                return (pv_row, col1, col2, False)
-
-    if fallback:
-        return (*fallback, True)
-    return None
+                fallback = (col1, col2)
     
-    
-    def pp2_find_first_valid_long_block_on_fixed_row(naam, ws_sheet, pv_row, pauze_cols, pv=None):
-    """
-    Zoek het vroegst mogelijke geldige halfuur op één vaste PV-rij.
-    Retourneert (col1, col2, conflict) of None.
-    """
-    blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
-    fallback = None
-
-    for col1, col2 in blokken:
-        if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
-            continue
-        if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
-            continue
-        if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
-            continue
-
-        if fallback is None:
-            fallback = (col1, col2)
-
-        if pv is not None:
-            venster = pp2_tijdvenster_pauze([col1, col2], ws_sheet)
-            attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
-            if pp2_pv_kan_overname(pv, attrs):
+            if pv is not None:
+                venster = pp2_tijdvenster_pauze([col1, col2], ws_sheet)
+                attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+                if pp2_pv_kan_overname(pv, attrs):
+                    return (col1, col2, False)
+            else:
                 return (col1, col2, False)
-        else:
-            return (col1, col2, False)
-
-    if fallback:
-        return (*fallback, True)
-    return None
-        
+    
+        if fallback:
+            return (*fallback, True)
+        return None
+            
     
     
     def pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
