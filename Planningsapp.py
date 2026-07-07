@@ -2635,41 +2635,41 @@ def maak_pp2_sheets(wb_arg, am_arg):
 
 
     def pp2_tijdvenster_pauze(cols, ws_sheet, speling_minuten=30):
-    """
-    Geeft (start_min, eind_min) in absolute minuten voor een pauze, incl. speling.
-    cols = [col] voor een kort kwartier, of [col1, col2] voor een lang halfuur.
-    """
-    start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, cols[0]).value)
-    eind_min  = pp2_parse_kwartier_header(ws_sheet.cell(1, cols[-1]).value)
-    if start_min is None or eind_min is None:
-        return None
-    eind_min += 15  # einde van het laatste kwartier zelf
-    return start_min, eind_min + speling_minuten
+        """
+        Geeft (start_min, eind_min) in absolute minuten voor een pauze, incl. speling.
+        cols = [col] voor een kort kwartier, of [col1, col2] voor een lang halfuur.
+        """
+        start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, cols[0]).value)
+        eind_min  = pp2_parse_kwartier_header(ws_sheet.cell(1, cols[-1]).value)
+        if start_min is None or eind_min is None:
+            return None
+        eind_min += 15
+        return start_min, eind_min + speling_minuten
 
 
-def pp2_attracties_in_venster(naam, start_min, eind_min):
-    """
-    Attracties die 'naam' bezet tussen start_min en eind_min.
-    'Extra'-uren tellen niet mee: die kan elke pauzevlinder overnemen.
-    """
-    attracties = set()
-    for uur in sorted(open_uren):
-        blok_start = uur * 60
-        blok_eind  = blok_start + blok_durations.get(uur, 1.0) * 60
-        if blok_eind <= start_min or blok_start >= eind_min:
-            continue
-        attr = vind_attractie_op_uur(naam, uur)
-        if not attr or str(attr).startswith("Extra") or attr == "Pauzevlinder-vervanging":
-            continue
-        attracties.add(attr)
-    return attracties
+    def pp2_attracties_in_venster(naam, start_min, eind_min):
+        """
+        Attracties die 'naam' bezet tussen start_min en eind_min.
+        'Extra'-uren tellen niet mee: die kan elke pauzevlinder overnemen.
+        """
+        attracties = set()
+        for uur in sorted(open_uren):
+            blok_start = uur * 60
+            blok_eind  = blok_start + blok_durations.get(uur, 1.0) * 60
+            if blok_eind <= start_min or blok_start >= eind_min:
+                continue
+            attr = vind_attractie_op_uur(naam, uur)
+            if not attr or str(attr).startswith("Extra") or attr == "Pauzevlinder-vervanging":
+                continue
+            attracties.add(attr)
+        return attracties
 
 
-def pp2_pv_kan_overname(pv, attracties_set):
-    """True als deze PV alle attracties in de set aankan. Lege set => altijd True."""
-    if not attracties_set:
-        return True
-    return all(student_kan_attr_in_analyse(pv, attr) for attr in attracties_set)
+    def pp2_pv_kan_overname(pv, attracties_set):
+        """True als deze PV alle attracties in de set aankan. Lege set => altijd True."""
+        if not attracties_set:
+            return True
+        return all(student_kan_attr_in_analyse(pv, attr) for attr in attracties_set)
     
     
     def pp2_get_pauze_cols(ws_sheet):
