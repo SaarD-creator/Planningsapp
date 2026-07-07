@@ -1,3 +1,4 @@
+# oplossing voor Antwerpen met introductie vinkje
 # gaten gevuld in post processing lange blokken
 # oude pauzeplanning weg!
 # mooiere blokken met tweede plekken
@@ -2602,6 +2603,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     ws_pp2 = wb_arg.copy_worksheet(ws_pauze_basis)
     ws_pp2.title = "Pauzeplanning"
     roze_fill = PatternFill(start_color="FFD6E7", end_color="FFD6E7", fill_type="solid")
+    conflict_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
     # ── hierna de rest van DEEL 5 geïndenteerd ──
 
@@ -2629,6 +2631,46 @@ def maak_pp2_sheets(wb_arg, am_arg):
             return uur * 60 + mins
         except:
             return None
+
+
+
+    def pp2_tijdvenster_pauze(cols, ws_sheet, speling_minuten=30):
+    """
+    Geeft (start_min, eind_min) in absolute minuten voor een pauze, incl. speling.
+    cols = [col] voor een kort kwartier, of [col1, col2] voor een lang halfuur.
+    """
+    start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, cols[0]).value)
+    eind_min  = pp2_parse_kwartier_header(ws_sheet.cell(1, cols[-1]).value)
+    if start_min is None or eind_min is None:
+        return None
+    eind_min += 15  # einde van het laatste kwartier zelf
+    return start_min, eind_min + speling_minuten
+
+
+def pp2_attracties_in_venster(naam, start_min, eind_min):
+    """
+    Attracties die 'naam' bezet tussen start_min en eind_min.
+    'Extra'-uren tellen niet mee: die kan elke pauzevlinder overnemen.
+    """
+    attracties = set()
+    for uur in sorted(open_uren):
+        blok_start = uur * 60
+        blok_eind  = blok_start + blok_durations.get(uur, 1.0) * 60
+        if blok_eind <= start_min or blok_start >= eind_min:
+            continue
+        attr = vind_attractie_op_uur(naam, uur)
+        if not attr or str(attr).startswith("Extra") or attr == "Pauzevlinder-vervanging":
+            continue
+        attracties.add(attr)
+    return attracties
+
+
+def pp2_pv_kan_overname(pv, attracties_set):
+    """True als deze PV alle attracties in de set aankan. Lege set => altijd True."""
+    if not attracties_set:
+        return True
+    return all(student_kan_attr_in_analyse(pv, attr) for attr in attracties_set)
+    
     
     def pp2_get_pauze_cols(ws_sheet):
         cols = []
@@ -2871,7 +2913,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
         return None
     
-    def pp2_write_name(ws_sheet, row_name, col, naam):
+    def pp2_write_name(ws_sheet, row_name, col, naam, conflict=False):
         """
         Schrijf in PP optie 2:
         - bovenste vak: attractie waarop student dat moment staat
@@ -2907,6 +2949,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             is_lange_pauze = True
     
         cel.fill = lichtgroen_fill if is_lange_pauze else lichtpaars_fill
+        cel.fill = conflict_fill if conflict else (lichtgroen_fill if is_lange_pauze else lichtpaars_fill)
     
     def pp2_clear_pauze_grid(ws_sheet, pv_rows, pauze_cols):
         """
@@ -3410,48 +3453,67 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     
     def pp2_find_first_valid_long_block_any_row(naam, ws_sheet, pv_rows, pauze_cols):
-        """
-        Zoek het vroegst mogelijke geldige halfuur voor deze student
-        over alle pauzevlinder-rijen heen, van links naar rechts.
-        Retourneert (pv_row, col1, col2) of None.
-        """
-        blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
-    
-        for col1, col2 in blokken:
-            for _pv, pv_row in pv_rows:
-                if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
-                    continue
-                if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
-                    continue
-    
-                if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
-                    continue
-    
-                return (pv_row, col1, col2)
-    
-        return None
-    
-    
-    def pp2_find_first_valid_long_block_on_fixed_row(naam, ws_sheet, pv_row, pauze_cols):
-        """
-        Zoek het vroegst mogelijke geldige halfuur voor deze student
-        op één vaste pauzevlinder-rij, van links naar rechts.
-        Retourneert (col1, col2) of None.
-        """
-        blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
-    
-        for col1, col2 in blokken:
+    """
+    Zoekt het vroegst mogelijke geldige halfuur, met voorkeur voor een PV die
+    de attracties in het venster (+30 min speling) effectief aankan.
+    Geen enkele optie gekwalificeerd? Valt terug op de eerst tijdgeldige optie.
+    Retourneert (pv_row, col1, col2, conflict) of None.
+    """
+    blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
+    fallback = None
+
+    for col1, col2 in blokken:
+        for pv, pv_row in pv_rows:
             if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
                 continue
             if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
                 continue
-    
             if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
                 continue
+
+            if fallback is None:
+                fallback = (pv_row, col1, col2)
+
+            venster = pp2_tijdvenster_pauze([col1, col2], ws_sheet)
+            attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+            if pp2_pv_kan_overname(pv, attrs):
+                return (pv_row, col1, col2, False)
+
+    if fallback:
+        return (*fallback, True)
+    return None
     
-            return (col1, col2)
     
-        return None
+    def pp2_find_first_valid_long_block_on_fixed_row(naam, ws_sheet, pv_row, pauze_cols, pv=None):
+    """
+    Zoek het vroegst mogelijke geldige halfuur op één vaste PV-rij.
+    Retourneert (col1, col2, conflict) of None.
+    """
+    blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
+    fallback = None
+
+    for col1, col2 in blokken:
+        if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
+            continue
+        if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
+            continue
+        if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
+            continue
+
+        if fallback is None:
+            fallback = (col1, col2)
+
+        if pv is not None:
+            venster = pp2_tijdvenster_pauze([col1, col2], ws_sheet)
+            attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+            if pp2_pv_kan_overname(pv, attrs):
+                return (col1, col2, False)
+        else:
+            return (col1, col2, False)
+
+    if fallback:
+        return (*fallback, True)
+    return None
         
     
     
@@ -3515,7 +3577,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return True
         
     
-    def pp2_write_long_break(ws_sheet, pv_row, col1, col2, naam, leave_top_blank=False):
+    def pp2_write_long_break(ws_sheet, pv_row, col1, col2, naam, leave_top_blank=False, conflict=False):
         """
         Schrijf een lange pauze van 2 kwartieren:
         - normaal: attractie erboven
@@ -3540,7 +3602,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
             naam_cel.value = naam
             naam_cel.alignment = center_align
             naam_cel.border = thin_border
-            naam_cel.fill = lichtgroen_fill
+            naam_cel.fill = conflict_fill if conflict else lichtgroen_fill
+            
     
     
     def pp2_halfuur_blokken(pauze_cols, ws_sheet):
@@ -3810,16 +3873,11 @@ def maak_pp2_sheets(wb_arg, am_arg):
             continue
     
         gevonden = pp2_find_first_valid_long_block_any_row(
-            naam=naam,
-            ws_sheet=ws_pp2,
-            pv_rows=pv_rows_pp2,
-            pauze_cols=pauze_cols_pp2
+            naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2, pauze_cols=pauze_cols_pp2
         )
-    
         if gevonden is None:
             continue
-    
-        pv_row, col1, col2 = gevonden
+        pv_row, col1, col2, conflict = gevonden
     
         eigen_pv_row = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
         leave_top_blank = eigen_pv_row == pv_row
@@ -3830,7 +3888,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
             col1=col1,
             col2=col2,
             naam=naam,
-            leave_top_blank=leave_top_blank
+            leave_top_blank=leave_top_blank,
+            conflict=conflict
         )
     
         pp2_lange_pauze_ontvangers.add(naam)
@@ -3848,32 +3907,65 @@ def maak_pp2_sheets(wb_arg, am_arg):
         )
     
     # 5) Daarna: algemene verdeling van andere lange werkers
+    # Ronde 1: enkel plaatsen bij een PV die de attracties (incl. 30 min
+    # speling na de pauze) effectief aankan. Lukt dit niet op dit moment,
+    # dan blijft de student "in de wachtrij" en wordt de volgende kandidaat
+    # geprobeerd op deze plek.
     pp2_blokken = pp2_halfuur_blokken(pauze_cols_pp2, ws_pp2)
-    
+
     for col1, col2 in pp2_blokken:
         for pv, pv_name_row in pv_rows_pp2:
             if not pp2_is_beschikbaar(ws_pp2, pv_name_row, col1):
                 continue
             if not pp2_is_beschikbaar(ws_pp2, pv_name_row, col2):
                 continue
-    
+
             toegewezen_naam = None
-    
+            for kandidaat in pp2_step2_overige_lange_werkers:
+                if kandidaat in pp2_lange_pauze_ontvangers:
+                    continue
+                if not pp2_is_valid_long_break_for_student(kandidaat, col1, col2, ws_pp2):
+                    continue
+
+                venster = pp2_tijdvenster_pauze([col1, col2], ws_pp2)
+                attrs = pp2_attracties_in_venster(kandidaat, *venster) if venster else set()
+                if not pp2_pv_kan_overname(pv, attrs):
+                    continue
+
+                toegewezen_naam = kandidaat
+                break
+
+            if toegewezen_naam:
+                pp2_write_long_break(
+                    ws_sheet=ws_pp2, pv_row=pv_name_row,
+                    col1=col1, col2=col2, naam=toegewezen_naam,
+                    leave_top_blank=False
+                )
+                pp2_lange_pauze_ontvangers.add(toegewezen_naam)
+
+    # Ronde 2: wie binnen dit venster nooit een gekwalificeerde PV trof,
+    # wordt nu alsnog geplaatst op de eerst tijdgeldige vrije plek — rood
+    # gemarkeerd.
+    for col1, col2 in pp2_blokken:
+        for pv, pv_name_row in pv_rows_pp2:
+            if not pp2_is_beschikbaar(ws_pp2, pv_name_row, col1):
+                continue
+            if not pp2_is_beschikbaar(ws_pp2, pv_name_row, col2):
+                continue
+
+            toegewezen_naam = None
             for kandidaat in pp2_step2_overige_lange_werkers:
                 if kandidaat in pp2_lange_pauze_ontvangers:
                     continue
                 if pp2_is_valid_long_break_for_student(kandidaat, col1, col2, ws_pp2):
                     toegewezen_naam = kandidaat
                     break
-    
+
             if toegewezen_naam:
                 pp2_write_long_break(
-                    ws_sheet=ws_pp2,
-                    pv_row=pv_name_row,
-                    col1=col1,
-                    col2=col2,
-                    naam=toegewezen_naam,
-                    leave_top_blank=False
+                    ws_sheet=ws_pp2, pv_row=pv_name_row,
+                    col1=col1, col2=col2, naam=toegewezen_naam,
+                    leave_top_blank=False, conflict=True
                 )
                 pp2_lange_pauze_ontvangers.add(toegewezen_naam)
     
@@ -3888,17 +3980,19 @@ def maak_pp2_sheets(wb_arg, am_arg):
         if vaste_rij is None:
             continue
     
+        vaste_pv = next((p for p, r in pv_rows_pp2 if r == vaste_rij), None)
         gevonden = pp2_find_first_valid_long_block_on_fixed_row(
             naam=naam,
             ws_sheet=ws_pp2,
             pv_row=vaste_rij,
-            pauze_cols=pauze_cols_pp2
+            pauze_cols=pauze_cols_pp2,
+            pv=vaste_pv
         )
     
         if gevonden is None:
             continue
     
-        col1, col2 = gevonden
+        col1, col2, conflict = gevonden
     
         eigen_pv_row = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
         leave_top_blank = eigen_pv_row == vaste_rij
@@ -3909,7 +4003,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
             col1=col1,
             col2=col2,
             naam=naam,
-            leave_top_blank=leave_top_blank
+            leave_top_blank=leave_top_blank,
+            conflict=conflict
         )
     
     
@@ -4146,7 +4241,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     
     
-    def pp2_write_short_break_for_pv(ws_sheet, pv_row, col, naam):
+    def pp2_write_short_break_for_pv(ws_sheet, pv_row, col, naam, conflict=False):
         """
         Schrijf 1 kort kwartier voor een pauzevlinder zelf:
         - bovenliggende cel leeg
@@ -4161,7 +4256,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         cel.value = naam
         cel.alignment = center_align
         cel.border = thin_border
-        cel.fill = lichtpaars_fill
+        cel.fill = conflict_fill if conflict else lichtpaars_fill
     
     
     def pp2_find_short_break_cols_for_pv(naam, pv_row, ws_sheet, pauze_cols, open_spots_set, needed_quarters):
