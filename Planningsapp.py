@@ -36,6 +36,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
+import re
 
 
 # -----------------------------
@@ -2646,7 +2647,20 @@ def maak_pp2_sheets(wb_arg, am_arg):
         eind_min += 15
         return start_min, eind_min + speling_minuten
 
+    def pp2_basis_attractie_naam(attr):
+        """
+        Strip een volgnummer van een attractie met meerdere plaatsen
+        (bv. 'Zipline 1' -> 'Zipline', 'Zipline 1 + Golf' -> 'Zipline + Golf'),
+        zodat kwalificatie gecheckt wordt op de attractie zelf, niet de
+        specifieke plaats.
+        """
+        attr = str(attr).strip()
+        if " + " in attr:
+            delen = [re.sub(r"\s+\d+$", "", d.strip()) for d in attr.split(" + ")]
+            return " + ".join(delen)
+        return re.sub(r"\s+\d+$", "", attr)
 
+    
     def pp2_attracties_in_venster(naam, start_min, eind_min):
         """
         Attracties die 'naam' bezet tussen start_min en eind_min.
@@ -2661,7 +2675,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             attr = vind_attractie_op_uur(naam, uur)
             if not attr or str(attr).startswith("Extra") or attr == "Pauzevlinder-vervanging":
                 continue
-            attracties.add(attr)
+            attracties.add(pp2_basis_attractie_naam(attr))
         return attracties
 
 
