@@ -5995,6 +5995,15 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     ws_feedback2.cell(row_fb2, 1, "Feedback pauzeplanning").font = Font(bold=True)
     row_fb2 += 2
+
+    if pp2_debug_log:
+        ws_feedback2.cell(row_fb2, 1, "TIJDELIJKE DEBUG-INFO (Beyza/HavagiA)").font = Font(bold=True)
+        row_fb2 += 1
+        for regel in pp2_debug_log:
+            ws_feedback2.cell(row_fb2, 1, regel)
+            row_fb2 += 1
+        row_fb2 += 1
+    row_fb2 += 2
     
     # -----------------------------------
     # 1) Lange pauzes controleren
