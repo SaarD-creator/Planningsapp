@@ -36,7 +36,6 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from io import BytesIO
 import datetime
-import re
 
 
 # -----------------------------
@@ -2467,6 +2466,7 @@ output = BytesIO()
 #oooooooooooooooooooo
 #oooooooooooooooooooo
 
+import random
 from collections import defaultdict
 from openpyxl.styles import Alignment, Border, Side, PatternFill
 import datetime
@@ -2647,21 +2647,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return start_min, eind_min + speling_minuten
 
 
-    def pp2_basis_attractie_naam(attr):
-        """
-        Strip een volgnummer van een attractie met meerdere plaatsen
-        (bv. 'Zipline 1' -> 'Zipline', 'Zipline 1 + Golf' -> 'Zipline + Golf'),
-        zodat kwalificatie gecheckt wordt op de attractie zelf, niet de
-        specifieke plaats.
-        """
-        attr = str(attr).strip()
-        if " + " in attr:
-            delen = [re.sub(r"\s+\d+$", "", d.strip()) for d in attr.split(" + ")]
-            return " + ".join(delen)
-        return re.sub(r"\s+\d+$", "", attr)
-
-
-    
     def pp2_attracties_in_venster(naam, start_min, eind_min):
         """
         Attracties die 'naam' bezet tussen start_min en eind_min.
@@ -2676,7 +2661,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             attr = vind_attractie_op_uur(naam, uur)
             if not attr or str(attr).startswith("Extra") or attr == "Pauzevlinder-vervanging":
                 continue
-            attracties.add(pp2_basis_attractie_naam(attr))
+            attracties.add(attr)
         return attracties
 
 
@@ -4143,11 +4128,9 @@ def maak_pp2_sheets(wb_arg, am_arg):
         if not vooruitgang:
             break  # niemand kon nog vooruit -> wachtrij zit muurvast
 
-    # Iedereen die overblijft: eerst nog proberen zonder de 60%-drempel
-    # (kwalificatie blijft wél vereist, gewoon later toegelaten) -> normaal
-    # (groen) plaatsen als dat lukt. Enkel als er ECHT nergens een
-    # gekwalificeerde PV bestaat, plaatsen we op de vroegste/moeilijkste
-    # optie, rood gemarkeerd.
+    # Iedereen die overblijft: nooit een gekwalificeerde optie gevonden
+    # binnen de openingen die er nu nog zijn -> plaatsen op eigen vroegste
+    # optie (vroegst -> moeilijkste PV bij gelijkstand), rood gemarkeerd.
     for naam in pp2_wachtrij:
         if naam in pp2_lange_pauze_ontvangers:
             continue
@@ -4158,7 +4141,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             if plek is not None:
                 col1, col2 = plek
                 start_min = pp2_parse_kwartier_header(ws_pp2.cell(1, col1).value)
-                opties.append((start_min, pp2_schaarste_pv(pv), pv, pv_name_row, col1, col2))
+                opties.append((start_min, pp2_schaarste_pv(pv), pv_name_row, col1, col2))
 
         if not opties:
             pp2_niet_geplaatst.append({
@@ -4168,27 +4151,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
             continue
 
         opties.sort(key=lambda o: (o[0], o[1]))
+        _start_min, _schaarste, pv_name_row, col1, col2 = opties[0]
 
-        # Eerst: alsnog een gekwalificeerde optie proberen, drempel genegeerd
-        geplaatst = False
-        for start_min, _schaarste, pv, pv_name_row, col1, col2 in opties:
-            venster = pp2_tijdvenster_pauze([col1, col2], ws_pp2)
-            attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
-            if pp2_pv_kan_overname(pv, attrs):
-                pp2_write_long_break(
-                    ws_sheet=ws_pp2, pv_row=pv_name_row,
-                    col1=col1, col2=col2, naam=naam,
-                    leave_top_blank=False
-                )
-                pp2_lange_pauze_ontvangers.add(naam)
-                geplaatst = True
-                break
-
-        if geplaatst:
-            continue
-
-        # Echt nergens gekwalificeerd -> vroegste/moeilijkste optie, rood
-        _start_min, _schaarste, _pv, pv_name_row, col1, col2 = opties[0]
         pp2_write_long_break(
             ws_sheet=ws_pp2, pv_row=pv_name_row,
             col1=col1, col2=col2, naam=naam,
