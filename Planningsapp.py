@@ -2711,6 +2711,39 @@ def maak_pp2_sheets(wb_arg, am_arg):
             opties.append((start_min, pp2_schaarste_pv(pv), pv, pv_row, col1, col2))
         opties.sort(key=lambda o: (o[0], o[1]))
         return opties
+
+
+    def pp2_eerste_halfuur_start_min(naam, ws_sheet, pv_row, pauze_cols):
+        """Vindt het starttijdstip (in minuten) van iemands geplaatste blok op deze rij."""
+        for col in pauze_cols:
+            if ws_sheet.cell(pv_row, col).value == naam:
+                return pp2_parse_kwartier_header(ws_sheet.cell(1, col).value)
+        return None
+
+
+    def pp2_kan_2de_halfuur_na(naam, ws_sheet, pv_row, pauze_cols, na_tijdstip_min, extra_bezet_cols=None):
+        """
+        Simulatie (schrijft niets naar de sheet): kan het 2de halfuur van deze
+        minderjarige op deze rij nog een geldig blok vinden dat niet eerder
+        start dan na_tijdstip_min? extra_bezet_cols laat toe kolommen die we
+        al 'gereserveerd' hebben in dezelfde simulatie ook als bezet te zien.
+        """
+        extra_bezet_cols = extra_bezet_cols or set()
+        blokken = pp2_halfuur_blokken(pauze_cols, ws_sheet)
+        for col1, col2 in blokken:
+            start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, col1).value)
+            if start_min is None or start_min < na_tijdstip_min:
+                continue
+            if col1 in extra_bezet_cols or col2 in extra_bezet_cols:
+                continue
+            if ws_sheet.cell(pv_row, col1).value not in [None, ""]:
+                continue
+            if ws_sheet.cell(pv_row, col2).value not in [None, ""]:
+                continue
+            if not pp2_is_valid_long_break_for_student(naam, col1, col2, ws_sheet):
+                continue
+            return (col1, col2)
+        return None
     
     
     def pp2_get_pauze_cols(ws_sheet):
@@ -3985,6 +4018,42 @@ def maak_pp2_sheets(wb_arg, am_arg):
             lange_pauze_ontvangers=pp2_lange_pauze_ontvangers,
             lange_werkers_random=pp2_lange_werkers_random
         )
+
+    # ---- Harde 60%-afkapregel voor de NORMALE lange pauzes ----
+    # Geen enkele normale lange pauze mag nog starten op of na 60% van de
+    # pauzevlinderuren. Rijen waar minderjarigen al hun eerste halfuur
+    # kregen, krijgen een vroegere, eigen drempel: 30 min per (nog
+    # haalbaar) tweede halfuur dat op die rij later nog moet komen, zodat
+    # er ruimte gereserveerd blijft voor stap 6.
+    pp2_pv_start_min = pp2_parse_kwartier_header(ws_pp2.cell(1, pauze_cols_pp2[0]).value)
+    pp2_pv_eind_min = pp2_parse_kwartier_header(ws_pp2.cell(1, pauze_cols_pp2[-1]).value) + 15
+    pp2_drempel_tijd_globaal = pp2_pv_start_min + 0.6 * (pp2_pv_eind_min - pp2_pv_start_min)
+
+    pp2_drempel_per_rij = {}
+    for pv, pv_name_row in pv_rows_pp2:
+        wachtende_minderjarigen = [
+            naam for naam, rij in pp2_minderjarige_eerste_halfuur_rij.items()
+            if rij == pv_name_row and pp2_aantal_lange_pauzes_nodig_in_stap2(naam) >= 2
+        ]
+        # Sorteer op het echte tijdstip van hun EERSTE halfuur -> wie het
+        # vroegst zijn eerste pauze had, wordt hier ook het eerst gesimuleerd.
+        wachtende_minderjarigen.sort(
+            key=lambda n: pp2_eerste_halfuur_start_min(n, ws_pp2, pv_name_row, pauze_cols_pp2) or 0
+        )
+
+        kandidaat_na = pp2_drempel_tijd_globaal - 60
+        extra_bezet = set()
+        haalbaar = 0
+        for naam in wachtende_minderjarigen:
+            plek = pp2_kan_2de_halfuur_na(
+                naam, ws_pp2, pv_name_row, pauze_cols_pp2, kandidaat_na, extra_bezet
+            )
+            if plek is not None:
+                haalbaar += 1
+                extra_bezet.add(plek[0])
+                extra_bezet.add(plek[1])
+
+        pp2_drempel_per_rij[pv_name_row] = pp2_drempel_tijd_globaal - (30 * haalbaar)
     
     # 5) Daarna: algemene verdeling van andere lange werkers
     # Rondes-systeem: per kandidaat de eerstvolgende plek van élke PV
@@ -4012,6 +4081,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 if plek is not None:
                     col1, col2 = plek
                     start_min = pp2_parse_kwartier_header(ws_pp2.cell(1, col1).value)
+                    if start_min >= pp2_drempel_per_rij.get(pv_name_row, pp2_drempel_tijd_globaal):
+                        continue  # 60%-drempel (eventueel vervroegd) overschreden op deze rij
                     opties.append((start_min, pp2_schaarste_pv(pv), pv, pv_name_row, col1, col2))
 
             if not opties:
@@ -4099,7 +4170,11 @@ def maak_pp2_sheets(wb_arg, am_arg):
         if pp2_aantal_lange_pauzes_nodig_in_stap2(naam) >= 2
         and pp2_minderjarige_eerste_halfuur_rij.get(naam) is not None
     ]
-
+    pp2_wachtrij_2de_halfuur.sort(
+        key=lambda n: pp2_eerste_halfuur_start_min(
+            n, ws_pp2, pp2_minderjarige_eerste_halfuur_rij[n], pauze_cols_pp2
+        ) or 0
+    )
     while pp2_wachtrij_2de_halfuur:
         vooruitgang = False
         nog_niet_geplaatst = []
