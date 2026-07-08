@@ -2693,6 +2693,24 @@ def maak_pp2_sheets(wb_arg, am_arg):
     def pp2_schaarste_pv(pv):
         """Lager = 'moeilijkere' pauzevlinder (kan minder attracties)."""
         return len(pv.get("attracties", []))
+
+    
+    def pp2_verzamel_opties_alle_pvs(naam, ws_sheet, pv_rows, pauze_cols):
+        """
+        Verzamelt per PV zijn eigen eerstvolgende tijdgeldige, vrije plek voor
+        'naam' (nooit verder gezocht dan die ene plek per PV -> 'plakken').
+        Sorteert op (vroegste tijd, moeilijkste PV).
+        """
+        opties = []
+        for pv, pv_row in pv_rows:
+            plek = pp2_eerste_vrije_blok_op_rij(naam, ws_sheet, pv_row, pauze_cols)
+            if plek is None:
+                continue
+            col1, col2 = plek
+            start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, col1).value)
+            opties.append((start_min, pp2_schaarste_pv(pv), pv, pv_row, col1, col2))
+        opties.sort(key=lambda o: (o[0], o[1]))
+        return opties
     
     
     def pp2_get_pauze_cols(ws_sheet):
@@ -3886,38 +3904,75 @@ def maak_pp2_sheets(wb_arg, am_arg):
         pp2_speciale_teller += 1
 
     # 3) Eerst: alle minderjarigen die in stap 2 recht hebben op een halfuur
-    #    krijgen hun EERSTE halfuur zo vroeg mogelijk
-    for naam in pp2_step2_minderjarigen:
-        nodig = pp2_aantal_lange_pauzes_nodig_in_stap2(naam)
-        if nodig <= 0:
-            continue
-    
-        # Heeft al ergens een lang halfuur? Dan niet nog eens als "eerste" plaatsen
+    #    krijgen hun EERSTE halfuur zo vroeg mogelijk (zelfde rondes-systeem
+    #    als de gewone lange werkers).
+    pp2_wachtrij_1ste_halfuur = [
+        naam for naam in pp2_step2_minderjarigen
+        if pp2_aantal_lange_pauzes_nodig_in_stap2(naam) > 0
+        and naam not in pp2_lange_pauze_ontvangers
+    ]
+
+    while pp2_wachtrij_1ste_halfuur:
+        vooruitgang = False
+        nog_niet_geplaatst = []
+
+        for naam in pp2_wachtrij_1ste_halfuur:
+            if naam in pp2_lange_pauze_ontvangers:
+                continue
+
+            opties = pp2_verzamel_opties_alle_pvs(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2)
+            if not opties:
+                continue
+
+            geplaatst = False
+            for start_min, _schaarste, pv, pv_row, col1, col2 in opties:
+                venster = pp2_tijdvenster_pauze([col1, col2], ws_pp2)
+                attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+                if pp2_pv_kan_overname(pv, attrs):
+                    eigen_pv_row = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
+                    leave_top_blank = eigen_pv_row == pv_row
+                    pp2_write_long_break(
+                        ws_sheet=ws_pp2, pv_row=pv_row,
+                        col1=col1, col2=col2, naam=naam,
+                        leave_top_blank=leave_top_blank
+                    )
+                    pp2_lange_pauze_ontvangers.add(naam)
+                    pp2_minderjarige_eerste_halfuur_rij[naam] = pv_row
+                    geplaatst = True
+                    vooruitgang = True
+                    break
+
+            if not geplaatst:
+                nog_niet_geplaatst.append(naam)
+
+        pp2_wachtrij_1ste_halfuur = nog_niet_geplaatst
+        if not vooruitgang:
+            break
+
+    for naam in pp2_wachtrij_1ste_halfuur:
         if naam in pp2_lange_pauze_ontvangers:
             continue
-    
-        gevonden = pp2_find_first_valid_long_block_any_row(
-            naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2, pauze_cols=pauze_cols_pp2
-        )
-        if gevonden is None:
+
+        opties = pp2_verzamel_opties_alle_pvs(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2)
+        if not opties:
+            pp2_niet_geplaatst.append({
+                "naam": naam,
+                "reden": "stap 2 (minderjarige, eerste halfuur): geen enkele vrije plek gevonden bij een PV"
+            })
             continue
-        pv_row, col1, col2, conflict = gevonden
-    
+
+        _start_min, _schaarste, pv, pv_row, col1, col2 = opties[0]
         eigen_pv_row = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
         leave_top_blank = eigen_pv_row == pv_row
-    
+
         pp2_write_long_break(
-            ws_sheet=ws_pp2,
-            pv_row=pv_row,
-            col1=col1,
-            col2=col2,
-            naam=naam,
-            leave_top_blank=leave_top_blank,
-            conflict=conflict
+            ws_sheet=ws_pp2, pv_row=pv_row,
+            col1=col1, col2=col2, naam=naam,
+            leave_top_blank=leave_top_blank, conflict=True
         )
-    
         pp2_lange_pauze_ontvangers.add(naam)
         pp2_minderjarige_eerste_halfuur_rij[naam] = pv_row
+        
     
     # 4) Daarna: bestaande logica voor overige lange pauzevlinders op eigen rij
     for pv, pv_name_row in pv_rows_pp2:
@@ -4020,44 +4075,98 @@ def maak_pp2_sheets(wb_arg, am_arg):
         )
         pp2_lange_pauze_ontvangers.add(naam)
     
-    # 6) Helemaal als laatste:
-    #    minderjarigen met > 6u krijgen nog een TWEEDE halfuur
-    #    op exact dezelfde rij als hun eerste halfuur
-    for naam in pp2_step2_minderjarigen:
-        if pp2_aantal_lange_pauzes_nodig_in_stap2(naam) < 2:
-            continue
-    
+    # 6) Helemaal als laatste: minderjarigen met > 6u krijgen nog een TWEEDE
+    #    halfuur. EERST altijd proberen op exact dezelfde rij als het eerste
+    #    halfuur (glued, geen gat). Lukt dat niet (geen plek, of niet
+    #    gekwalificeerd), dan pas een andere PV -- ook daar telkens enkel
+    #    de eigen eerstvolgende plek.
+    pp2_wachtrij_2de_halfuur = [
+        naam for naam in pp2_step2_minderjarigen
+        if pp2_aantal_lange_pauzes_nodig_in_stap2(naam) >= 2
+        and pp2_minderjarige_eerste_halfuur_rij.get(naam) is not None
+    ]
+
+    while pp2_wachtrij_2de_halfuur:
+        vooruitgang = False
+        nog_niet_geplaatst = []
+
+        for naam in pp2_wachtrij_2de_halfuur:
+            vaste_rij = pp2_minderjarige_eerste_halfuur_rij.get(naam)
+            vaste_pv = next((p for p, r in pv_rows_pp2 if r == vaste_rij), None)
+            geplaatst = False
+
+            # Stap A: eerst proberen op dezelfde rij als het eerste halfuur
+            plek = pp2_eerste_vrije_blok_op_rij(naam, ws_pp2, vaste_rij, pauze_cols_pp2)
+            if plek is not None and vaste_pv is not None:
+                col1, col2 = plek
+                venster = pp2_tijdvenster_pauze([col1, col2], ws_pp2)
+                attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+                if pp2_pv_kan_overname(vaste_pv, attrs):
+                    eigen_pv_row = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
+                    leave_top_blank = eigen_pv_row == vaste_rij
+                    pp2_write_long_break(
+                        ws_sheet=ws_pp2, pv_row=vaste_rij,
+                        col1=col1, col2=col2, naam=naam,
+                        leave_top_blank=leave_top_blank
+                    )
+                    pp2_lange_pauze_ontvangers.add(naam)
+                    geplaatst = True
+                    vooruitgang = True
+
+            # Stap B: eigen rij lukt niet -> andere PV proberen
+            if not geplaatst:
+                opties = pp2_verzamel_opties_alle_pvs(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2)
+                for start_min, _schaarste, pv, pv_row, col1, col2 in opties:
+                    venster = pp2_tijdvenster_pauze([col1, col2], ws_pp2)
+                    attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+                    if pp2_pv_kan_overname(pv, attrs):
+                        eigen_pv_row = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
+                        leave_top_blank = eigen_pv_row == pv_row
+                        pp2_write_long_break(
+                            ws_sheet=ws_pp2, pv_row=pv_row,
+                            col1=col1, col2=col2, naam=naam,
+                            leave_top_blank=leave_top_blank
+                        )
+                        pp2_lange_pauze_ontvangers.add(naam)
+                        geplaatst = True
+                        vooruitgang = True
+                        break
+
+            if not geplaatst:
+                nog_niet_geplaatst.append(naam)
+
+        pp2_wachtrij_2de_halfuur = nog_niet_geplaatst
+        if not vooruitgang:
+            break
+
+    # Overblijvers: zelfde volgorde (eigen rij eerst, dan andere PV's),
+    # maar nu zonder kwalificatie-eis -- op de vroegste optie, rood.
+    for naam in pp2_wachtrij_2de_halfuur:
         vaste_rij = pp2_minderjarige_eerste_halfuur_rij.get(naam)
-        if vaste_rij is None:
-            continue
-    
-        vaste_pv = next((p for p, r in pv_rows_pp2 if r == vaste_rij), None)
-        gevonden = pp2_find_first_valid_long_block_on_fixed_row(
-            naam=naam,
-            ws_sheet=ws_pp2,
-            pv_row=vaste_rij,
-            pauze_cols=pauze_cols_pp2,
-            pv=vaste_pv
-        )
-    
-        if gevonden is None:
-            continue
-    
-        col1, col2, conflict = gevonden
-    
+
+        plek = pp2_eerste_vrije_blok_op_rij(naam, ws_pp2, vaste_rij, pauze_cols_pp2)
+        if plek is not None:
+            col1, col2 = plek
+            pv_row_gekozen = vaste_rij
+        else:
+            opties = pp2_verzamel_opties_alle_pvs(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2)
+            if not opties:
+                pp2_niet_geplaatst.append({
+                    "naam": naam,
+                    "reden": "stap 2 (minderjarige, tweede halfuur): geen enkele vrije plek gevonden bij een PV"
+                })
+                continue
+            _start_min, _schaarste, _pv, pv_row_gekozen, col1, col2 = opties[0]
+
         eigen_pv_row = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
-        leave_top_blank = eigen_pv_row == vaste_rij
-    
+        leave_top_blank = eigen_pv_row == pv_row_gekozen
+
         pp2_write_long_break(
-            ws_sheet=ws_pp2,
-            pv_row=vaste_rij,
-            col1=col1,
-            col2=col2,
-            naam=naam,
-            leave_top_blank=leave_top_blank,
-            conflict=conflict
+            ws_sheet=ws_pp2, pv_row=pv_row_gekozen,
+            col1=col1, col2=col2, naam=naam,
+            leave_top_blank=leave_top_blank, conflict=True
         )
-    
+        pp2_lange_pauze_ontvangers.add(naam)
     
     
     #STAP 3 333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333
