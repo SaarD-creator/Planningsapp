@@ -4017,6 +4017,14 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 continue  # deze kandidaat heeft nergens (nog) een vrije plek
 
             # 2) sorteer: vroegste tijd eerst, bij gelijke tijd moeilijkste PV eerst
+            if naam in ("BeyzaA", "HavagiA"):
+                print(f"--- {naam} ---")
+                for o in opties:
+                    start_min, schaarste, pv, pv_row, col1, col2 = o
+                    venster = pp2_tijdvenster_pauze([col1, col2], ws_pp2)
+                    attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+                    kan = pp2_pv_kan_overname(pv, attrs)
+                    print(f"  PV-rij {pv_row}: start={start_min}min, schaarste={schaarste}, attracties_in_venster={attrs}, gekwalificeerd={kan}")
             opties.sort(key=lambda o: (o[0], o[1]))
 
             # 3) eerste gekwalificeerde optie plaatsen
