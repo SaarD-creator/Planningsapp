@@ -2708,6 +2708,38 @@ def maak_pp2_sheets(wb_arg, am_arg):
         """Lager = 'moeilijkere' pauzevlinder (kan minder attracties)."""
         return len(pv.get("attracties", []))
 
+
+
+    def pp2_eerste_vrij_kwartier_op_rij(naam, ws_sheet, pv_row, pauze_cols, open_spots_set):
+        """
+        Eerste tijdgeldige, vrije KORTE (1 kwartier) plek op deze PV-rij.
+        'Plakken': nooit verder gezocht dan deze ene, eerstvolgende plek.
+        """
+        for col in pauze_cols:
+            if (pv_row, col) in open_spots_set:
+                continue
+            if ws_sheet.cell(pv_row, col).value not in [None, ""]:
+                continue
+            if not pp2_is_valid_short_break_for_student(naam, col, ws_sheet):
+                continue
+            return col
+        return None
+
+
+    def pp2_verzamel_opties_alle_pvs_kort(naam, ws_sheet, pv_rows, pauze_cols, open_spots_set):
+        """
+        Verzamelt per PV zijn eigen eerstvolgende korte plek, gesorteerd op
+        (vroegste tijd, moeilijkste PV) -- zelfde principe als bij lange pauzes.
+        """
+        opties = []
+        for pv, pv_row in pv_rows:
+            col = pp2_eerste_vrij_kwartier_op_rij(naam, ws_sheet, pv_row, pauze_cols, open_spots_set)
+            if col is not None:
+                start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, col).value)
+                opties.append((start_min, pp2_schaarste_pv(pv), pv, pv_row, col))
+        opties.sort(key=lambda o: (o[0], o[1]))
+        return opties
+
     
     def pp2_verzamel_opties_alle_pvs(naam, ws_sheet, pv_rows, pauze_cols):
         """
@@ -4879,30 +4911,34 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return result
     
     
-    def pp2_write_short_break_regular(ws_sheet, pv_row, col, naam):
+    def pp2_write_short_break_regular(ws_sheet, pv_row, col, naam, conflict=False):
         """
         Korte pauze voor gewone student:
-        - bovenliggende cel = attractie
+        - bovenliggende cel = attractie (rood bij conflict)
         - naamcel:
+            * rood bij conflict (niet-gekwalificeerde PV)
             * lichtgeel voor minderjarigen die >4u werken
             * lichtpaars voor alle andere korte pauzes
         """
         header = ws_sheet.cell(1, col).value
         uur = parse_header_uur(header)
-    
+
         attr = vind_attractie_op_uur(naam, uur) if uur is not None else None
-    
+
         top_cel = ws_sheet.cell(pv_row - 1, col)
         top_cel.value = attr if attr else ""
         top_cel.alignment = center_align
         top_cel.border = thin_border
-    
+        top_cel.fill = conflict_fill if conflict else PatternFill(fill_type=None)
+
         cel = ws_sheet.cell(pv_row, col)
         cel.value = naam
         cel.alignment = center_align
         cel.border = thin_border
-    
-        if pp2_is_minderjarig(naam) and werkduur_voor_pauze(naam) > 4:
+
+        if conflict:
+            cel.fill = conflict_fill
+        elif pp2_is_minderjarig(naam) and werkduur_voor_pauze(naam) > 4:
             cel.fill = roze_fill
         else:
             cel.fill = lichtpaars_fill
@@ -5055,7 +5091,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     
     
-    def pp2_place_short_break_cols_on_row(naam, pv, pv_row, cols):
+    def pp2_place_short_break_cols_on_row(naam, pv, pv_row, cols, conflict=False):
         """
         Schrijf 1 of 2 korte kwartieren voor gewone student op een bepaalde rij.
         """
@@ -5064,9 +5100,10 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 ws_sheet=ws_pp2,
                 pv_row=pv_row,
                 col=col,
-                naam=naam
+                naam=naam,
+                conflict=conflict
             )
-    
+
         pp2_regular_short_breaks_placed.append({
             "naam": naam,
             "pauzevlinder": pv["naam"],
@@ -5307,7 +5344,107 @@ def maak_pp2_sheets(wb_arg, am_arg):
             pv_row=pv_row,
             cols=[col]
         )
-    
+
+
+
+
+    # ---------------------------------------
+    # KORTE WERKERS (geen lange pauze, geen pauzevlinder zelf):
+    # zelfde systeem als de lange pauzes -- vroegste PV, bij gelijkstand
+    # moeilijkste PV, plakken (nooit verder dan de eigen eerstvolgende
+    # plek per PV), en wie vastzit blijft in de wachtrij voor een volgende
+    # ronde. Enkel als écht nergens een gekwalificeerde PV bestaat: rood.
+    # ---------------------------------------
+    pauzevlinder_namen_set_kort = {pv["naam"] for pv in selected}
+
+    pp2_korte_werkers_kandidaten = [
+        naam for naam in pp2_students_before_end_all
+        if naam not in pp2_minor_early_stoppers
+        and naam not in pp2_lange_pauze_ontvangers
+        and naam not in pauzevlinder_namen_set_kort
+        and pp2_resterende_korte_kwartieren(
+            naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
+            pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
+        ) > 0
+    ]
+
+    pp2_wachtrij_kort = list(pp2_korte_werkers_kandidaten)
+
+    while pp2_wachtrij_kort:
+        vooruitgang = False
+        nog_niet_geplaatst = []
+
+        for naam in pp2_wachtrij_kort:
+            if pp2_resterende_korte_kwartieren(
+                naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
+                pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
+            ) <= 0:
+                continue
+
+            opties = pp2_verzamel_opties_alle_pvs_kort(
+                naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots
+            )
+            if not opties:
+                nog_niet_geplaatst.append(naam)
+                continue
+
+            geplaatst = False
+            for start_min, _schaarste, pv, pv_row, col in opties:
+                venster = pp2_tijdvenster_pauze([col], ws_pp2)
+                attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+                if pp2_pv_kan_overname(pv, attrs):
+                    pp2_place_short_break_cols_on_row(
+                        naam=naam, pv=pv, pv_row=pv_row, cols=[col]
+                    )
+                    geplaatst = True
+                    vooruitgang = True
+                    break
+
+            if not geplaatst:
+                nog_niet_geplaatst.append(naam)
+
+        pp2_wachtrij_kort = nog_niet_geplaatst
+        if not vooruitgang:
+            break  # niemand kon nog vooruit -> wachtrij zit muurvast
+
+    # Fallback: drempel/kwalificatie genegeerd waar nodig -> alsnog proberen
+    # gekwalificeerd te plaatsen, pas rood als dat ECHT nergens lukt.
+    for naam in pp2_wachtrij_kort:
+        if pp2_resterende_korte_kwartieren(
+            naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
+            pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
+        ) <= 0:
+            continue
+
+        opties = pp2_verzamel_opties_alle_pvs_kort(
+            naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots
+        )
+        if not opties:
+            pp2_niet_geplaatst.append({
+                "naam": naam,
+                "reden": "korte werkers: geen enkele vrije plek gevonden bij een PV"
+            })
+            continue
+
+        geplaatst = False
+        for start_min, _schaarste, pv, pv_row, col in opties:
+            venster = pp2_tijdvenster_pauze([col], ws_pp2)
+            attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+            if pp2_pv_kan_overname(pv, attrs):
+                pp2_place_short_break_cols_on_row(
+                    naam=naam, pv=pv, pv_row=pv_row, cols=[col]
+                )
+                geplaatst = True
+                break
+
+        if geplaatst:
+            continue
+
+        _start_min, _schaarste, pv, pv_row, col = opties[0]
+        pp2_place_short_break_cols_on_row(
+            naam=naam, pv=pv, pv_row=pv_row, cols=[col], conflict=True
+        )
+        
     
     # ---------------------------------------
     # 1) Daarna pas: gewone korte werkers
