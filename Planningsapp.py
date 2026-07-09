@@ -5355,6 +5355,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # plek per PV), en wie vastzit blijft in de wachtrij voor een volgende
     # ronde. Enkel als écht nergens een gekwalificeerde PV bestaat: rood.
     # ---------------------------------------
+    pp2_students_before_end_all = pp2_get_students_stopping_before_end()
     pauzevlinder_namen_set_kort = {pv["naam"] for pv in selected}
 
     pp2_korte_werkers_kandidaten = [
