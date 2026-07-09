@@ -2781,11 +2781,10 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 continue
             delen = []
             if mist_huidig:
-                delen.append(f"de attractie ('{', '.join(mist_huidig)}') niet kan")
+                delen.append(f"de attractie ('{', '.join(mist_huidig)}') niet kan overnemen")
             if mist_volgend:
-                delen.append(f"de attractie die erop volgt ('{', '.join(mist_volgend)}') niet kan")
-            stukken.append(f"{pv_naam} de " + " en ".join(delen))
-
+                delen.append(f"de attractie die erop volgt ('{', '.join(mist_volgend)}') niet kan overnemen")
+            stukken.append(f"{pv_naam} {' en '.join(delen)}")
         if not stukken:
             return "omdat er op dat moment nergens een vrije plek meer was bij een pauzevlinder"
 
@@ -2823,7 +2822,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
                             i += 1
 
                     reden = pp2_bouw_conflict_reden(naam, gebruikte_cols, ws_sheet, pv_rows)
-                    redenen.append(f"{naam} staat in het rood {reden}.")
+                    redenen.append((naam, f"staat in het rood {reden}."))
 
                 i += 1
 
@@ -6083,23 +6082,53 @@ def maak_pp2_sheets(wb_arg, am_arg):
     pp2_rode_pauze_redenen = pp2_verzamel_rode_pauze_redenen(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
 
     if pp2_rode_pauze_redenen:
-        ws_feedback2.cell(row_fb2, 1, "Rode pauzes: waarom?").font = Font(bold=True)
-        row_fb2 += 1
+        _titel_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+        _kader_fill = PatternFill(start_color="FFF2F2", end_color="FFF2F2", fill_type="solid")
+        _dun_rand = Border(
+            left=Side(style="thin", color="F8CBAD"),
+            right=Side(style="thin", color="F8CBAD"),
+            top=Side(style="thin", color="F8CBAD"),
+            bottom=Side(style="thin", color="F8CBAD"),
+        )
+        _laatste_kolom = 15  # niet verder dan kolom O
 
-        for regel in pp2_rode_pauze_redenen:
-            ws_feedback2.cell(row_fb2, 1, regel)
+        ws_feedback2.cell(row_fb2, 1, "Rode pauzes: waarom?").font = Font(bold=True, size=13)
+        row_fb2 += 2
+
+        for naam, tekst in pp2_rode_pauze_redenen:
+            ws_feedback2.merge_cells(start_row=row_fb2, start_column=1, end_row=row_fb2, end_column=_laatste_kolom)
+            titel_cel = ws_feedback2.cell(row_fb2, 1, f"⚠  {naam}")
+            titel_cel.font = Font(bold=True, color="9C0006")
+            titel_cel.alignment = Alignment(vertical="center")
+            for c in range(1, _laatste_kolom + 1):
+                ws_feedback2.cell(row_fb2, c).fill = _titel_fill
+                ws_feedback2.cell(row_fb2, c).border = _dun_rand
             row_fb2 += 1
 
-        row_fb2 += 1
-        cel = ws_feedback2.cell(
+            ws_feedback2.merge_cells(start_row=row_fb2, start_column=1, end_row=row_fb2, end_column=_laatste_kolom)
+            tekst_cel = ws_feedback2.cell(row_fb2, 1, tekst)
+            tekst_cel.alignment = Alignment(wrap_text=True, vertical="top")
+            for c in range(1, _laatste_kolom + 1):
+                ws_feedback2.cell(row_fb2, c).fill = _kader_fill
+                ws_feedback2.cell(row_fb2, c).border = _dun_rand
+            _geschatte_lijnen = max(1, (len(tekst) // 110) + 1)
+            ws_feedback2.row_dimensions[row_fb2].height = max(15, _geschatte_lijnen * 15)
+            row_fb2 += 1
+
+            row_fb2 += 1  # lege regel tussen kaartjes
+
+        ws_feedback2.merge_cells(start_row=row_fb2, start_column=1, end_row=row_fb2, end_column=_laatste_kolom)
+        tip_cel = ws_feedback2.cell(
             row_fb2, 1,
             "Tip: sommige van deze rode pauzes ontstaan door willekeurige volgorde-keuzes "
             "in het planningsproces. Genereer gerust nog eens een nieuwe planning (druk "
-            "opnieuw op de 'Download planning' knop) -- het is goed mogelijk dat er dan "
-            "geen enkele rode pauze meer verschijnt."
+            "opnieuw op de knop) — het is goed mogelijk dat er dan geen enkele rode pauze "
+            "meer verschijnt."
         )
-        cel.font = Font(italic=True)
-        row_fb2 += 1
+        tip_cel.font = Font(italic=True)
+        tip_cel.alignment = Alignment(wrap_text=True)
+        ws_feedback2.row_dimensions[row_fb2].height = 30
+        row_fb2 += 2
 
     row_fb2 += 2
     
