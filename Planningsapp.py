@@ -4142,9 +4142,10 @@ def maak_pp2_sheets(wb_arg, am_arg):
         if not vooruitgang:
             break  # niemand kon nog vooruit -> wachtrij zit muurvast
 
-    # Iedereen die overblijft: nooit een gekwalificeerde optie gevonden
-    # binnen de openingen die er nu nog zijn -> plaatsen op eigen vroegste
-    # optie (vroegst -> moeilijkste PV bij gelijkstand), rood gemarkeerd.
+    # Iedereen die overblijft: de drempel voorkwam een plek binnen de
+    # tijdslimiet. Check nu, zonder drempel, of de vroegst/moeilijkst
+    # mogelijke PV de attractie (en de volgende, binnen het halfuur
+    # speling) wel degelijk aankan -- enkel dan pas rood.
     for naam in pp2_wachtrij:
         if naam in pp2_lange_pauze_ontvangers:
             continue
@@ -4155,7 +4156,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             if plek is not None:
                 col1, col2 = plek
                 start_min = pp2_parse_kwartier_header(ws_pp2.cell(1, col1).value)
-                opties.append((start_min, pp2_schaarste_pv(pv), pv_name_row, col1, col2))
+                opties.append((start_min, pp2_schaarste_pv(pv), pv, pv_name_row, col1, col2))
 
         if not opties:
             pp2_niet_geplaatst.append({
@@ -4165,12 +4166,16 @@ def maak_pp2_sheets(wb_arg, am_arg):
             continue
 
         opties.sort(key=lambda o: (o[0], o[1]))
-        _start_min, _schaarste, pv_name_row, col1, col2 = opties[0]
+        _start_min, _schaarste, pv, pv_name_row, col1, col2 = opties[0]
+
+        venster = pp2_tijdvenster_pauze([col1, col2], ws_pp2)
+        attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+        conflict = not pp2_pv_kan_overname(pv, attrs)
 
         pp2_write_long_break(
             ws_sheet=ws_pp2, pv_row=pv_name_row,
             col1=col1, col2=col2, naam=naam,
-            leave_top_blank=False, conflict=True
+            leave_top_blank=False, conflict=conflict
         )
         pp2_lange_pauze_ontvangers.add(naam)
     
