@@ -5370,6 +5370,20 @@ def maak_pp2_sheets(wb_arg, am_arg):
     pp2_students_before_end_pending.sort(
         key=lambda naam: pp2_get_last_long_break_end_col_for_sort(naam)
     )
+
+    # Willekeurige volgorde voor wie geen lange pauze heeft (zij staan
+    # toch al vooraan, want hun sorteersleutel is overal -1) -- de
+    # volgorde van wie al wél een lange pauze heeft, blijft gesorteerd
+    # op eindkolom.
+    _idx_eerste_met_lange = next(
+        (i for i, n in enumerate(pp2_students_before_end_pending)
+         if pp2_get_last_long_break_end_col_for_sort(n) != -1),
+        len(pp2_students_before_end_pending)
+    )
+    _zonder_lange = pp2_students_before_end_pending[:_idx_eerste_met_lange]
+    _met_lange = pp2_students_before_end_pending[_idx_eerste_met_lange:]
+    random.shuffle(_zonder_lange)
+    pp2_students_before_end_pending = _zonder_lange + _met_lange
     
     pp2_regular_short_breaks_placed = []
     
