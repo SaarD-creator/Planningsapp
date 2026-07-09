@@ -2726,6 +2726,110 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return None
 
 
+
+    def pp2_attracties_in_venster_gesplitst(naam, cols, ws_sheet, speling_minuten=30):
+        """
+        Zoals pp2_attracties_in_venster, maar gesplitst in:
+        - huidige: attracties tijdens de pauze zelf
+        - volgende: attracties enkel bereikbaar dankzij de speling erna
+        """
+        start_min = pp2_parse_kwartier_header(ws_sheet.cell(1, cols[0]).value)
+        eind_pauze_min = pp2_parse_kwartier_header(ws_sheet.cell(1, cols[-1]).value) + 15
+        if start_min is None or eind_pauze_min is None:
+            return set(), set()
+        eind_venster_min = eind_pauze_min + speling_minuten
+
+        huidige, volgende = set(), set()
+        for uur in sorted(open_uren):
+            blok_start = uur * 60
+            blok_eind = blok_start + blok_durations.get(uur, 1.0) * 60
+            if blok_eind <= start_min or blok_start >= eind_venster_min:
+                continue
+            attr = vind_attractie_op_uur(naam, uur)
+            if not attr or str(attr).startswith("Extra") or attr == "Pauzevlinder-vervanging":
+                continue
+            attr = pp2_basis_attractie_naam(attr)
+            if blok_start < eind_pauze_min:
+                huidige.add(attr)
+            else:
+                volgende.add(attr)
+        return huidige, volgende
+
+
+    def pp2_bouw_conflict_reden(naam, cols, ws_sheet, pv_rows):
+        """
+        Begrijpbare uitleg waarom deze pauze niet bij een gekwalificeerde
+        PV geplaatst kon worden.
+        """
+        huidige, volgende = pp2_attracties_in_venster_gesplitst(naam, cols, ws_sheet)
+
+        per_pv = []
+        for pv, pv_row in pv_rows:
+            mist_huidig = sorted(a for a in huidige if not student_kan_attr_in_analyse(pv, a))
+            mist_volgend = sorted(a for a in volgende if not student_kan_attr_in_analyse(pv, a))
+            per_pv.append((pv["naam"], mist_huidig, mist_volgend))
+
+        # Iedereen faalt op exact dezelfde huidige attractie(s), niets bij 'volgend'?
+        alle_huidig = [tuple(h) for _n, h, v in per_pv if h and not v]
+        if len(alle_huidig) == len(per_pv) and len(set(alle_huidig)) == 1 and alle_huidig[0]:
+            attrs_str = " en ".join(alle_huidig[0])
+            return f"omdat geen enkele pauzevlinder de attractie '{attrs_str}' kan overnemen"
+
+        stukken = []
+        for pv_naam, mist_huidig, mist_volgend in per_pv:
+            if not mist_huidig and not mist_volgend:
+                continue
+            delen = []
+            if mist_huidig:
+                delen.append(f"de attractie ('{', '.join(mist_huidig)}') niet kan")
+            if mist_volgend:
+                delen.append(f"de attractie die erop volgt ('{', '.join(mist_volgend)}') niet kan")
+            stukken.append(f"{pv_naam} de " + " en ".join(delen))
+
+        if not stukken:
+            return "omdat er op dat moment nergens een vrije plek meer was bij een pauzevlinder"
+
+        return "omdat " + "; ".join(stukken)
+
+
+    def pp2_verzamel_rode_pauze_redenen(ws_sheet, pv_rows, pauze_cols):
+        """
+        Doorzoekt de volledige Pauzeplanning-sheet op conflict-gekleurde
+        (rode) pauzes en bouwt per stuk een leesbare uitleg.
+        """
+        redenen = []
+        conflict_rgb = conflict_fill.start_color.rgb
+
+        for pv, pv_row in pv_rows:
+            cols_lijst = list(pauze_cols)
+            i = 0
+            while i < len(cols_lijst):
+                col = cols_lijst[i]
+                cel = ws_sheet.cell(pv_row, col)
+                rgb = cel.fill.start_color.rgb if cel.fill and cel.fill.start_color else None
+
+                if rgb == conflict_rgb and cel.value:
+                    naam = cel.value
+                    gebruikte_cols = [col]
+                    if i + 1 < len(cols_lijst):
+                        volgende_col = cols_lijst[i + 1]
+                        volgende_cel = ws_sheet.cell(pv_row, volgende_col)
+                        volgende_rgb = (
+                            volgende_cel.fill.start_color.rgb
+                            if volgende_cel.fill and volgende_cel.fill.start_color else None
+                        )
+                        if volgende_cel.value == naam and volgende_rgb == conflict_rgb:
+                            gebruikte_cols.append(volgende_col)
+                            i += 1
+
+                    reden = pp2_bouw_conflict_reden(naam, gebruikte_cols, ws_sheet, pv_rows)
+                    redenen.append(f"{naam} staat in het rood {reden}.")
+
+                i += 1
+
+        return redenen
+        
+
     def pp2_verzamel_opties_alle_pvs_kort(naam, ws_sheet, pv_rows, pauze_cols, open_spots_set):
         """
         Verzamelt per PV zijn eigen eerstvolgende korte plek, gesorteerd op
@@ -3259,7 +3363,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     pp2_geplaatste_pauzes = []
     pp2_niet_geplaatst = []
-    pp2_debug_log = []  # TIJDELIJK, voor diagnose Beyza/HavagiA
         
     # -----------------------------
     # STAP 1a: minderjarige vroege stoppers
@@ -4172,20 +4275,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
             if not opties:
                 continue  # deze kandidaat heeft nergens (nog) een vrije plek
 
-            # 2) sorteer: vroegste tijd eerst, bij gelijke tijd moeilijkste PV eerst
-            if naam in ("BeyzaA", "HavagiA"):
-                regel = [f"--- {naam} ---"]
-                for o in opties:
-                    start_min, schaarste, pv, pv_row, col1, col2 = o
-                    venster = pp2_tijdvenster_pauze([col1, col2], ws_pp2)
-                    attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
-                    kan = pp2_pv_kan_overname(pv, attrs)
-                    regel.append(
-                        f"  PV-rij {pv_row}: start={start_min}min, schaarste={schaarste}, "
-                        f"attracties_in_venster={attrs}, gekwalificeerd={kan}"
-                    )
-                pp2_debug_log.extend(regel)
-                
             opties.sort(key=lambda o: (o[0], o[1]))
 
             # 3) eerste gekwalificeerde optie plaatsen
@@ -5991,13 +6080,27 @@ def maak_pp2_sheets(wb_arg, am_arg):
     ws_feedback2.cell(row_fb2, 1, "Feedback pauzeplanning").font = Font(bold=True)
     row_fb2 += 2
 
-    if pp2_debug_log:
-        ws_feedback2.cell(row_fb2, 1, "TIJDELIJKE DEBUG-INFO (Beyza/HavagiA)").font = Font(bold=True)
+    pp2_rode_pauze_redenen = pp2_verzamel_rode_pauze_redenen(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
+
+    if pp2_rode_pauze_redenen:
+        ws_feedback2.cell(row_fb2, 1, "Rode pauzes: waarom?").font = Font(bold=True)
         row_fb2 += 1
-        for regel in pp2_debug_log:
+
+        for regel in pp2_rode_pauze_redenen:
             ws_feedback2.cell(row_fb2, 1, regel)
             row_fb2 += 1
+
         row_fb2 += 1
+        cel = ws_feedback2.cell(
+            row_fb2, 1,
+            "Tip: sommige van deze rode pauzes ontstaan door willekeurige volgorde-keuzes "
+            "in het planningsproces. Genereer gerust nog eens een nieuwe planning (druk "
+            "opnieuw op de 'Download planning' knop) -- het is goed mogelijk dat er dan "
+            "geen enkele rode pauze meer verschijnt."
+        )
+        cel.font = Font(italic=True)
+        row_fb2 += 1
+
     row_fb2 += 2
     
     # -----------------------------------
