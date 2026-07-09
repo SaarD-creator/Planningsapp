@@ -6121,13 +6121,14 @@ def maak_pp2_sheets(wb_arg, am_arg):
         tip_cel = ws_feedback2.cell(
             row_fb2, 1,
             "Tip: sommige van deze rode pauzes ontstaan door willekeurige volgorde-keuzes "
-            "in het planningsproces. Genereer gerust nog eens een nieuwe planning (druk "
-            "opnieuw op de knop) — het is goed mogelijk dat er dan geen enkele rode pauze "
-            "meer verschijnt."
+            "in het planningsproces. Genereer gerust nog eens een nieuwe planning door "
+            "opnieuw op de knop 'Download planning' te drukken — het is goed mogelijk dat "
+            "er dan geen enkele rode pauze meer verschijnt."
         )
         tip_cel.font = Font(italic=True)
-        tip_cel.alignment = Alignment(wrap_text=True)
-        ws_feedback2.row_dimensions[row_fb2].height = 30
+        tip_cel.alignment = Alignment(wrap_text=True, vertical="top")
+        _tip_lijnen = max(2, (len(tip_cel.value) // 90) + 1)
+        ws_feedback2.row_dimensions[row_fb2].height = _tip_lijnen * 15
         row_fb2 += 2
 
     row_fb2 += 2
