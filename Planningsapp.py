@@ -5369,6 +5369,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         ) > 0
     ]
 
+    random.shuffle(pp2_korte_werkers_kandidaten)
     pp2_wachtrij_kort = list(pp2_korte_werkers_kandidaten)
 
     while pp2_wachtrij_kort:
