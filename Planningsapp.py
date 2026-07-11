@@ -5427,6 +5427,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
     pp2_students_before_end_pending = [
         naam for naam in pp2_students_before_end_all
         if naam not in pp2_minor_early_stoppers
+        and naam not in pp2_lange_pauze_ontvangers
+        and naam not in pauzevlinder_namen_set_kort
         and pp2_resterende_korte_kwartieren(
             naam=naam,
             ws_sheet=ws_pp2,
