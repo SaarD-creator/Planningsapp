@@ -3691,7 +3691,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
               krijgt ook eerder pauze (geen willekeur meer)
             * anders: random volgorde (maakt niet uit wie eerst is)
         """
-        dag_eind_uur = pp2_get_day_end_hour()
+        dag_eind_uur = max(open_uren) if open_uren else None
 
         per_einduur = defaultdict(list)
         for naam in namenlijst:
