@@ -5949,6 +5949,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
     #    anders wachtrij, anders rood)
     # -----------------------------------
     pp2_wachtrij_stap5 = list(pp2_other_pending_short_breaks)
+    if not pp2_debug_log_tijdelijk:
+        pp2_debug_log_tijdelijk = []
 
     while pp2_wachtrij_stap5:
         vooruitgang = False
@@ -5983,6 +5985,18 @@ def maak_pp2_sheets(wb_arg, am_arg):
 
             if not geplaatst:
                 opties = pp2_verzamel_opties_alle_pvs_kort(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots)
+                if naam in ("TawhidH", "LouisL", "EdithR", "ArtyomY", "AbdulWajidS"):
+                    regel = [f"--- STAP5 {naam} ---"]
+                    for o in opties:
+                        _start_min, _schaarste, _pv, _pv_row, _col = o
+                        _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
+                        _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
+                        _kan = pp2_pv_kan_overname(_pv, _attrs)
+                        regel.append(
+                            f"  PV-rij {_pv_row}: start={_start_min}min, "
+                            f"attracties_in_venster={_attrs}, gekwalificeerd={_kan}"
+                        )
+                    pp2_debug_log_tijdelijk.append("\n".join(regel))
                 for start_min, _schaarste, pv, pv_row, col in opties:
                     venster = pp2_tijdvenster_pauze([col], ws_pp2)
                     attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
