@@ -5759,7 +5759,22 @@ def maak_pp2_sheets(wb_arg, am_arg):
             else:
                 other_pending_short_breaks.append(naam)
     
-        random.shuffle(other_pending_short_breaks)
+        # Wie al een lange pauze heeft, blijft gesorteerd op het eindpunt
+        # van die lange pauze (zelfde principe als STAP4-1) -- enkel wie
+        # geen lange pauze heeft, wordt willekeurig geschud.
+        def _eindcol_voor_sortering_stap5(naam):
+            for _pv, pv_row in pv_rows_pp2:
+                col = pp2_lange_pauze_eindkolom_op_rij(naam, ws_pp2, pv_row, pauze_cols_pp2)
+                if col is not None:
+                    return col
+            return -1
+
+        _met_lange_p5 = [n for n in other_pending_short_breaks if n in pp2_lange_pauze_ontvangers]
+        _zonder_lange_p5 = [n for n in other_pending_short_breaks if n not in pp2_lange_pauze_ontvangers]
+        _met_lange_p5.sort(key=_eindcol_voor_sortering_stap5)
+        random.shuffle(_zonder_lange_p5)
+        other_pending_short_breaks = _zonder_lange_p5 + _met_lange_p5
+
         random.shuffle(endworkers_without_long_break)
     
         return other_pending_short_breaks, endworkers_without_long_break
