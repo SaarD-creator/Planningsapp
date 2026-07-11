@@ -5351,6 +5351,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # ---------------------------------------
     pp2_step4_late_long_break_rescue = []
     pp2_regular_short_breaks_placed = []
+    pp2_debug_log_tijdelijk = []  # TIJDELIJK, voor diagnose korte-only werkers
     
     # ---------------------------------------
     # 0A) Eerst: minderjarige vroege stoppers
@@ -5556,6 +5557,19 @@ def maak_pp2_sheets(wb_arg, am_arg):
             opties = pp2_verzamel_opties_alle_pvs_kort(
                 naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots
             )
+            if naam in ("TawhidH", "LouisL", "EdithR", "ArtyomY", "AbdulWajidS"):
+                regel = [f"--- {naam} ---"]
+                for o in opties:
+                    _start_min, _schaarste, _pv, _pv_row, _col = o
+                    _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
+                    _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
+                    _kan = pp2_pv_kan_overname(_pv, _attrs)
+                    regel.append(
+                        f"  PV-rij {_pv_row}: start={_start_min}min, "
+                        f"attracties_in_venster={_attrs}, gekwalificeerd={_kan}"
+                    )
+                pp2_debug_log_tijdelijk.append("\n".join(regel))
+            for start_min, _schaarste, pv, pv_row, col in opties:
             for start_min, _schaarste, pv, pv_row, col in opties:
                 venster = pp2_tijdvenster_pauze([col], ws_pp2)
                 attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
@@ -6119,6 +6133,15 @@ def maak_pp2_sheets(wb_arg, am_arg):
     ws_feedback2.cell(row_fb2, 1, "Feedback pauzeplanning").font = Font(bold=True)
     row_fb2 += 2
 
+
+    if pp2_debug_log_tijdelijk:
+        ws_feedback2.cell(row_fb2, 1, "TIJDELIJKE DEBUG-INFO (korte-only werkers)").font = Font(bold=True)
+        row_fb2 += 1
+        for regel in pp2_debug_log_tijdelijk:
+            for lijn in regel.split("\n"):
+                ws_feedback2.cell(row_fb2, 1, lijn)
+                row_fb2 += 1
+        row_fb2 += 2
     pp2_rode_pauze_redenen = pp2_verzamel_rode_pauze_redenen(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
 
     if pp2_rode_pauze_redenen:
