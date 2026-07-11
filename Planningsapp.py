@@ -3686,22 +3686,28 @@ def maak_pp2_sheets(wb_arg, am_arg):
         """
         Sorteer voor stap 2:
         - eerst wie vroeger stopt
-        - bij gelijke eindtijd: random volgorde
+        - bij gelijke eindtijd:
+            * wie tot het einduur van de dag werkt: wie eerder START,
+              krijgt ook eerder pauze (geen willekeur meer)
+            * anders: random volgorde (maakt niet uit wie eerst is)
         """
+        dag_eind_uur = pp2_get_day_end_hour()
+
         per_einduur = defaultdict(list)
-    
         for naam in namenlijst:
             werk_uren = pp2_get_student_work_hours(naam)
             if werk_uren:
                 einduur = max(werk_uren)
                 per_einduur[einduur].append(naam)
-    
+
         resultaat = []
         for einduur in sorted(per_einduur.keys()):
             groep = per_einduur[einduur][:]
-            random.shuffle(groep)
+            if dag_eind_uur is not None and einduur == dag_eind_uur:
+                groep.sort(key=lambda n: min(pp2_get_student_work_hours(n)))
+            else:
+                random.shuffle(groep)
             resultaat.extend(groep)
-    
         return resultaat
     
     def pp2_get_pv_row_for_name(naam, pv_rows):
