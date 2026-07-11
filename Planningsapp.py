@@ -5783,21 +5783,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return [naam for naam, _col in sorted(found.items(), key=lambda x: x[1])]
     
     
-    def pp2_student_has_long_break_in_row(naam, ws_sheet, pv_row, pauze_cols):
-        """
-        True als deze student op deze specifieke rij ergens een lange pauze heeft.
-        """
-        for idx in range(len(pauze_cols) - 1):
-            col1 = pauze_cols[idx]
-            col2 = pauze_cols[idx + 1]
-    
-            if (
-                ws_sheet.cell(pv_row, col1).value == naam and
-                ws_sheet.cell(pv_row, col2).value == naam
-            ):
-                return True
-    
-        return False
     
     
     def pp2_student_works_until_day_end(naam):
@@ -6381,7 +6366,47 @@ def maak_pp2_sheets(wb_arg, am_arg):
 
 
 # ── Oorspronkelijke aanroep ──
-maak_pp2_sheets(wb_out, assigned_map)
+def pp2_tel_rode_cellen_extern(wb, conflict_rgb="00FFC7CE"):
+    """Telt het aantal rood-gemarkeerde (conflict) cellen in Pauzeplanning."""
+    ws = wb["Pauzeplanning"]
+    aantal = 0
+    for row in ws.iter_rows():
+        for cel in row:
+            if cel.fill and cel.fill.start_color and cel.fill.start_color.rgb == conflict_rgb and cel.value:
+                aantal += 1
+    return aantal
+
+
+PP2_MAX_POGINGEN = 5
+_pp2_beste_aantal_rood = None
+
+for _pp2_poging in range(PP2_MAX_POGINGEN):
+    maak_pp2_sheets(wb_out, assigned_map)
+    _pp2_aantal_rood = pp2_tel_rode_cellen_extern(wb_out)
+
+    if _pp2_beste_aantal_rood is None or _pp2_aantal_rood < _pp2_beste_aantal_rood:
+        _pp2_beste_aantal_rood = _pp2_aantal_rood
+
+        for _naam in ["Pauzeplanning_beste", "Feedback PP_beste"]:
+            if _naam in wb_out.sheetnames:
+                wb_out.remove(wb_out[_naam])
+
+        _pp2_kopie_pp = wb_out.copy_worksheet(wb_out["Pauzeplanning"])
+        _pp2_kopie_pp.title = "Pauzeplanning_beste"
+        _pp2_kopie_fb = wb_out.copy_worksheet(wb_out["Feedback PP"])
+        _pp2_kopie_fb.title = "Feedback PP_beste"
+
+    if _pp2_beste_aantal_rood == 0:
+        break
+
+# De beste poging terugzetten onder de juiste, definitieve naam
+wb_out.remove(wb_out["Pauzeplanning"])
+wb_out.remove(wb_out["Feedback PP"])
+
+_pp2_beste_pp = wb_out["Pauzeplanning_beste"]
+_pp2_beste_pp.title = "Pauzeplanning"
+_pp2_beste_fb = wb_out["Feedback PP_beste"]
+_pp2_beste_fb.title = "Feedback PP"
 
 
 # PART 6 6666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666
