@@ -1,3 +1,4 @@
+# pauzevlindercheck is toegevoegd maar moet nog grondig getest worden + feedback betere lay-out
 # oplossing voor Antwerpen met introductie vinkje
 # gaten gevuld in post processing lange blokken
 # oude pauzeplanning weg!
@@ -5424,11 +5425,12 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # ---------------------------------------
     pp2_students_before_end_all = pp2_get_students_stopping_before_end()
     
+    pp2_pauzevlinder_namen_alle = {pv["naam"] for pv, _ in pv_rows_pp2}
+
     pp2_students_before_end_pending = [
         naam for naam in pp2_students_before_end_all
         if naam not in pp2_minor_early_stoppers
-        and naam not in pp2_lange_pauze_ontvangers
-        and naam not in pauzevlinder_namen_set_kort
+        and naam not in pp2_pauzevlinder_namen_alle
         and pp2_resterende_korte_kwartieren(
             naam=naam,
             ws_sheet=ws_pp2,
