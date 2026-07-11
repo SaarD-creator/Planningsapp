@@ -59,11 +59,12 @@ ws = wb["Input"]
 
 ws_speciaal = wb["Input_"]
 ws_aanpassingen = wb["Aanpassingen"]
+ws_instellingen = wb["Instellingen"]
 
-# --- VINKJE Y17: forceer perfect exhaustieve verdeling ---
-_vinkje_y17 = ws_aanpassingen.cell(row=17, column=25).value   # Y17 (kolom Y = 25)
+# --- VINKJE B2 (Instellingen): forceer perfect exhaustieve verdeling ---
+_vinkje_y17 = ws_instellingen.cell(row=2, column=2).value   # B2
 FORCEER_EXHAUSTIEF = _vinkje_y17 in [1, True, "WAAR", "X"]
-# ---------------------------------------------------------
+# ------------------------------------------------------------------------
 
 # -----------------------------
 # Datum op basis van W4 in Input_
