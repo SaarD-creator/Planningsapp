@@ -5351,7 +5351,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # ---------------------------------------
     pp2_step4_late_long_break_rescue = []
     pp2_regular_short_breaks_placed = []
-    pp2_debug_log_tijdelijk = []  # TIJDELIJK, voor diagnose korte-only werkers
     
     # ---------------------------------------
     # 0A) Eerst: minderjarige vroege stoppers
@@ -5445,7 +5444,110 @@ def maak_pp2_sheets(wb_arg, am_arg):
         pp2_place_short_break_cols_on_row(
             naam=naam, pv=pv, pv_row=pv_row, cols=[col], conflict=conflict
         )
-    
+
+
+    # ---------------------------------------
+    # KORTE-ONLY WERKERS (geen lange pauze, geen pauzevlinder zelf) --
+    # ONGEACHT of ze voor of tot het einduur werken, BEHALVE wie de
+    # laatste paar uur van de dag werkt en tot sluiting blijft -- die
+    # blijft bewust laat (valt terug in de bestaande, late STAP5-3-staart).
+    # ---------------------------------------
+    _pauzevlinder_namen_vroeg = {pv["naam"] for pv, _ in pv_rows_pp2}
+
+    _pv_eind_min_check = pp2_parse_kwartier_header(ws_pp2.cell(1, pauze_cols_pp2[-1]).value) + 15
+    _dag_eind_uur_check = pp2_get_day_end_hour()
+    _dag_eind_min_check = (_dag_eind_uur_check * 60) if _dag_eind_uur_check is not None else _pv_eind_min_check
+    _gap_min_check = _dag_eind_min_check - _pv_eind_min_check
+    _drempel_uren_laat = 4 if _gap_min_check <= 60 else 5
+
+    def _werkt_tot_einduur_check(naam):
+        werk_uren = pp2_get_student_work_hours(naam)
+        if not werk_uren or not open_uren:
+            return False
+        return max(werk_uren) == max(open_uren)
+
+    pp2_korte_only_kandidaten = [
+        naam for naam in [s["naam"] for s in studenten]
+        if naam not in pp2_minor_early_stoppers
+        and naam not in pp2_lange_pauze_ontvangers
+        and naam not in _pauzevlinder_namen_vroeg
+        and not (
+            pp2_is_minderjarig(naam)
+            and len(pp2_get_student_work_hours(naam)) >= 4
+            and pp2_get_student_work_hours(naam)
+            and max(pp2_get_student_work_hours(naam)) <= 15
+        )
+        and not (
+            _werkt_tot_einduur_check(naam)
+            and len(pp2_get_student_work_hours(naam)) <= _drempel_uren_laat
+        )
+        and pp2_resterende_korte_kwartieren(
+            naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
+            pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
+        ) > 0
+    ]
+
+    random.shuffle(pp2_korte_only_kandidaten)
+    pp2_wachtrij_korte_only = list(pp2_korte_only_kandidaten)
+
+    while pp2_wachtrij_korte_only:
+        vooruitgang = False
+        nog_niet_geplaatst = []
+        for naam in pp2_wachtrij_korte_only:
+            if pp2_resterende_korte_kwartieren(
+                naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
+                pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
+            ) <= 0:
+                continue
+            opties = pp2_verzamel_opties_alle_pvs_kort(
+                naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots
+            )
+            if not opties:
+                nog_niet_geplaatst.append(naam)
+                continue
+            geplaatst = False
+            for start_min, _schaarste, pv, pv_row, col in opties:
+                venster = pp2_tijdvenster_pauze([col], ws_pp2)
+                attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+                if pp2_pv_kan_overname(pv, attrs):
+                    pp2_place_short_break_cols_on_row(naam=naam, pv=pv, pv_row=pv_row, cols=[col])
+                    geplaatst = True
+                    vooruitgang = True
+                    break
+            if not geplaatst:
+                nog_niet_geplaatst.append(naam)
+        pp2_wachtrij_korte_only = nog_niet_geplaatst
+        if not vooruitgang:
+            break
+
+    for naam in pp2_wachtrij_korte_only:
+        if pp2_resterende_korte_kwartieren(
+            naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
+            pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
+        ) <= 0:
+            continue
+        opties = pp2_verzamel_opties_alle_pvs_kort(
+            naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots
+        )
+        if not opties:
+            pp2_niet_geplaatst.append({
+                "naam": naam,
+                "reden": "korte-only werkers: geen enkele vrije plek gevonden bij een PV"
+            })
+            continue
+        geplaatst = False
+        for start_min, _schaarste, pv, pv_row, col in opties:
+            venster = pp2_tijdvenster_pauze([col], ws_pp2)
+            attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
+            if pp2_pv_kan_overname(pv, attrs):
+                pp2_place_short_break_cols_on_row(naam=naam, pv=pv, pv_row=pv_row, cols=[col])
+                geplaatst = True
+                break
+        if geplaatst:
+            continue
+        _start_min, _schaarste, pv, pv_row, col = opties[0]
+        pp2_place_short_break_cols_on_row(naam=naam, pv=pv, pv_row=pv_row, cols=[col], conflict=True)
+        
     # ---------------------------------------
     # 1) Daarna pas: gewone korte werkers
     #    die vroeger stoppen dan het einde
@@ -5557,18 +5659,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
             opties = pp2_verzamel_opties_alle_pvs_kort(
                 naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots
             )
-            if naam in ("TawhidH", "LouisL", "EdithR", "ArtyomY", "AbdulWajidS"):
-                regel = [f"--- {naam} ---"]
-                for o in opties:
-                    _start_min, _schaarste, _pv, _pv_row, _col = o
-                    _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
-                    _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
-                    _kan = pp2_pv_kan_overname(_pv, _attrs)
-                    regel.append(
-                        f"  PV-rij {_pv_row}: start={_start_min}min, "
-                        f"attracties_in_venster={_attrs}, gekwalificeerd={_kan}"
-                    )
-                pp2_debug_log_tijdelijk.append("\n".join(regel))
             for start_min, _schaarste, pv, pv_row, col in opties:
                 venster = pp2_tijdvenster_pauze([col], ws_pp2)
                 attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
@@ -5949,8 +6039,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     #    anders wachtrij, anders rood)
     # -----------------------------------
     pp2_wachtrij_stap5 = list(pp2_other_pending_short_breaks)
-    if not pp2_debug_log_tijdelijk:
-        pp2_debug_log_tijdelijk = []
 
     while pp2_wachtrij_stap5:
         vooruitgang = False
@@ -5985,18 +6073,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
 
             if not geplaatst:
                 opties = pp2_verzamel_opties_alle_pvs_kort(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots)
-                if naam in ("TawhidH", "LouisL", "EdithR", "ArtyomY", "AbdulWajidS"):
-                    regel = [f"--- STAP5 {naam} ---"]
-                    for o in opties:
-                        _start_min, _schaarste, _pv, _pv_row, _col = o
-                        _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
-                        _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
-                        _kan = pp2_pv_kan_overname(_pv, _attrs)
-                        regel.append(
-                            f"  PV-rij {_pv_row}: start={_start_min}min, "
-                            f"attracties_in_venster={_attrs}, gekwalificeerd={_kan}"
-                        )
-                    pp2_debug_log_tijdelijk.append("\n".join(regel))
                 for start_min, _schaarste, pv, pv_row, col in opties:
                     venster = pp2_tijdvenster_pauze([col], ws_pp2)
                     attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
@@ -6146,15 +6222,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     ws_feedback2.cell(row_fb2, 1, "Feedback pauzeplanning").font = Font(bold=True)
     row_fb2 += 2
 
-
-    if pp2_debug_log_tijdelijk:
-        ws_feedback2.cell(row_fb2, 1, "TIJDELIJKE DEBUG-INFO (korte-only werkers)").font = Font(bold=True)
-        row_fb2 += 1
-        for regel in pp2_debug_log_tijdelijk:
-            for lijn in regel.split("\n"):
-                ws_feedback2.cell(row_fb2, 1, lijn)
-                row_fb2 += 1
-        row_fb2 += 2
     pp2_rode_pauze_redenen = pp2_verzamel_rode_pauze_redenen(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
 
     if pp2_rode_pauze_redenen:
