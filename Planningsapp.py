@@ -3704,6 +3704,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         for einduur in sorted(per_einduur.keys()):
             groep = per_einduur[einduur][:]
             if dag_eind_uur is not None and einduur == dag_eind_uur:
+                random.shuffle(groep)
                 groep.sort(key=lambda n: min(pp2_get_student_work_hours(n)))
             else:
                 random.shuffle(groep)
