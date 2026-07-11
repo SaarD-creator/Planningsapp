@@ -3712,7 +3712,18 @@ def maak_pp2_sheets(wb_arg, am_arg):
             if pv["naam"] == naam:
                 return pv_row
         return None
-    
+
+
+    def pp2_vind_rij_met_lange_pauze(naam, ws_sheet, pv_rows, pauze_cols):
+        """
+        Zoekt op welke PV-rij deze student (niet per se zelf een pauzevlinder)
+        al een lange pauze heeft staan. Geeft de rij terug, of None.
+        """
+        for _pv, pv_row in pv_rows:
+            if pp2_student_has_long_break_in_row(naam, ws_sheet, pv_row, pauze_cols):
+                return pv_row
+        return None
+        
     
     def pp2_find_first_valid_long_block_any_row(naam, ws_sheet, pv_rows, pauze_cols):
         """
@@ -5490,7 +5501,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             pp2_students_before_end_pending.remove(naam)
             continue
 
-        eigen_rij = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
+        eigen_rij = pp2_vind_rij_met_lange_pauze(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2)
         is_minor_long_worker = (
             pp2_is_minderjarig(naam) and werkduur_voor_pauze(naam) > 6
         )
@@ -5915,7 +5926,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             if resterend <= 0:
                 continue
 
-            eigen_rij = pp2_get_pv_row_for_name(naam, pv_rows_pp2)
+            eigen_rij = pp2_vind_rij_met_lange_pauze(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2)
             geplaatst = False
 
             if eigen_rij is not None and pp2_student_has_long_break_in_row(naam, ws_pp2, eigen_rij, pauze_cols_pp2):
