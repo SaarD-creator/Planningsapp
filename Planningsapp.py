@@ -3723,6 +3723,23 @@ def maak_pp2_sheets(wb_arg, am_arg):
             if pp2_student_has_long_break_in_row(naam, ws_sheet, pv_row, pauze_cols):
                 return pv_row
         return None
+
+
+    def pp2_lange_pauze_eindkolom_op_rij(naam, ws_sheet, pv_row, pauze_cols):
+        """
+        Eindkolom van deze student zijn lange pauze op deze rij (of None).
+        Gebruikt als ankerpunt zodat de korte pauze nooit vóór de lange
+        pauze van dezelfde persoon kan vallen.
+        """
+        for idx in range(len(pauze_cols) - 1):
+            col1 = pauze_cols[idx]
+            col2 = pauze_cols[idx + 1]
+            if (
+                ws_sheet.cell(pv_row, col1).value == naam
+                and ws_sheet.cell(pv_row, col2).value == naam
+            ):
+                return col2
+        return None
         
     
     def pp2_find_first_valid_long_block_any_row(naam, ws_sheet, pv_rows, pauze_cols):
@@ -5516,16 +5533,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         if eigen_rij is not None and pp2_student_has_long_break_in_row(naam, ws_pp2, eigen_rij, pauze_cols_pp2):
             eigen_pv = next((p for p, r in pv_rows_pp2 if r == eigen_rij), None)
 
-            ankercol = None
-            if is_minor_long_worker:
-                for idx in range(len(pauze_cols_pp2) - 1):
-                    col1 = pauze_cols_pp2[idx]
-                    col2 = pauze_cols_pp2[idx + 1]
-                    if (
-                        ws_pp2.cell(eigen_rij, col1).value == naam
-                        and ws_pp2.cell(eigen_rij, col2).value == naam
-                    ):
-                        ankercol = col2
+            ankercol = pp2_lange_pauze_eindkolom_op_rij(naam, ws_pp2, eigen_rij, pauze_cols_pp2)
 
             cols = pp2_find_needed_short_cols_for_student_on_row(
                 naam=naam, pv_row=eigen_rij, ws_sheet=ws_pp2,
@@ -5931,9 +5939,11 @@ def maak_pp2_sheets(wb_arg, am_arg):
 
             if eigen_rij is not None and pp2_student_has_long_break_in_row(naam, ws_pp2, eigen_rij, pauze_cols_pp2):
                 eigen_pv = next((p for p, r in pv_rows_pp2 if r == eigen_rij), None)
+                ankercol = pp2_lange_pauze_eindkolom_op_rij(naam, ws_pp2, eigen_rij, pauze_cols_pp2)
                 cols = pp2_find_needed_short_cols_for_student_on_row(
                     naam=naam, pv_row=eigen_rij, ws_sheet=ws_pp2,
-                    pauze_cols=pauze_cols_pp2, open_spots_set=pp2_open_spots
+                    pauze_cols=pauze_cols_pp2, open_spots_set=pp2_open_spots,
+                    min_col_exclusive=ankercol
                 )
                 if cols and eigen_pv is not None:
                     venster = pp2_tijdvenster_pauze(cols, ws_pp2)
