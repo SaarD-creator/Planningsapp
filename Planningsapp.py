@@ -5570,7 +5570,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
                     )
                 pp2_debug_log_tijdelijk.append("\n".join(regel))
             for start_min, _schaarste, pv, pv_row, col in opties:
-            for start_min, _schaarste, pv, pv_row, col in opties:
                 venster = pp2_tijdvenster_pauze([col], ws_pp2)
                 attrs = pp2_attracties_in_venster(naam, *venster) if venster else set()
                 if pp2_pv_kan_overname(pv, attrs):
