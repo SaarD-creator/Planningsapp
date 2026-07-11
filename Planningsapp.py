@@ -5100,8 +5100,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
 
         if conflict:
             cel.fill = conflict_fill
-        elif pp2_is_minderjarig(naam) and werkduur_voor_pauze(naam) > 4:
-            cel.fill = roze_fill
         else:
             cel.fill = lichtpaars_fill
     
