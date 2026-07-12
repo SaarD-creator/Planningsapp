@@ -4927,28 +4927,28 @@ def maak_pp2_sheets(wb_arg, am_arg):
             pp2_debug_log_tijdelijk.append(f"  werk_uren: {_debug_werk_uren}")
             pp2_debug_log_tijdelijk.append(f"  in pp2_lange_werkers_lijst: {_debug_lange_lijst}")
             if naam == "ArtyomY":
-            _debug_werk_uren = pp2_get_student_work_hours(naam)
-            _debug_lange_lijst = naam in pp2_lange_werkers_lijst()
-            pp2_debug_log_tijdelijk.append(f"--- DEBUG ArtyomY (STAP3 hulploop) ---")
-            pp2_debug_log_tijdelijk.append(f"  eigen pv_row: {pv_row}")
-            pp2_debug_log_tijdelijk.append(f"  werk_uren: {_debug_werk_uren}")
-            pp2_debug_log_tijdelijk.append(f"  in pp2_lange_werkers_lijst: {_debug_lange_lijst}")
-
-            _debug_resterend = pp2_resterende_korte_kwartieren(
-                naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
-                pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
-            )
-            pp2_debug_log_tijdelijk.append(f"  resterend_nodig: {_debug_resterend}")
-
-            for _debug_col in pauze_cols_pp2:
-                _debug_header = ws_pp2.cell(1, _debug_col).value
-                _debug_val = ws_pp2.cell(pv_row, _debug_col).value
-                _debug_open_spot = (pv_row, _debug_col) in pp2_open_spots
-                _debug_geldig = pp2_is_valid_short_break_for_student(naam, _debug_col, ws_pp2)
-                pp2_debug_log_tijdelijk.append(
-                    f"  kolom {_debug_header}: cel-waarde={_debug_val!r}, "
-                    f"open_spot={_debug_open_spot}, geldig={_debug_geldig}"
+                _debug_werk_uren = pp2_get_student_work_hours(naam)
+                _debug_lange_lijst = naam in pp2_lange_werkers_lijst()
+                pp2_debug_log_tijdelijk.append(f"--- DEBUG ArtyomY (STAP3 hulploop) ---")
+                pp2_debug_log_tijdelijk.append(f"  eigen pv_row: {pv_row}")
+                pp2_debug_log_tijdelijk.append(f"  werk_uren: {_debug_werk_uren}")
+                pp2_debug_log_tijdelijk.append(f"  in pp2_lange_werkers_lijst: {_debug_lange_lijst}")
+    
+                _debug_resterend = pp2_resterende_korte_kwartieren(
+                    naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
+                    pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
                 )
+                pp2_debug_log_tijdelijk.append(f"  resterend_nodig: {_debug_resterend}")
+    
+                for _debug_col in pauze_cols_pp2:
+                    _debug_header = ws_pp2.cell(1, _debug_col).value
+                    _debug_val = ws_pp2.cell(pv_row, _debug_col).value
+                    _debug_open_spot = (pv_row, _debug_col) in pp2_open_spots
+                    _debug_geldig = pp2_is_valid_short_break_for_student(naam, _debug_col, ws_pp2)
+                    pp2_debug_log_tijdelijk.append(
+                        f"  kolom {_debug_header}: cel-waarde={_debug_val!r}, "
+                        f"open_spot={_debug_open_spot}, geldig={_debug_geldig}"
+                    )
     
         # Lange pauzevlinders hier nog overslaan:
         # hun korte pauze moet pas later komen
