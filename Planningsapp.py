@@ -4906,6 +4906,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     pp2_open_spots = set()
     pp2_pv_short_breaks_placed = []
+    pp2_debug_log_tijdelijk = []  # TIJDELIJK, voor diagnose ArtyomY
     
     # -----------------------------
     # Hulploop: korte pauzes van pauzevlinders zelf invullen
@@ -4917,6 +4918,14 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # -----------------------------
     for pv, pv_row in pv_rows_pp2:
         naam = pv["naam"]
+
+        if naam == "ArtyomY":
+            _debug_werk_uren = pp2_get_student_work_hours(naam)
+            _debug_lange_lijst = naam in pp2_lange_werkers_lijst()
+            pp2_debug_log_tijdelijk.append(f"--- DEBUG ArtyomY (STAP3 hulploop) ---")
+            pp2_debug_log_tijdelijk.append(f"  eigen pv_row: {pv_row}")
+            pp2_debug_log_tijdelijk.append(f"  werk_uren: {_debug_werk_uren}")
+            pp2_debug_log_tijdelijk.append(f"  in pp2_lange_werkers_lijst: {_debug_lange_lijst}")
     
         # Lange pauzevlinders hier nog overslaan:
         # hun korte pauze moet pas later komen
@@ -6361,6 +6370,13 @@ def maak_pp2_sheets(wb_arg, am_arg):
     ws_feedback2.cell(row_fb2, 1, "Feedback pauzeplanning").font = Font(bold=True)
     row_fb2 += 2
 
+    if pp2_debug_log_tijdelijk:
+        ws_feedback2.cell(row_fb2, 1, "TIJDELIJKE DEBUG-INFO (ArtyomY)").font = Font(bold=True)
+        row_fb2 += 1
+        for regel in pp2_debug_log_tijdelijk:
+            ws_feedback2.cell(row_fb2, 1, regel)
+            row_fb2 += 1
+        row_fb2 += 2
     
     # -----------------------------------
     # 1) Lange pauzes controleren
