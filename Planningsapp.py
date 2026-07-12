@@ -4334,6 +4334,39 @@ def maak_pp2_sheets(wb_arg, am_arg):
             lange_werkers_random=pp2_lange_werkers_random
         )
 
+    # Fallback: pauzevlinders wiens eigen rij (deels) afgeknipt is, en die
+    # dus geen lange pauze op hun eigen rij konden krijgen, alsnog een
+    # lange pauze geven bij een ANDERE pauzevlinder -- net als een gewone
+    # lange werker. Ze houden nog steeds recht op hun pauze.
+    for pv, pv_name_row in pv_rows_pp2:
+        naam = pv["naam"]
+        if naam not in pp2_lange_werkers_random:
+            continue
+        if naam in pp2_lange_pauze_ontvangers:
+            continue
+
+        gevonden = pp2_find_first_valid_long_block_any_row(
+            naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2, pauze_cols=pauze_cols_pp2
+        )
+        if gevonden is None:
+            pp2_niet_geplaatst.append({
+                "naam": naam,
+                "reden": "pauzevlinder (eigen rij afgeknipt): geen lange pauze gevonden bij een andere PV"
+            })
+            continue
+
+        _fallback_pv_row, col1, col2, conflict = gevonden
+        pp2_write_long_break(
+            ws_sheet=ws_pp2,
+            pv_row=_fallback_pv_row,
+            col1=col1,
+            col2=col2,
+            naam=naam,
+            leave_top_blank=False,
+            conflict=conflict
+        )
+        pp2_lange_pauze_ontvangers.add(naam)
+
     # ---- Harde 60%-afkapregel voor de NORMALE lange pauzes ----
     # Geen enkele normale lange pauze mag nog starten op of na 60% van de
     # pauzevlinderuren. Rijen waar minderjarigen al hun eerste halfuur
@@ -5818,22 +5851,45 @@ def maak_pp2_sheets(wb_arg, am_arg):
             pauze_cols=pauze_cols_pp2,
             open_spots_set=pp2_open_spots
         )
-    
-        if not gekozen_cols:
+
+        if gekozen_cols:
+            for col in gekozen_cols:
+                pp2_write_short_break_for_pv(
+                    ws_sheet=ws_pp2,
+                    pv_row=pv_row,
+                    col=col,
+                    naam=naam
+                )
+
+            pp2_lange_pv_short_breaks_placed.append({
+                "naam": naam,
+                "tijden": [ws_pp2.cell(1, col).value for col in gekozen_cols]
+            })
             continue
-    
-        for col in gekozen_cols:
-            pp2_write_short_break_for_pv(
-                ws_sheet=ws_pp2,
-                pv_row=pv_row,
-                col=col,
-                naam=naam
-            )
-    
-        pp2_lange_pv_short_breaks_placed.append({
-            "naam": naam,
-            "tijden": [ws_pp2.cell(1, col).value for col in gekozen_cols]
-        })
+
+        # Eigen rij lukt niet (bv. (deels) afgeknipt) -> val terug op een
+        # andere pauzevlinder, net als een gewone lange werker.
+        _opties_fallback = pp2_verzamel_opties_alle_pvs_kort(
+            naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots
+        )
+        _geplaatst_fallback = False
+        for _start_min, _schaarste, _ander_pv, _ander_pv_row, _col in _opties_fallback:
+            _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
+            _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
+            if pp2_pv_kan_overname(_ander_pv, _attrs):
+                pp2_write_short_break_regular(ws_sheet=ws_pp2, pv_row=_ander_pv_row, col=_col, naam=naam)
+                pp2_lange_pv_short_breaks_placed.append({
+                    "naam": naam,
+                    "tijden": [ws_pp2.cell(1, _col).value]
+                })
+                _geplaatst_fallback = True
+                break
+
+        if not _geplaatst_fallback:
+            pp2_niet_geplaatst.append({
+                "naam": naam,
+                "reden": "pauzevlinder (eigen rij afgeknipt): geen kort kwartier gevonden bij een andere PV"
+            })
     
     
     # STAP 5 55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555
