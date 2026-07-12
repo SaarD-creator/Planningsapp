@@ -4949,6 +4949,16 @@ def maak_pp2_sheets(wb_arg, am_arg):
                         f"  kolom {_debug_header}: cel-waarde={_debug_val!r}, "
                         f"open_spot={_debug_open_spot}, geldig={_debug_geldig}"
                     )
+
+                _debug_gekozen = pp2_find_short_break_cols_for_pv(
+                    naam=naam,
+                    pv_row=pv_row,
+                    ws_sheet=ws_pp2,
+                    pauze_cols=pauze_cols_pp2,
+                    open_spots_set=pp2_open_spots,
+                    needed_quarters=_debug_resterend
+                )
+                pp2_debug_log_tijdelijk.append(f"  pp2_find_short_break_cols_for_pv gaf terug: {_debug_gekozen}")
     
         # Lange pauzevlinders hier nog overslaan:
         # hun korte pauze moet pas later komen
@@ -4975,11 +4985,17 @@ def maak_pp2_sheets(wb_arg, am_arg):
             needed_quarters=resterend_nodig
         )
     
+        if naam == "ArtyomY":
+            pp2_debug_log_tijdelijk.append(f"  ECHTE gekozen_cols in de lus: {gekozen_cols}")
+
         if not gekozen_cols:
             continue
     
         for col in gekozen_cols:
             pp2_write_short_break_for_pv(ws_pp2, pv_row, col, naam)
+
+        if naam == "ArtyomY":
+            pp2_debug_log_tijdelijk.append(f"  Na schrijven, cel-waarde op kolom {gekozen_cols}: {[ws_pp2.cell(pv_row, c).value for c in gekozen_cols]}")
     
         pp2_pv_short_breaks_placed.append({
             "naam": naam,
