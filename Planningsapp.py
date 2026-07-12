@@ -819,7 +819,17 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
     pauze_kwartieren = 2 * lange_pauzes + korte_pauzes
     open_spots = plaatsen_pauzeplanning - pauze_kwartieren
     min_open_spots_per_pv = 1 if len(open_uren) <= 6 else 3
-    beschikbaar = open_spots - aantal_pv * min_open_spots_per_pv
+    max_open_spots_zonder_korte_pauzes = 2
+
+    _afknip_kandidaat = pp2_bepaal_pv_voor_afknip(selected)
+    marge_totaal = 0
+    for _pv_marge in selected:
+        if _afknip_kandidaat is not None and _pv_marge["naam"] == _afknip_kandidaat["naam"]:
+            marge_totaal += min(max_open_spots_zonder_korte_pauzes, min_open_spots_per_pv)
+        else:
+            marge_totaal += min_open_spots_per_pv
+
+    beschikbaar = open_spots - marge_totaal
     if len(open_uren) <= 6 and beschikbaar >= 3:
         overbodige_uren = 1 + max(0, math.floor((beschikbaar - 3) / 4))
     else:
@@ -880,7 +890,17 @@ def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
 
     _open_spots = _plaatsen - (2 * _lange + _korte)
     _min_open_spots_per_pv = 1 if len(open_uren) <= 6 else 3
-    _beschikbaar = _open_spots - _aantal_pv * _min_open_spots_per_pv
+    _max_open_spots_zonder_korte_pauzes = 2
+
+    _afknip_kandidaat_herb = pp2_bepaal_pv_voor_afknip(selected)
+    _marge_totaal = 0
+    for _pv_marge in selected:
+        if _afknip_kandidaat_herb is not None and _pv_marge["naam"] == _afknip_kandidaat_herb["naam"]:
+            _marge_totaal += min(_max_open_spots_zonder_korte_pauzes, _min_open_spots_per_pv)
+        else:
+            _marge_totaal += _min_open_spots_per_pv
+
+    _beschikbaar = _open_spots - _marge_totaal
     if len(open_uren) <= 6 and _beschikbaar >= 3:
         _overbodige = 1 + max(0, math.floor((_beschikbaar - 3) / 4))
     else:
@@ -3326,6 +3346,17 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # -----------------------------
     pauze_cols_pp2 = pp2_get_pauze_cols(ws_pp2)
     pv_rows_pp2 = pp2_get_pv_rows(ws_pp2, selected)
+
+    # Welke PV is de afgeknipte (indien van toepassing)? Die krijgt max 2
+    # open spots i.p.v. het normale aandeel, want die dient toch geen
+    # korte pauzes meer na de lange pauzes.
+    pp2_afgeknipte_pv_naam = None
+    if afgekapte_pv_uren:
+        _afknip_pv_obj = pp2_bepaal_pv_voor_afknip(selected)
+        if _afknip_pv_obj is not None:
+            pp2_afgeknipte_pv_naam = _afknip_pv_obj["naam"]
+    pp2_max_open_spots_afgeknipt = 2
+    pp2_open_spots_afgeknipte_teller = 0
     
     # Maak de grid leeg, maar behoud layout
     pp2_clear_pauze_grid(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
@@ -5090,6 +5121,13 @@ def maak_pp2_sheets(wb_arg, am_arg):
             for _pv, pv_row in pv_rows_pp2:
                 if len(pp2_open_spots) >= pp2_open_spots_count:
                     break
+
+                if (
+                    pp2_afgeknipte_pv_naam is not None
+                    and _pv["naam"] == pp2_afgeknipte_pv_naam
+                    and pp2_open_spots_afgeknipte_teller >= pp2_max_open_spots_afgeknipt
+                ):
+                    continue
     
                 lege_cols = pp2_get_empty_cols_for_pv_row(
                     ws_sheet=ws_pp2,
@@ -5105,6 +5143,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
                 pp2_open_spots.add((pv_row, gekozen_col))
                 pp2_mark_open_spot(ws_pp2, pv_row, gekozen_col)
+                if pp2_afgeknipte_pv_naam is not None and _pv["naam"] == pp2_afgeknipte_pv_naam:
+                    pp2_open_spots_afgeknipte_teller += 1
                 iets_geplaatst_deze_ronde = True
     
             if not iets_geplaatst_deze_ronde:
@@ -5195,6 +5235,14 @@ def maak_pp2_sheets(wb_arg, am_arg):
             for _pv, pv_row in pv_rows_pp2:
                 if len(pp2_open_spots) >= pp2_open_spots_count:
                     break
+
+                if (
+                    pp2_afgeknipte_pv_naam is not None
+                    and _pv["naam"] == pp2_afgeknipte_pv_naam
+                    and pp2_open_spots_afgeknipte_teller >= pp2_max_open_spots_afgeknipt
+                ):
+                    continue
+
                 lege_cols = pp2_get_empty_cols_for_pv_row(
                     ws_sheet=ws_pp2,
                     pv_row=pv_row,
@@ -5207,6 +5255,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 gekozen_col = lege_cols[-1]
                 pp2_open_spots.add((pv_row, gekozen_col))
                 pp2_mark_open_spot(ws_pp2, pv_row, gekozen_col)
+                if pp2_afgeknipte_pv_naam is not None and _pv["naam"] == pp2_afgeknipte_pv_naam:
+                    pp2_open_spots_afgeknipte_teller += 1
                 iets_geplaatst_deze_ronde = True
             if not iets_geplaatst_deze_ronde:
                 break
