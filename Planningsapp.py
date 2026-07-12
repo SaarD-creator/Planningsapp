@@ -2627,14 +2627,18 @@ vinkje_aanpassingen = ws_aanpassingen.cell(row=3, column=22).value  # V3
 if vinkje_aanpassingen in [1, True, "WAAR", "X"]:
     waarde = ws_aanpassingen.cell(row=3, column=23).value  # W3 (samengevoegde cel)
     if waarde:
+        _laatste_pv_naam_rij = (len(selected) - 1) * 3 + 3
+        _start_rij_info = _laatste_pv_naam_rij + 3
+
         regels = str(waarde).split("\n")
         for i, regel in enumerate(regels):
             regel = regel.strip()
             if regel:
-                cel = ws_pauze_sheet.cell(row=14 + i, column=1, value=regel)
+                cel = ws_pauze_sheet.cell(row=_start_rij_info + i, column=1, value=regel)
                 cel.fill = witte_fill
                 cel.border = thin_border
                 cel.alignment = Alignment(horizontal="left", vertical="center")
+# -------------------------------------
 # -------------------------------------
 
 
