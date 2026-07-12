@@ -6535,13 +6535,12 @@ def maak_pp2_sheets(wb_arg, am_arg):
         _start_rij_samenvatting = _laatste_pv_naam_rij + 2
         for i, _lijn in enumerate(_samenvatting_lijnen):
             _cel = ws_pp2.cell(row=_start_rij_samenvatting + i, column=1, value=_lijn)
-            _cel.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
             _cel.font = Font(bold=True)
             _cel.border = thin_border
             _cel.alignment = Alignment(horizontal="left", vertical="center")
 
         if _samenvatting_lijnen:
-            _start_rij_aanpassingen = _start_rij_samenvatting + len(_samenvatting_lijnen) + 3
+            _start_rij_aanpassingen = _start_rij_samenvatting + len(_samenvatting_lijnen) + 1
         else:
             _start_rij_aanpassingen = _laatste_pv_naam_rij + 3
 
