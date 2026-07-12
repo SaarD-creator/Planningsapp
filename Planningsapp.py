@@ -772,6 +772,20 @@ import math
 
 aantal_pv = len(selected)
 aantal_pauze_uren = len(required_pauze_hours)
+
+def pp2_bepaal_pv_voor_afknip(selected_lijst):
+    """
+    Bepaal welke pauzevlinder in aanmerking komt om afgeknipt te worden:
+    degene met het minst aantal attracties (de 'moeilijkste'). Bij
+    gelijkstand: de laatste in de lijst (het bestaande gedrag).
+    """
+    if not selected_lijst:
+        return None
+    min_aantal = min(len(pv.get("attracties", [])) for pv in selected_lijst)
+    kandidaten = [pv for pv in selected_lijst if len(pv.get("attracties", [])) == min_aantal]
+    return kandidaten[-1]
+
+
 afgekapte_pv_uren = set()  # nieuw: bijhouden welke uren afgekapt worden
 
 if aantal_pv > 0 and aantal_pauze_uren > 0:
@@ -796,7 +810,7 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
         overbodige_uren = max(0, math.floor(beschikbaar / 4))
 
     if overbodige_uren > 0:
-        laatste_pv = selected[-1]
+        laatste_pv = pp2_bepaal_pv_voor_afknip(selected)
         pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         uren_te_verschuiven = min(overbodige_uren, len(pv_pauze_uren))
 
@@ -2099,14 +2113,16 @@ for attr in alle_actieve_attracties:
 # Pauzevlinders
 rij_out += 1
 pauzevlinder_namen_sorted = [pv["naam"] for pv in selected]
+_afgeknipte_pv_voor_weergave = pp2_bepaal_pv_voor_afknip(selected)
+_afgeknipte_pv_naam_weergave = _afgeknipte_pv_voor_weergave["naam"] if _afgeknipte_pv_voor_weergave else None
 
 for pv_idx, pvnaam in enumerate(pauzevlinder_namen_sorted, start=1):
     ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True)
     ws_out.cell(rij_out, 1).fill = white_fill
     ws_out.cell(rij_out, 1).border = thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
-        # Laatste PV: toon niet bij de afgekapte uren
-        if pvnaam == selected[-1]["naam"] and uur in afgekapte_pv_uren:
+        # Afgeknipte PV: toon niet bij de afgekapte uren
+        if pvnaam == _afgeknipte_pv_naam_weergave and uur in afgekapte_pv_uren:
             naam = ""
         else:
             naam = pvnaam if uur in required_pauze_hours else ""
@@ -3307,7 +3323,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     pp2_closed_spots = set()  # set van (naam_rij, col)
     
     if afgekapte_pv_uren and selected:
-        laatste_pv = selected[-1]
+        laatste_pv = pp2_bepaal_pv_voor_afknip(selected)
         for pv, naam_rij in pv_rows_pp2:
             if pv["naam"] == laatste_pv["naam"]:
                 for col in pauze_cols_pp2:
@@ -8425,7 +8441,8 @@ def lm5_vrijgeven_afgekapte_pv_uren(ctx, start_uur):
     if not geschikte_uren:
         return
 
-    laatste_pv_naam = str(selected[-1]["naam"]).strip()
+    _afknip_pv = pp2_bepaal_pv_voor_afknip(selected)
+    laatste_pv_naam = str(_afknip_pv["naam"]).strip() if _afknip_pv else ""
     # Bepaal de effectieve persoon (zelf of vervanger)
     effectief_naam = ctx["pv_replacements"].get(laatste_pv_naam, laatste_pv_naam)
 
