@@ -3526,6 +3526,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # -----------------------------
     duo_basis_col = {}
     duo_basis_pv_row = {}
+    cluster_laatste_col = None
+    cluster_laatste_pv_row = None
     
     if pv_rows_pp2:
         for idx, item in enumerate(vroege_stoppers_gewoon):
@@ -3536,7 +3538,33 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
             # Eerste van het duo
             if idx % 2 == 0:
-                gekozen_col_kandidaten = pp2_choose_middle_col(naam, ws_pp2, pauze_cols_pp2)
+                is_solo = (
+                    idx == len(vroege_stoppers_gewoon) - 1
+                    and len(vroege_stoppers_gewoon) % 2 == 1
+                )
+
+                aansluit_col = None
+                if is_solo and cluster_laatste_col is not None:
+                    kandidaat = cluster_laatste_col + 1
+                    if (
+                        kandidaat in pauze_cols_pp2
+                        and pp2_is_beschikbaar(ws_pp2, cluster_laatste_pv_row, kandidaat)
+                        and pp2_is_valid_short_break_for_student(naam, kandidaat, ws_pp2)
+                    ):
+                        aansluit_col = kandidaat
+
+                if aansluit_col is not None:
+                    gekozen_col_kandidaten = [aansluit_col]
+                    pv_volgorde = (
+                        [(pv, r) for pv, r in pv_rows_pp2 if r == cluster_laatste_pv_row]
+                        + [(pv, r) for pv, r in pv_rows_pp2 if r != cluster_laatste_pv_row]
+                    )
+                else:
+                    gekozen_col_kandidaten = pp2_choose_middle_col(naam, ws_pp2, pauze_cols_pp2)
+                    pv_volgorde = (
+                        [pv_rows_pp2[pv_index_voorkeur]]
+                        + [r for i, r in enumerate(pv_rows_pp2) if i != pv_index_voorkeur]
+                    )
 
                 if not gekozen_col_kandidaten:
                     pp2_niet_geplaatst.append({
@@ -3545,13 +3573,10 @@ def maak_pp2_sheets(wb_arg, am_arg):
                     })
                     continue
 
-                # Probeer elke kandidaatkolom (dichtst bij midden eerst),
-                # en per kolom: eerst voorkeurs-PV-rij, daarna de rest.
-                pv_volgorde = (
-                    [pv_rows_pp2[pv_index_voorkeur]]
-                    + [r for i, r in enumerate(pv_rows_pp2) if i != pv_index_voorkeur]
-                )
-
+                # Probeer elke kandidaatkolom (dichtst bij midden eerst,
+                # of -- voor de partnerloze laatste -- aansluitend op de
+                # bestaande cluster), en per kolom: eerst voorkeurs-PV-rij,
+                # daarna de rest.
                 geplaatst_eerste = False
                 for gekozen_col in gekozen_col_kandidaten:
                     for pv, pv_name_row in pv_volgorde:
@@ -3561,6 +3586,10 @@ def maak_pp2_sheets(wb_arg, am_arg):
                         pp2_write_name(ws_pp2, pv_name_row, gekozen_col, naam)
                         duo_basis_col[duo_nummer]    = gekozen_col
                         duo_basis_pv_row[duo_nummer] = pv_name_row
+
+                        if cluster_laatste_col is None or gekozen_col > cluster_laatste_col:
+                            cluster_laatste_col = gekozen_col
+                            cluster_laatste_pv_row = pv_name_row
 
                         pp2_geplaatste_pauzes.append({
                             "naam": naam,
@@ -3613,6 +3642,10 @@ def maak_pp2_sheets(wb_arg, am_arg):
                         continue
     
                     pp2_write_name(ws_pp2, pv_name_row, buur_col, naam)
+
+                    if cluster_laatste_col is None or buur_col > cluster_laatste_col:
+                        cluster_laatste_col = buur_col
+                        cluster_laatste_pv_row = pv_name_row
     
                     pp2_geplaatste_pauzes.append({
                         "naam": naam,
