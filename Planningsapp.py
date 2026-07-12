@@ -775,15 +775,31 @@ aantal_pauze_uren = len(required_pauze_hours)
 
 def pp2_bepaal_pv_voor_afknip(selected_lijst):
     """
-    Bepaal welke pauzevlinder in aanmerking komt om afgeknipt te worden:
-    degene met het minst aantal attracties (de 'moeilijkste'). Bij
-    gelijkstand: de laatste in de lijst (het bestaande gedrag).
+    Bepaal welke pauzevlinder afgeknipt wordt:
+    1) degene met het minst aantal attracties (de 'moeilijkste') -- wint
+       altijd als dit uniek is, ongeacht naam.
+    2) bij gelijkstand: als één van de gelijk-staande kandidaten
+       "Vlinder..." heet, wordt die afgeknipt.
+    3) bij gelijkstand zonder "Vlinder"-naam: gewoon de laatste
+       pauzevlinder van de volledige lijst (het oorspronkelijke gedrag).
     """
     if not selected_lijst:
         return None
+
     min_aantal = min(len(pv.get("attracties", [])) for pv in selected_lijst)
     kandidaten = [pv for pv in selected_lijst if len(pv.get("attracties", [])) == min_aantal]
-    return kandidaten[-1]
+
+    if len(kandidaten) == 1:
+        return kandidaten[0]
+
+    vlinder_kandidaten = [
+        pv for pv in kandidaten
+        if str(pv.get("naam", "")).strip().lower().startswith("vlinder")
+    ]
+    if vlinder_kandidaten:
+        return vlinder_kandidaten[-1]
+
+    return selected_lijst[-1]
 
 
 afgekapte_pv_uren = set()  # nieuw: bijhouden welke uren afgekapt worden
