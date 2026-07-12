@@ -4906,7 +4906,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     pp2_open_spots = set()
     pp2_pv_short_breaks_placed = []
-    pp2_debug_log_tijdelijk = []  # TIJDELIJK, voor diagnose ArtyomY
     
     # -----------------------------
     # Hulploop: korte pauzes van pauzevlinders zelf invullen
@@ -4918,47 +4917,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # -----------------------------
     for pv, pv_row in pv_rows_pp2:
         naam = pv["naam"]
-
-        if naam == "ArtyomY":
-            _debug_werk_uren = pp2_get_student_work_hours(naam)
-            _debug_lange_lijst = naam in pp2_lange_werkers_lijst()
-            pp2_debug_log_tijdelijk.append(f"--- DEBUG ArtyomY (STAP3 hulploop) ---")
-            pp2_debug_log_tijdelijk.append(f"  eigen pv_row: {pv_row}")
-            pp2_debug_log_tijdelijk.append(f"  werk_uren: {_debug_werk_uren}")
-            pp2_debug_log_tijdelijk.append(f"  in pp2_lange_werkers_lijst: {_debug_lange_lijst}")
-            if naam == "ArtyomY":
-                _debug_werk_uren = pp2_get_student_work_hours(naam)
-                _debug_lange_lijst = naam in pp2_lange_werkers_lijst()
-                pp2_debug_log_tijdelijk.append(f"--- DEBUG ArtyomY (STAP3 hulploop) ---")
-                pp2_debug_log_tijdelijk.append(f"  eigen pv_row: {pv_row}")
-                pp2_debug_log_tijdelijk.append(f"  werk_uren: {_debug_werk_uren}")
-                pp2_debug_log_tijdelijk.append(f"  in pp2_lange_werkers_lijst: {_debug_lange_lijst}")
-    
-                _debug_resterend = pp2_resterende_korte_kwartieren(
-                    naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2,
-                    pauze_cols=pauze_cols_pp2, lange_pauze_ontvangers=pp2_lange_pauze_ontvangers
-                )
-                pp2_debug_log_tijdelijk.append(f"  resterend_nodig: {_debug_resterend}")
-    
-                for _debug_col in pauze_cols_pp2:
-                    _debug_header = ws_pp2.cell(1, _debug_col).value
-                    _debug_val = ws_pp2.cell(pv_row, _debug_col).value
-                    _debug_open_spot = (pv_row, _debug_col) in pp2_open_spots
-                    _debug_geldig = pp2_is_valid_short_break_for_student(naam, _debug_col, ws_pp2)
-                    pp2_debug_log_tijdelijk.append(
-                        f"  kolom {_debug_header}: cel-waarde={_debug_val!r}, "
-                        f"open_spot={_debug_open_spot}, geldig={_debug_geldig}"
-                    )
-
-                _debug_gekozen = pp2_find_short_break_cols_for_pv(
-                    naam=naam,
-                    pv_row=pv_row,
-                    ws_sheet=ws_pp2,
-                    pauze_cols=pauze_cols_pp2,
-                    open_spots_set=pp2_open_spots,
-                    needed_quarters=_debug_resterend
-                )
-                pp2_debug_log_tijdelijk.append(f"  pp2_find_short_break_cols_for_pv gaf terug: {_debug_gekozen}")
     
         # Lange pauzevlinders hier nog overslaan:
         # hun korte pauze moet pas later komen
@@ -4984,24 +4942,35 @@ def maak_pp2_sheets(wb_arg, am_arg):
             open_spots_set=pp2_open_spots,
             needed_quarters=resterend_nodig
         )
-    
-        if naam == "ArtyomY":
-            pp2_debug_log_tijdelijk.append(f"  ECHTE gekozen_cols in de lus: {gekozen_cols}")
 
-        if not gekozen_cols:
+        if gekozen_cols:
+            for col in gekozen_cols:
+                pp2_write_short_break_for_pv(ws_pp2, pv_row, col, naam)
+
+            pp2_pv_short_breaks_placed.append({
+                "naam": naam,
+                "pv_row": pv_row,
+                "kolommen": gekozen_cols,
+                "tijden": [ws_pp2.cell(1, col).value for col in gekozen_cols]
+            })
             continue
-    
-        for col in gekozen_cols:
-            pp2_write_short_break_for_pv(ws_pp2, pv_row, col, naam)
 
-        if naam == "ArtyomY":
-            pp2_debug_log_tijdelijk.append(f"  Na schrijven, cel-waarde op kolom {gekozen_cols}: {[ws_pp2.cell(pv_row, c).value for c in gekozen_cols]}")
-    
-        pp2_pv_short_breaks_placed.append({
-            "naam": naam,
-            "kolommen": gekozen_cols,
-            "tijden": [ws_pp2.cell(1, col).value for col in gekozen_cols]
-        })
+        # Eigen rij lukt niet -> val terug op een andere pauzevlinder,
+        # net als bij lange pauzevlinders.
+        if resterend_nodig == 1:
+            _opties = pp2_verzamel_opties_alle_pvs_kort(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots)
+            for _start_min, _schaarste, _ander_pv, _ander_pv_row, _col in _opties:
+                _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
+                _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
+                if pp2_pv_kan_overname(_ander_pv, _attrs):
+                    pp2_write_short_break_regular(ws_sheet=ws_pp2, pv_row=_ander_pv_row, col=_col, naam=naam)
+                    pp2_pv_short_breaks_placed.append({
+                        "naam": naam,
+                        "pv_row": _ander_pv_row,
+                        "kolommen": [_col],
+                        "tijden": [ws_pp2.cell(1, _col).value]
+                    })
+                    break
     
     # -----------------------------
     # 2) Tellen hoeveel kwartierblokjes nog leeg zijn
@@ -5061,11 +5030,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         # Reset eerst eventuele eerder geplaatste korte pauzes van pauzevlinders
         for item in pp2_pv_short_breaks_placed:
             naam = item["naam"]
-    
-            pv_row = next(
-                pv_row for pv, pv_row in pv_rows_pp2
-                if pv["naam"] == naam
-            )
+            pv_row = item["pv_row"]
     
             for col in item["kolommen"]:
                 top_cel = ws_pp2.cell(pv_row - 1, col)
@@ -5145,25 +5110,41 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 open_spots_set=pp2_open_spots,
                 needed_quarters=resterend_nodig
             )
-    
-            if not gekozen_cols:
+
+            if gekozen_cols:
+                for col in gekozen_cols:
+                    pp2_write_short_break_for_pv(
+                        ws_sheet=ws_pp2,
+                        pv_row=pv_row,
+                        col=col,
+                        naam=naam
+                    )
+
+                pp2_pv_short_breaks_placed.append({
+                    "naam": naam,
+                    "pv_row": pv_row,
+                    "kolommen": gekozen_cols,
+                    "tijden": [
+                        ws_pp2.cell(1, col).value for col in gekozen_cols
+                    ]
+                })
                 continue
-    
-            for col in gekozen_cols:
-                pp2_write_short_break_for_pv(
-                    ws_sheet=ws_pp2,
-                    pv_row=pv_row,
-                    col=col,
-                    naam=naam
-                )
-    
-            pp2_pv_short_breaks_placed.append({
-                "naam": naam,
-                "kolommen": gekozen_cols,
-                "tijden": [
-                    ws_pp2.cell(1, col).value for col in gekozen_cols
-                ]
-            })
+
+            # Eigen rij lukt niet -> val terug op een andere pauzevlinder.
+            if resterend_nodig == 1:
+                _opties = pp2_verzamel_opties_alle_pvs_kort(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots)
+                for _start_min, _schaarste, _ander_pv, _ander_pv_row, _col in _opties:
+                    _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
+                    _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
+                    if pp2_pv_kan_overname(_ander_pv, _attrs):
+                        pp2_write_short_break_regular(ws_sheet=ws_pp2, pv_row=_ander_pv_row, col=_col, naam=naam)
+                        pp2_pv_short_breaks_placed.append({
+                            "naam": naam,
+                            "pv_row": _ander_pv_row,
+                            "kolommen": [_col],
+                            "tijden": [ws_pp2.cell(1, _col).value]
+                        })
+                        break
     
     
     # ---------------------------------------------------
@@ -6409,13 +6390,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     ws_feedback2.cell(row_fb2, 1, "Feedback pauzeplanning").font = Font(bold=True)
     row_fb2 += 2
 
-    if pp2_debug_log_tijdelijk:
-        ws_feedback2.cell(row_fb2, 1, "TIJDELIJKE DEBUG-INFO (ArtyomY)").font = Font(bold=True)
-        row_fb2 += 1
-        for regel in pp2_debug_log_tijdelijk:
-            ws_feedback2.cell(row_fb2, 1, regel)
-            row_fb2 += 1
-        row_fb2 += 2
     
     # -----------------------------------
     # 1) Lange pauzes controleren
