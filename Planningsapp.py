@@ -4845,6 +4845,38 @@ def maak_pp2_sheets(wb_arg, am_arg):
         cel.alignment = center_align
         cel.border = thin_border
         cel.fill = conflict_fill if conflict else lichtpaars_fill
+
+
+    def pp2_write_short_break_regular(ws_sheet, pv_row, col, naam, conflict=False):
+        """
+        Korte pauze voor gewone student:
+        - bovenliggende cel = attractie (rood bij conflict)
+        - naamcel:
+            * rood bij conflict (niet-gekwalificeerde PV)
+            * lichtgeel voor minderjarigen die >4u werken
+            * lichtpaars voor alle andere korte pauzes
+        """
+        header = ws_sheet.cell(1, col).value
+        uur = parse_header_uur(header)
+
+        attr = vind_attractie_op_uur(naam, uur) if uur is not None else None
+
+        top_cel = ws_sheet.cell(pv_row - 1, col)
+        top_cel.value = attr if attr else ""
+        top_cel.alignment = center_align
+        top_cel.border = thin_border
+        top_cel.fill = conflict_fill if conflict else PatternFill(fill_type=None)
+
+        cel = ws_sheet.cell(pv_row, col)
+        cel.value = naam
+        cel.alignment = center_align
+        cel.border = thin_border
+
+        if conflict:
+            cel.fill = conflict_fill
+        else:
+            cel.fill = lichtpaars_fill
+            
     
     
     def pp2_find_short_break_cols_for_pv(naam, pv_row, ws_sheet, pauze_cols, open_spots_set, needed_quarters):
@@ -5227,36 +5259,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
         return result
     
-    
-    def pp2_write_short_break_regular(ws_sheet, pv_row, col, naam, conflict=False):
-        """
-        Korte pauze voor gewone student:
-        - bovenliggende cel = attractie (rood bij conflict)
-        - naamcel:
-            * rood bij conflict (niet-gekwalificeerde PV)
-            * lichtgeel voor minderjarigen die >4u werken
-            * lichtpaars voor alle andere korte pauzes
-        """
-        header = ws_sheet.cell(1, col).value
-        uur = parse_header_uur(header)
-
-        attr = vind_attractie_op_uur(naam, uur) if uur is not None else None
-
-        top_cel = ws_sheet.cell(pv_row - 1, col)
-        top_cel.value = attr if attr else ""
-        top_cel.alignment = center_align
-        top_cel.border = thin_border
-        top_cel.fill = conflict_fill if conflict else PatternFill(fill_type=None)
-
-        cel = ws_sheet.cell(pv_row, col)
-        cel.value = naam
-        cel.alignment = center_align
-        cel.border = thin_border
-
-        if conflict:
-            cel.fill = conflict_fill
-        else:
-            cel.fill = lichtpaars_fill
     
     
     def pp2_get_long_break_owners_on_row(ws_sheet, pv_row, pauze_cols):
