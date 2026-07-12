@@ -2621,24 +2621,7 @@ def vind_attractie_op_uur(naam, uur):
 ws_pauze_sheet = wb_out["Pauzevlinders"]
 witte_fill = PatternFill(start_color="FFFFFF", fill_type="solid")
 
-# --- VINKJE V3 + TEKST W3 in Aanpassingen ---
-vinkje_aanpassingen = ws_aanpassingen.cell(row=3, column=22).value  # V3
 
-if vinkje_aanpassingen in [1, True, "WAAR", "X"]:
-    waarde = ws_aanpassingen.cell(row=3, column=23).value  # W3 (samengevoegde cel)
-    if waarde:
-        _laatste_pv_naam_rij = (len(selected) - 1) * 3 + 3
-        _start_rij_info = _laatste_pv_naam_rij + 3
-
-        regels = str(waarde).split("\n")
-        for i, regel in enumerate(regels):
-            regel = regel.strip()
-            if regel:
-                cel = ws_pauze_sheet.cell(row=_start_rij_info + i, column=1, value=regel)
-                cel.fill = witte_fill
-                cel.border = thin_border
-                cel.alignment = Alignment(horizontal="left", vertical="center")
-# -------------------------------------
 # -------------------------------------
 
 
@@ -6525,9 +6508,57 @@ def maak_pp2_sheets(wb_arg, am_arg):
             row_fb2 += 1
     
         row_fb2 += 1
-    
-    pp2_rode_pauze_redenen = pp2_verzamel_rode_pauze_redenen(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
 
+    # -----------------------------------
+    # Korte samenvatting + Aanpassingen-info, op de Pauzeplanning-sheet
+    # zelf, onder de laatste pauzevlinderrij.
+    # -----------------------------------
+    if pv_rows_pp2:
+        _laatste_pv_naam_rij = max(row for _, row in pv_rows_pp2)
+
+        _samenvatting_lijnen = []
+        if pp2_lange_pauze_ontbreekt:
+            _namen_lang = sorted(pp2_lange_pauze_ontbreekt)
+            _samenvatting_lijnen.append(
+                f"{', '.join(_namen_lang)} kregen geen lange pauze"
+                if len(_namen_lang) > 1
+                else f"{_namen_lang[0]} kreeg geen lange pauze"
+            )
+        if pp2_korte_kwartieren_ontbreekt:
+            _namen_kort = sorted(n for n, _ in pp2_korte_kwartieren_ontbreekt)
+            _samenvatting_lijnen.append(
+                f"{', '.join(_namen_kort)} kregen geen korte pauze"
+                if len(_namen_kort) > 1
+                else f"{_namen_kort[0]} kreeg geen korte pauze"
+            )
+
+        _start_rij_samenvatting = _laatste_pv_naam_rij + 2
+        for i, _lijn in enumerate(_samenvatting_lijnen):
+            _cel = ws_pp2.cell(row=_start_rij_samenvatting + i, column=1, value=_lijn)
+            _cel.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            _cel.font = Font(bold=True)
+            _cel.border = thin_border
+            _cel.alignment = Alignment(horizontal="left", vertical="center")
+
+        if _samenvatting_lijnen:
+            _start_rij_aanpassingen = _start_rij_samenvatting + len(_samenvatting_lijnen) + 3
+        else:
+            _start_rij_aanpassingen = _laatste_pv_naam_rij + 3
+
+        _vinkje_aanpassingen_lokaal = ws_aanpassingen.cell(row=3, column=22).value  # V3
+        if _vinkje_aanpassingen_lokaal in [1, True, "WAAR", "X"]:
+            _waarde_aanpassingen = ws_aanpassingen.cell(row=3, column=23).value  # W3
+            if _waarde_aanpassingen:
+                for i, _regel in enumerate(str(_waarde_aanpassingen).split("\n")):
+                    _regel = _regel.strip()
+                    if _regel:
+                        _cel = ws_pp2.cell(row=_start_rij_aanpassingen + i, column=1, value=_regel)
+                        _cel.fill = witte_fill
+                        _cel.border = thin_border
+                        _cel.alignment = Alignment(horizontal="left", vertical="center")
+
+    pp2_rode_pauze_redenen = pp2_verzamel_rode_pauze_redenen(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
+    
     if pp2_rode_pauze_redenen:
         _titel_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
         _kader_fill = PatternFill(start_color="FFF2F2", end_color="FFF2F2", fill_type="solid")
