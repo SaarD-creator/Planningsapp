@@ -800,10 +800,23 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
         pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         uren_te_verschuiven = min(overbodige_uren, len(pv_pauze_uren))
 
+        # Check: valt deze PV VOLLEDIG weg, is er dan met 1 PV minder
+        # (en dus ook 1 marge minder) nog voldoende capaciteit voor de
+        # rest om de effectieve pauzebehoefte te dekken? Zo ja: knip
+        # meteen de volledige shift af i.p.v. enkel een deel.
+        if uren_te_verschuiven < len(pv_pauze_uren):
+            aantal_pv_zonder_laatste = aantal_pv - 1
+            if aantal_pv_zonder_laatste > 0:
+                plaatsen_zonder_laatste = (aantal_pauze_uren * 4 - 1) * aantal_pv_zonder_laatste
+                marge_zonder_laatste = aantal_pv_zonder_laatste * min_open_spots_per_pv
+                nodig_zonder_laatste = pauze_kwartieren + marge_zonder_laatste
+                if plaatsen_zonder_laatste >= nodig_zonder_laatste:
+                    uren_te_verschuiven = len(pv_pauze_uren)
+
         for i in range(uren_te_verschuiven):
             uur = pv_pauze_uren[i]
             extra_assignments[uur].append(laatste_pv["naam"])
-            afgekapte_pv_uren.add(uur)  # nieuw: registreer dit uur als afgeknipt
+            afgekapte_pv_uren.add(uur)
 
 
 def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
@@ -845,7 +858,18 @@ def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
 
     if _overbodige > 0:
         _pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
-        for uur in _pv_pauze_uren[:min(_overbodige, len(_pv_pauze_uren))]:
+        _uren_te_verschuiven = min(_overbodige, len(_pv_pauze_uren))
+
+        if _uren_te_verschuiven < len(_pv_pauze_uren):
+            _aantal_pv_zonder_laatste = _aantal_pv - 1
+            if _aantal_pv_zonder_laatste > 0:
+                _plaatsen_zonder_laatste = (_aantal_pauze_uren * 4 - 1) * _aantal_pv_zonder_laatste
+                _marge_zonder_laatste = _aantal_pv_zonder_laatste * _min_open_spots_per_pv
+                _nodig_zonder_laatste = (2 * _lange + _korte) + _marge_zonder_laatste
+                if _plaatsen_zonder_laatste >= _nodig_zonder_laatste:
+                    _uren_te_verschuiven = len(_pv_pauze_uren)
+
+        for uur in _pv_pauze_uren[:_uren_te_verschuiven]:
             afgekapte_pv_uren.add(uur)
 
 
