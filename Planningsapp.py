@@ -3017,9 +3017,11 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     def pp2_choose_middle_col(naam, ws_sheet, pauze_cols):
         """
-        Geef een gerangschikte lijst van geldige kwartierkolommen terug,
-        gesorteerd op afstand tot het midden van de shift (dichtst eerst).
-        Lege lijst als er niets gevonden wordt.
+        Geef een gerangschikte lijst van geldige kwartierkolommen terug.
+        Voorkeur: kolommen die op een half uur beginnen (:00 of :30), zodat
+        een duo netjes één aaneengesloten halfuur-blok vormt. Daarbinnen:
+        dichtst bij het midden van de shift eerst. Niet-uitgelijnde
+        kolommen komen pas daarna, als terugval.
         """
         candidates = pp2_candidate_cols_for_student(naam, ws_sheet, pauze_cols)
         if not candidates:
@@ -3034,10 +3036,11 @@ def maak_pp2_sheets(wb_arg, am_arg):
         for col in candidates:
             mins = pp2_parse_kwartier_header(ws_sheet.cell(1, col).value)
             if mins is not None:
-                scored.append((abs(mins - midpoint), col))
+                niet_uitgelijnd = 1 if (mins % 30 != 0) else 0
+                scored.append((niet_uitgelijnd, abs(mins - midpoint), col))
 
-        scored.sort(key=lambda x: x[0])
-        return [col for _, col in scored]
+        scored.sort(key=lambda x: (x[0], x[1]))
+        return [col for _, _, col in scored]
     
     def pp2_is_valid_short_break_for_student(naam, col, ws_sheet):
         """
@@ -3571,10 +3574,10 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 )
     
                 buur_cols = []
-                if basis_col - 1 in pauze_cols_pp2:
-                    buur_cols.append(basis_col - 1)
                 if basis_col + 1 in pauze_cols_pp2:
                     buur_cols.append(basis_col + 1)
+                if basis_col - 1 in pauze_cols_pp2:
+                    buur_cols.append(basis_col - 1)
     
                 geplaatste_tweede = False
     
