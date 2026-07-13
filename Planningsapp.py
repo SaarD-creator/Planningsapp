@@ -287,9 +287,19 @@ def compute_ideal_moments():
     beste_paar = max(paren, key=lambda p: p[2]) if paren else None
 
     # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften
-    if FORCEER_EXHAUSTIEF and beste_paar is not None:
-        return _half_grid((beste_paar[0], beste_paar[1]))
-    if beste_paar:
+    # B2 aangevinkt -> altijd volgens de perfect exhaustieve shiften
+    if FORCEER_EXHAUSTIEF:
+        if beste_paar is not None:
+            # exact paar aanwezig -> oude logica
+            return _half_grid((beste_paar[0], beste_paar[1]))
+
+        # geen exact paar -> kies zelf het beste splitspunt m:
+        # het binnen-uur waar de meeste mensen beginnen/eindigen,
+        # bij gelijkspel dat het dichtst bij het midden van de dag ligt.
+        _binnen = {h: hist[h] for h in hist if open_start < h < open_end}
+        if _binnen:
+            _m = max(_binnen, key=lambda h: (_binnen[h], -abs(h - (open_start + open_end) / 2)))
+            return {open_start, open_end} | _kies_cuts(open_start, _m) | _kies_cuts(_m, open_end)
         eenheden.append((beste_paar[2], "pair", (beste_paar[0], beste_paar[1])))
 
     def _eenheid_grid(u):
