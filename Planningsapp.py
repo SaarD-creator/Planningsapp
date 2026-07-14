@@ -186,6 +186,15 @@ def compute_ideal_moments():
         for run in contiguous_runs(uren):
             shifts[(run[0], run[-1] + 1)] += 1   # (start, eind-marker)
 
+    # Aparte shiften-telling ZONDER pauzevlinders, uitsluitend voor de "forceer exhaustief"-berekening
+    shifts_zonder_pv = defaultdict(int)
+    for s in studenten_workend:
+        if s.get("is_pauzevlinder"):
+            continue
+        uren = sorted(u for u in s["uren_beschikbaar"] if u in open_uren)
+        for run in contiguous_runs(uren):
+            shifts_zonder_pv[(run[0], run[-1] + 1)] += 1
+
     if not shifts:
         return set()
 
@@ -288,17 +297,27 @@ def compute_ideal_moments():
     ]
     beste_paar = max(paren, key=lambda p: p[2]) if paren else None
 
-    # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften
-    if FORCEER_EXHAUSTIEF and beste_paar is not None:
-        return _half_grid((beste_paar[0], beste_paar[1]))
+    # --- Alles hieronder ENKEL voor FORCEER_EXHAUSTIEF: zelfde berekening, maar met de
+    #     pauzevlinders volledig uit de shiften-telling gehaald (shifts_zonder_pv). ---
+    if FORCEER_EXHAUSTIEF:
+        _m_kandidaten_ex = ({e for (s, e) in shifts_zonder_pv if s == open_start}
+                             & {s for (s, e) in shifts_zonder_pv if e == open_end})
+        paren_ex = [
+            ((open_start, m), (m, open_end), shifts_zonder_pv[(open_start, m)] + shifts_zonder_pv[(m, open_end)])
+            for m in _m_kandidaten_ex
+        ]
+        beste_paar_ex = max(paren_ex, key=lambda p: p[2]) if paren_ex else None
 
-    # Y17 aangevinkt maar geen echt complementair paar aanwezig:
-    # zoek een halve-dag-shift die vanaf open_start vertrekt of op open_end eindigt,
-    # waarbij het resterende stuk van de dag minstens 4 uur bedraagt. Die shift wordt
-    # dan gebruikt om een geforceerd (virtueel) complementair paar te bouwen.
-    if FORCEER_EXHAUSTIEF and beste_paar is None:
+        # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften (pauzevlinders niet meegeteld)
+        if beste_paar_ex is not None:
+            return _half_grid((beste_paar_ex[0], beste_paar_ex[1]))
+
+        # Y17 aangevinkt maar geen echt complementair paar aanwezig (zonder pauzevlinders):
+        # zoek een halve-dag-shift die vanaf open_start vertrekt of op open_end eindigt,
+        # waarbij het resterende stuk van de dag minstens 4 uur bedraagt. Die shift wordt
+        # dan gebruikt om een geforceerd (virtueel) complementair paar te bouwen.
         _halve_dag_kandidaten = []
-        for (s, e), aantal in shifts.items():
+        for (s, e), aantal in shifts_zonder_pv.items():
             if s == open_start and (open_end - e) >= 4:
                 _halve_dag_kandidaten.append((aantal, e))    # m = einde van de shift
             if e == open_end and (s - open_start) >= 4:
@@ -306,7 +325,7 @@ def compute_ideal_moments():
         if _halve_dag_kandidaten:
             _, _m_gedwongen = max(_halve_dag_kandidaten, key=lambda x: x[0])
             return _half_grid(((open_start, _m_gedwongen), (_m_gedwongen, open_end)))
-        # geen geschikte halve-dag-shift gevonden -> val terug op de gewone logica hieronder
+        # geen geschikte halve-dag-shift gevonden (zonder pauzevlinders) -> val terug op de gewone logica hieronder
 
     if beste_paar:
         eenheden.append((beste_paar[2], "pair", (beste_paar[0], beste_paar[1])))
