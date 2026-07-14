@@ -291,6 +291,23 @@ def compute_ideal_moments():
     # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften
     if FORCEER_EXHAUSTIEF and beste_paar is not None:
         return _half_grid((beste_paar[0], beste_paar[1]))
+
+    # Y17 aangevinkt maar geen echt complementair paar aanwezig:
+    # zoek een halve-dag-shift die vanaf open_start vertrekt of op open_end eindigt,
+    # waarbij het resterende stuk van de dag minstens 4 uur bedraagt. Die shift wordt
+    # dan gebruikt om een geforceerd (virtueel) complementair paar te bouwen.
+    if FORCEER_EXHAUSTIEF and beste_paar is None:
+        _halve_dag_kandidaten = []
+        for (s, e), aantal in shifts.items():
+            if s == open_start and (open_end - e) >= 4:
+                _halve_dag_kandidaten.append((aantal, e))    # m = einde van de shift
+            if e == open_end and (s - open_start) >= 4:
+                _halve_dag_kandidaten.append((aantal, s))    # m = start van de shift
+        if _halve_dag_kandidaten:
+            _, _m_gedwongen = max(_halve_dag_kandidaten, key=lambda x: x[0])
+            return _half_grid(((open_start, _m_gedwongen), (_m_gedwongen, open_end)))
+        # geen geschikte halve-dag-shift gevonden -> val terug op de gewone logica hieronder
+
     if beste_paar:
         eenheden.append((beste_paar[2], "pair", (beste_paar[0], beste_paar[1])))
 
