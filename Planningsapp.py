@@ -3834,15 +3834,15 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
         if is_minderjarig:
             if is_minderjarig:
-            if PAUZE_STRIKT_BOVEN_4U:
-                if gewerkte_uren <= 4:
-                    return 0
-            else:
-                if gewerkte_uren < 4:
-                    return 0
-            if gewerkte_uren > 6:
-                return 2
-            return 1
+                if PAUZE_STRIKT_BOVEN_4U:
+                    if gewerkte_uren <= 4:
+                        return 0
+                else:
+                    if gewerkte_uren < 4:
+                        return 0
+                if gewerkte_uren > 6:
+                    return 2
+                return 1
     
         if gewerkte_uren > 6:
             return 1
