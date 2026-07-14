@@ -68,6 +68,10 @@ _vinkje_y17 = ws_instellingen.cell(row=2, column=2).value   # B2
 FORCEER_EXHAUSTIEF = _vinkje_y17 in [1, True, "WAAR", "X"]
 # ------------------------------------------------------------------------
 
+# --- VINKJE B3 (Instellingen): pauze pas vanaf MEER dan 4 uur werk (i.p.v. vanaf 4 uur) ---
+_vinkje_b3 = ws_instellingen.cell(row=3, column=2).value   # B3
+PAUZE_STRIKT_BOVEN_4U = _vinkje_b3 in [1, True, "WAAR", "X"]
+# ------------------------------------------------------------------------
 # -----------------------------
 # Datum op basis van W4 in Input_
 # -----------------------------
@@ -3803,7 +3807,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             gewerkte_uren = werkduur_voor_pauze(naam)
             is_minderjarig = "-18" in str(naam)
     
-            if is_minderjarig and gewerkte_uren >= 4:
+            if is_minderjarig and ((gewerkte_uren > 4) if PAUZE_STRIKT_BOVEN_4U else (gewerkte_uren >= 4)):
                 if naam not in al_toegevoegd:
                     result.append(naam)
                     al_toegevoegd.add(naam)
@@ -3829,8 +3833,13 @@ def maak_pp2_sheets(wb_arg, am_arg):
         is_minderjarig = "-18" in str(naam)
     
         if is_minderjarig:
-            if gewerkte_uren < 4:
-                return 0
+            if is_minderjarig:
+            if PAUZE_STRIKT_BOVEN_4U:
+                if gewerkte_uren <= 4:
+                    return 0
+            else:
+                if gewerkte_uren < 4:
+                    return 0
             if gewerkte_uren > 6:
                 return 2
             return 1
@@ -4670,12 +4679,17 @@ def maak_pp2_sheets(wb_arg, am_arg):
                         return 0
     
                 # Iedereen die echt >= 4u werkt krijgt een korte pauze
-                if echte_duur >= 4:
+                # (bij PAUZE_STRIKT_BOVEN_4U aangevinkt: pas vanaf MEER dan 4u)
+                if (echte_duur > 4) if PAUZE_STRIKT_BOVEN_4U else (echte_duur >= 4):
                     return 1
     
         # Fallback naar bestaande logica
-        if werkduur_voor_pauze(naam) < 4:
-            return 0
+        if PAUZE_STRIKT_BOVEN_4U:
+            if werkduur_voor_pauze(naam) <= 4:
+                return 0
+        else:
+            if werkduur_voor_pauze(naam) < 4:
+                return 0
         return 1
     
     
@@ -5453,12 +5467,20 @@ def maak_pp2_sheets(wb_arg, am_arg):
         is_minor = pp2_is_minderjarig(naam)
     
         if is_minor:
-            if gewerkte_uren < 4:
-                nodig = 0
-            elif gewerkte_uren <= 6:
-                nodig = 1
+            if PAUZE_STRIKT_BOVEN_4U:
+                if gewerkte_uren <= 4:
+                    nodig = 0
+                elif gewerkte_uren <= 6:
+                    nodig = 1
+                else:
+                    nodig = 2
             else:
-                nodig = 2
+                if gewerkte_uren < 4:
+                    nodig = 0
+                elif gewerkte_uren <= 6:
+                    nodig = 1
+                else:
+                    nodig = 2
         else:
             nodig = 1 if gewerkte_uren > 6 else 0
     
@@ -7456,9 +7478,9 @@ def lm5_bereken_pauze_counts(absentees_set, base_maps):
         is_minor = "-18" in str(naam)
         if n > 6:
             lange_pauzes += 1
-        if is_minor and n >= 4:
+        if is_minor and ((n > 4) if PAUZE_STRIKT_BOVEN_4U else (n >= 4)):
             lange_pauzes += 1
-        if n >= 4:
+        if (n > 4) if PAUZE_STRIKT_BOVEN_4U else (n >= 4):
             korte_pauzes += 1
 
     return lange_pauzes, korte_pauzes
