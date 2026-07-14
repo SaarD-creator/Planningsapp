@@ -1652,7 +1652,7 @@ def can_use_block_as_swap_target(student, attr, block_hours):
             return False
     return True
 
-def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=False):
+def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=False, voorkeur_nieuwe_attractie=False):
     """
     Probeer één specifiek blok (eerste OF laatste) van student/attr te wisselen.
     Alleen als:
@@ -1664,6 +1664,11 @@ def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=
     - het totaal aantal >4u-problemen niet stijgt (of, als sta_toe_overflow_andere
       True is: enkel als laatste redmiddel, en enkel als het bij de andere
       student opgesplitst blijft i.p.v. een nieuw lang aaneengesloten blok)
+
+    voorkeur_nieuwe_attractie: als True, worden kandidaten die voor BEIDE studenten
+    een attractie opleveren die ze die dag nog niet deden eerst geprobeerd. Andere
+    (niet-ideale) kandidaten blijven nog steeds mogelijk als fallback, enkel later
+    in de volgorde.
     """
     if len(block_hours) not in [2, 3]:
         return False
@@ -1697,6 +1702,16 @@ def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=
             continue
 
         kandidaten.append((andere_student["naam"], attr_b, andere_student))
+
+    if voorkeur_nieuwe_attractie:
+        # ideale kandidaten (nieuwe attractie voor BEIDE studenten die dag) eerst proberen;
+        # de rest blijft achteraan in de lijst staan als fallback
+        def _is_ideaal(kand):
+            _, attr_b, andere_student = kand
+            student_krijgt_nieuwe_attr = attr_b not in student["assigned_attracties"]
+            andere_krijgt_nieuwe_attr = attr not in andere_student["assigned_attracties"]
+            return 0 if (student_krijgt_nieuwe_attr and andere_krijgt_nieuwe_attr) else 1
+        kandidaten.sort(key=_is_ideaal)
 
     for _, attr_b, andere_student in kandidaten:
         orig_switches_b = count_attr_switches(andere_student)
@@ -1910,6 +1925,51 @@ for _ in range(max_block_swap_passes):
 
     if not wijziging:
         break
+
+
+# -----------------------------
+# Post-processing (ENKEL bij FORCEER_EXHAUSTIEF, Instellingen!B2):
+# probeer blokken van EXACT 4 uur aan één stuk ook op te splitsen in 2x 2 uur.
+# Staat het vakje niet aan, dan verandert hier niets.
+# -----------------------------
+if FORCEER_EXHAUSTIEF:
+
+    def try_split_exact_4h_block(student, attr):
+        """
+        Probeert een aaneengesloten blok van EXACT 4 uur op deze attractie op te
+        splitsen door de eerste of laatste 2 uur te wisselen met een andere student.
+        Voorkeur: de wissel geeft zowel 'student' als de wisselpartner een attractie
+        die ze die dag nog niet gedaan hebben (via voorkeur_nieuwe_attractie=True).
+        Lukt dat nergens, dan wordt elke andere geldige 2-uurs-wissel aanvaard --
+        dat is nog steeds beter dan het blok van 4 uur aan één stuk te laten staan.
+        """
+        runs = get_runs_on_attr(student, attr)
+        for run in runs:
+            if len(run) != 4:
+                continue
+            for blok in (run[-2:], run[:2]):
+                if try_swap_specific_block(student, attr, blok, voorkeur_nieuwe_attractie=True):
+                    return True
+        return False
+
+    # Iteratief toepassen tot er niets meer verandert
+    max_4u_split_passes = 15
+    for _ in range(max_4u_split_passes):
+        wijziging_4u = False
+
+        for student in studenten_workend:
+            vier_uur_attracties = [
+                a for a in list(student["assigned_attracties"])
+                if any(len(r) == 4 for r in get_runs_on_attr(student, a))
+            ]
+
+            for attr in vier_uur_attracties:
+                if try_split_exact_4h_block(student, attr):
+                    wijziging_4u = True
+                    break
+
+        if not wijziging_4u:
+            break
 
 
 # -----------------------------
