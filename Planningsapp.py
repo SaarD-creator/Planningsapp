@@ -3466,7 +3466,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     pauze_cols_pp2 = pp2_get_pauze_cols(ws_pp2)
     pv_rows_pp2 = pp2_get_pv_rows(ws_pp2, selected)
 
-    # Welke PV is de afgeknipte (indien van toepassing)? Die krijgt max 2
+    # Welke PV is de afgeknipte (indien van toepassing)? 
     # open spots i.p.v. het normale aandeel, want die dient toch geen
     # korte pauzes meer na de lange pauzes.
     pp2_afgeknipte_pv_naam = None
@@ -3474,7 +3474,14 @@ def maak_pp2_sheets(wb_arg, am_arg):
         _afknip_pv_obj = pp2_bepaal_pv_voor_afknip(selected)
         if _afknip_pv_obj is not None:
             pp2_afgeknipte_pv_naam = _afknip_pv_obj["naam"]
-    pp2_max_open_spots_afgeknipt = 2
+
+    _aantal_afgeknipte_uren_pv = len(afgekapte_pv_uren)
+    if _aantal_afgeknipte_uren_pv >= 4:
+        pp2_max_open_spots_afgeknipt = 0
+    elif _aantal_afgeknipte_uren_pv >= 2:
+        pp2_max_open_spots_afgeknipt = 2
+    else:
+        pp2_max_open_spots_afgeknipt = min_open_spots_per_pv  # geen extra begrenzing
     pp2_open_spots_afgeknipte_teller = 0
     
     # Maak de grid leeg, maar behoud layout
