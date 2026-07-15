@@ -865,8 +865,16 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
 
     _afknip_kandidaat = pp2_bepaal_pv_voor_afknip(selected)
 
-    marge_kandidaat = min_open_spots_per_pv  # start: nog geen extra begrenzing
-    for _iter in range(5):
+    # Probeer de strengste begrenzing eerst; val pas terug op een lossere
+    # begrenzing als de strengere zichzelf niet waarmaakt (te weinig uren
+    # om af te knippen om die begrenzing te rechtvaardigen).
+    _marge_tiers = [
+        (0, 4),                      # marge 0, vereist >=4 afgeknipte uren
+        (2, 2),                      # marge 2, vereist >=2 afgeknipte uren
+        (min_open_spots_per_pv, 0),  # normale marge, geen minimum vereist
+    ]
+
+    for marge_kandidaat, _vereiste_uren in _marge_tiers:
         marge_totaal = 0
         for _pv_marge in selected:
             if _afknip_kandidaat is not None and _pv_marge["naam"] == _afknip_kandidaat["naam"]:
@@ -883,17 +891,8 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
         pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         uren_te_verschuiven = min(overbodige_uren, len(pv_pauze_uren))
 
-        # begrenzing pas toepassen als er ook echt genoeg uren afgeknipt worden
-        if uren_te_verschuiven >= 4:
-            nieuwe_marge_kandidaat = 0
-        elif uren_te_verschuiven >= 2:
-            nieuwe_marge_kandidaat = min(2, min_open_spots_per_pv)
-        else:
-            nieuwe_marge_kandidaat = min_open_spots_per_pv
-
-        if nieuwe_marge_kandidaat == marge_kandidaat:
-            break  # stabiel, geen verdere aanpassing nodig
-        marge_kandidaat = nieuwe_marge_kandidaat
+        if uren_te_verschuiven >= _vereiste_uren:
+            break  # deze marge houdt zichzelf overeind -> gebruiken
 
     if overbodige_uren > 0:
         laatste_pv = _afknip_kandidaat
@@ -951,8 +950,13 @@ def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
 
     _afknip_kandidaat_herb = pp2_bepaal_pv_voor_afknip(selected)
 
-    _marge_kandidaat = _min_open_spots_per_pv
-    for _iter in range(5):
+    _marge_tiers = [
+        (0, 4),
+        (2, 2),
+        (_min_open_spots_per_pv, 0),
+    ]
+
+    for _marge_kandidaat, _vereiste_uren in _marge_tiers:
         _marge_totaal = 0
         for _pv_marge in selected:
             if _afknip_kandidaat_herb is not None and _pv_marge["naam"] == _afknip_kandidaat_herb["naam"]:
@@ -969,16 +973,8 @@ def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
         _pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         _uren_te_verschuiven = min(_overbodige, len(_pv_pauze_uren))
 
-        if _uren_te_verschuiven >= 4:
-            _nieuwe_marge_kandidaat = 0
-        elif _uren_te_verschuiven >= 2:
-            _nieuwe_marge_kandidaat = min(2, _min_open_spots_per_pv)
-        else:
-            _nieuwe_marge_kandidaat = _min_open_spots_per_pv
-
-        if _nieuwe_marge_kandidaat == _marge_kandidaat:
+        if _uren_te_verschuiven >= _vereiste_uren:
             break
-        _marge_kandidaat = _nieuwe_marge_kandidaat
 
     if _overbodige > 0:
 
