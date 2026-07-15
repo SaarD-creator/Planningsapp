@@ -862,26 +862,41 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
     pauze_kwartieren = 2 * lange_pauzes + korte_pauzes
     open_spots = plaatsen_pauzeplanning - pauze_kwartieren
     min_open_spots_per_pv = 1 if len(open_uren) <= 6 else 3
-    max_open_spots_zonder_korte_pauzes = 2
 
     _afknip_kandidaat = pp2_bepaal_pv_voor_afknip(selected)
-    marge_totaal = 0
-    for _pv_marge in selected:
-        if _afknip_kandidaat is not None and _pv_marge["naam"] == _afknip_kandidaat["naam"]:
-            marge_totaal += min(max_open_spots_zonder_korte_pauzes, min_open_spots_per_pv)
+
+    marge_kandidaat = min_open_spots_per_pv  # start: nog geen extra begrenzing
+    for _iter in range(5):
+        marge_totaal = 0
+        for _pv_marge in selected:
+            if _afknip_kandidaat is not None and _pv_marge["naam"] == _afknip_kandidaat["naam"]:
+                marge_totaal += marge_kandidaat
+            else:
+                marge_totaal += min_open_spots_per_pv
+
+        beschikbaar = open_spots - marge_totaal
+        if len(open_uren) <= 6 and beschikbaar >= 3:
+            overbodige_uren = 1 + max(0, math.floor((beschikbaar - 3) / 4))
         else:
-            marge_totaal += min_open_spots_per_pv
+            overbodige_uren = max(0, math.floor(beschikbaar / 4))
 
-    beschikbaar = open_spots - marge_totaal
-    if len(open_uren) <= 6 and beschikbaar >= 3:
-        overbodige_uren = 1 + max(0, math.floor((beschikbaar - 3) / 4))
-    else:
-        overbodige_uren = max(0, math.floor(beschikbaar / 4))
-
-    if overbodige_uren > 0:
-        laatste_pv = pp2_bepaal_pv_voor_afknip(selected)
         pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         uren_te_verschuiven = min(overbodige_uren, len(pv_pauze_uren))
+
+        # begrenzing pas toepassen als er ook echt genoeg uren afgeknipt worden
+        if uren_te_verschuiven >= 4:
+            nieuwe_marge_kandidaat = 0
+        elif uren_te_verschuiven >= 2:
+            nieuwe_marge_kandidaat = min(2, min_open_spots_per_pv)
+        else:
+            nieuwe_marge_kandidaat = min_open_spots_per_pv
+
+        if nieuwe_marge_kandidaat == marge_kandidaat:
+            break  # stabiel, geen verdere aanpassing nodig
+        marge_kandidaat = nieuwe_marge_kandidaat
+
+    if overbodige_uren > 0:
+        laatste_pv = _afknip_kandidaat
 
         # Check: valt deze PV VOLLEDIG weg, is er dan met 1 PV minder
         # (en dus ook 1 marge minder) nog voldoende capaciteit voor de
@@ -933,25 +948,39 @@ def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
 
     _open_spots = _plaatsen - (2 * _lange + _korte)
     _min_open_spots_per_pv = 1 if len(open_uren) <= 6 else 3
-    _max_open_spots_zonder_korte_pauzes = 2
 
     _afknip_kandidaat_herb = pp2_bepaal_pv_voor_afknip(selected)
-    _marge_totaal = 0
-    for _pv_marge in selected:
-        if _afknip_kandidaat_herb is not None and _pv_marge["naam"] == _afknip_kandidaat_herb["naam"]:
-            _marge_totaal += min(_max_open_spots_zonder_korte_pauzes, _min_open_spots_per_pv)
+
+    _marge_kandidaat = _min_open_spots_per_pv
+    for _iter in range(5):
+        _marge_totaal = 0
+        for _pv_marge in selected:
+            if _afknip_kandidaat_herb is not None and _pv_marge["naam"] == _afknip_kandidaat_herb["naam"]:
+                _marge_totaal += _marge_kandidaat
+            else:
+                _marge_totaal += _min_open_spots_per_pv
+
+        _beschikbaar = _open_spots - _marge_totaal
+        if len(open_uren) <= 6 and _beschikbaar >= 3:
+            _overbodige = 1 + max(0, math.floor((_beschikbaar - 3) / 4))
         else:
-            _marge_totaal += _min_open_spots_per_pv
+            _overbodige = max(0, math.floor(_beschikbaar / 4))
 
-    _beschikbaar = _open_spots - _marge_totaal
-    if len(open_uren) <= 6 and _beschikbaar >= 3:
-        _overbodige = 1 + max(0, math.floor((_beschikbaar - 3) / 4))
-    else:
-        _overbodige = max(0, math.floor(_beschikbaar / 4))
-
-    if _overbodige > 0:
         _pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         _uren_te_verschuiven = min(_overbodige, len(_pv_pauze_uren))
+
+        if _uren_te_verschuiven >= 4:
+            _nieuwe_marge_kandidaat = 0
+        elif _uren_te_verschuiven >= 2:
+            _nieuwe_marge_kandidaat = min(2, _min_open_spots_per_pv)
+        else:
+            _nieuwe_marge_kandidaat = _min_open_spots_per_pv
+
+        if _nieuwe_marge_kandidaat == _marge_kandidaat:
+            break
+        _marge_kandidaat = _nieuwe_marge_kandidaat
+
+    if _overbodige > 0:
 
         if _uren_te_verschuiven < len(_pv_pauze_uren):
             _aantal_pv_zonder_laatste = _aantal_pv - 1
