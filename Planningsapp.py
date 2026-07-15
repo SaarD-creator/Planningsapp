@@ -1,6 +1,5 @@
-# verbeteringen pauzeplanning
-# invoeging werkblad "aanpassingen" --> nog niet helemaal operationeel
-# pauzevlindercheck is toegevoegd maar moet nog grondig getest worden + feedback betere lay-out
+# overall verbetering pauzeplanning
+# pauzevlindercheck is toegevoegd maar weinig getest
 # oplossing voor Antwerpen met introductie vinkje
 # gaten gevuld in post processing lange blokken
 # oude pauzeplanning weg!
@@ -68,10 +67,6 @@ _vinkje_y17 = ws_instellingen.cell(row=2, column=2).value   # B2
 FORCEER_EXHAUSTIEF = _vinkje_y17 in [1, True, "WAAR", "X"]
 # ------------------------------------------------------------------------
 
-# --- VINKJE B3 (Instellingen): pauze pas vanaf MEER dan 4 uur werk (i.p.v. vanaf 4 uur) ---
-_vinkje_b3 = ws_instellingen.cell(row=3, column=2).value   # B3
-PAUZE_STRIKT_BOVEN_4U = _vinkje_b3 in [1, True, "WAAR", "X"]
-# ------------------------------------------------------------------------
 # -----------------------------
 # Datum op basis van W4 in Input_
 # -----------------------------
@@ -190,15 +185,6 @@ def compute_ideal_moments():
         for run in contiguous_runs(uren):
             shifts[(run[0], run[-1] + 1)] += 1   # (start, eind-marker)
 
-    # Aparte shiften-telling ZONDER pauzevlinders, uitsluitend voor de "forceer exhaustief"-berekening
-    shifts_zonder_pv = defaultdict(int)
-    for s in studenten_workend:
-        if s.get("is_pauzevlinder"):
-            continue
-        uren = sorted(u for u in s["uren_beschikbaar"] if u in open_uren)
-        for run in contiguous_runs(uren):
-            shifts_zonder_pv[(run[0], run[-1] + 1)] += 1
-
     if not shifts:
         return set()
 
@@ -301,36 +287,9 @@ def compute_ideal_moments():
     ]
     beste_paar = max(paren, key=lambda p: p[2]) if paren else None
 
-    # --- Alles hieronder ENKEL voor FORCEER_EXHAUSTIEF: zelfde berekening, maar met de
-    #     pauzevlinders volledig uit de shiften-telling gehaald (shifts_zonder_pv). ---
-    if FORCEER_EXHAUSTIEF:
-        _m_kandidaten_ex = ({e for (s, e) in shifts_zonder_pv if s == open_start}
-                             & {s for (s, e) in shifts_zonder_pv if e == open_end})
-        paren_ex = [
-            ((open_start, m), (m, open_end), shifts_zonder_pv[(open_start, m)] + shifts_zonder_pv[(m, open_end)])
-            for m in _m_kandidaten_ex
-        ]
-        beste_paar_ex = max(paren_ex, key=lambda p: p[2]) if paren_ex else None
-
-        # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften (pauzevlinders niet meegeteld)
-        if beste_paar_ex is not None:
-            return _half_grid((beste_paar_ex[0], beste_paar_ex[1]))
-
-        # Y17 aangevinkt maar geen echt complementair paar aanwezig (zonder pauzevlinders):
-        # zoek een halve-dag-shift die vanaf open_start vertrekt of op open_end eindigt,
-        # waarbij het resterende stuk van de dag minstens 4 uur bedraagt. Die shift wordt
-        # dan gebruikt om een geforceerd (virtueel) complementair paar te bouwen.
-        _halve_dag_kandidaten = []
-        for (s, e), aantal in shifts_zonder_pv.items():
-            if s == open_start and (open_end - e) >= 4:
-                _halve_dag_kandidaten.append((aantal, e))    # m = einde van de shift
-            if e == open_end and (s - open_start) >= 4:
-                _halve_dag_kandidaten.append((aantal, s))    # m = start van de shift
-        if _halve_dag_kandidaten:
-            _, _m_gedwongen = max(_halve_dag_kandidaten, key=lambda x: x[0])
-            return _half_grid(((open_start, _m_gedwongen), (_m_gedwongen, open_end)))
-        # geen geschikte halve-dag-shift gevonden (zonder pauzevlinders) -> val terug op de gewone logica hieronder
-
+    # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften
+    if FORCEER_EXHAUSTIEF and beste_paar is not None:
+        return _half_grid((beste_paar[0], beste_paar[1]))
     if beste_paar:
         eenheden.append((beste_paar[2], "pair", (beste_paar[0], beste_paar[1])))
 
@@ -814,6 +773,36 @@ import math
 
 aantal_pv = len(selected)
 aantal_pauze_uren = len(required_pauze_hours)
+
+def pp2_bepaal_pv_voor_afknip(selected_lijst):
+    """
+    Bepaal welke pauzevlinder afgeknipt wordt:
+    1) degene met het minst aantal attracties (de 'moeilijkste') -- wint
+       altijd als dit uniek is, ongeacht naam.
+    2) bij gelijkstand: als één van de gelijk-staande kandidaten
+       "Vlinder..." heet, wordt die afgeknipt.
+    3) bij gelijkstand zonder "Vlinder"-naam: gewoon de laatste
+       pauzevlinder van de volledige lijst (het oorspronkelijke gedrag).
+    """
+    if not selected_lijst:
+        return None
+
+    min_aantal = min(len(pv.get("attracties", [])) for pv in selected_lijst)
+    kandidaten = [pv for pv in selected_lijst if len(pv.get("attracties", [])) == min_aantal]
+
+    if len(kandidaten) == 1:
+        return kandidaten[0]
+
+    vlinder_kandidaten = [
+        pv for pv in kandidaten
+        if str(pv.get("naam", "")).strip().lower().startswith("vlinder")
+    ]
+    if vlinder_kandidaten:
+        return vlinder_kandidaten[-1]
+
+    return selected_lijst[-1]
+
+
 afgekapte_pv_uren = set()  # nieuw: bijhouden welke uren afgekapt worden
 
 if aantal_pv > 0 and aantal_pauze_uren > 0:
@@ -831,14 +820,24 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
     pauze_kwartieren = 2 * lange_pauzes + korte_pauzes
     open_spots = plaatsen_pauzeplanning - pauze_kwartieren
     min_open_spots_per_pv = 1 if len(open_uren) <= 6 else 3
-    beschikbaar = open_spots - aantal_pv * min_open_spots_per_pv
+    max_open_spots_zonder_korte_pauzes = 2
+
+    _afknip_kandidaat = pp2_bepaal_pv_voor_afknip(selected)
+    marge_totaal = 0
+    for _pv_marge in selected:
+        if _afknip_kandidaat is not None and _pv_marge["naam"] == _afknip_kandidaat["naam"]:
+            marge_totaal += min(max_open_spots_zonder_korte_pauzes, min_open_spots_per_pv)
+        else:
+            marge_totaal += min_open_spots_per_pv
+
+    beschikbaar = open_spots - marge_totaal
     if len(open_uren) <= 6 and beschikbaar >= 3:
         overbodige_uren = 1 + max(0, math.floor((beschikbaar - 3) / 4))
     else:
         overbodige_uren = max(0, math.floor(beschikbaar / 4))
 
     if overbodige_uren > 0:
-        laatste_pv = selected[-1]
+        laatste_pv = pp2_bepaal_pv_voor_afknip(selected)
         pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         uren_te_verschuiven = min(overbodige_uren, len(pv_pauze_uren))
 
@@ -892,7 +891,17 @@ def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
 
     _open_spots = _plaatsen - (2 * _lange + _korte)
     _min_open_spots_per_pv = 1 if len(open_uren) <= 6 else 3
-    _beschikbaar = _open_spots - _aantal_pv * _min_open_spots_per_pv
+    _max_open_spots_zonder_korte_pauzes = 2
+
+    _afknip_kandidaat_herb = pp2_bepaal_pv_voor_afknip(selected)
+    _marge_totaal = 0
+    for _pv_marge in selected:
+        if _afknip_kandidaat_herb is not None and _pv_marge["naam"] == _afknip_kandidaat_herb["naam"]:
+            _marge_totaal += min(_max_open_spots_zonder_korte_pauzes, _min_open_spots_per_pv)
+        else:
+            _marge_totaal += _min_open_spots_per_pv
+
+    _beschikbaar = _open_spots - _marge_totaal
     if len(open_uren) <= 6 and _beschikbaar >= 3:
         _overbodige = 1 + max(0, math.floor((_beschikbaar - 3) / 4))
     else:
@@ -1656,7 +1665,7 @@ def can_use_block_as_swap_target(student, attr, block_hours):
             return False
     return True
 
-def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=False, voorkeur_nieuwe_attractie=False):
+def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=False):
     """
     Probeer één specifiek blok (eerste OF laatste) van student/attr te wisselen.
     Alleen als:
@@ -1668,11 +1677,6 @@ def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=
     - het totaal aantal >4u-problemen niet stijgt (of, als sta_toe_overflow_andere
       True is: enkel als laatste redmiddel, en enkel als het bij de andere
       student opgesplitst blijft i.p.v. een nieuw lang aaneengesloten blok)
-
-    voorkeur_nieuwe_attractie: als True, worden kandidaten die voor BEIDE studenten
-    een attractie opleveren die ze die dag nog niet deden eerst geprobeerd. Andere
-    (niet-ideale) kandidaten blijven nog steeds mogelijk als fallback, enkel later
-    in de volgorde.
     """
     if len(block_hours) not in [2, 3]:
         return False
@@ -1706,16 +1710,6 @@ def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=
             continue
 
         kandidaten.append((andere_student["naam"], attr_b, andere_student))
-
-    if voorkeur_nieuwe_attractie:
-        # ideale kandidaten (nieuwe attractie voor BEIDE studenten die dag) eerst proberen;
-        # de rest blijft achteraan in de lijst staan als fallback
-        def _is_ideaal(kand):
-            _, attr_b, andere_student = kand
-            student_krijgt_nieuwe_attr = attr_b not in student["assigned_attracties"]
-            andere_krijgt_nieuwe_attr = attr not in andere_student["assigned_attracties"]
-            return 0 if (student_krijgt_nieuwe_attr and andere_krijgt_nieuwe_attr) else 1
-        kandidaten.sort(key=_is_ideaal)
 
     for _, attr_b, andere_student in kandidaten:
         orig_switches_b = count_attr_switches(andere_student)
@@ -1929,51 +1923,6 @@ for _ in range(max_block_swap_passes):
 
     if not wijziging:
         break
-
-
-# -----------------------------
-# Post-processing (ENKEL bij FORCEER_EXHAUSTIEF, Instellingen!B2):
-# probeer blokken van EXACT 4 uur aan één stuk ook op te splitsen in 2x 2 uur.
-# Staat het vakje niet aan, dan verandert hier niets.
-# -----------------------------
-if FORCEER_EXHAUSTIEF:
-
-    def try_split_exact_4h_block(student, attr):
-        """
-        Probeert een aaneengesloten blok van EXACT 4 uur op deze attractie op te
-        splitsen door de eerste of laatste 2 uur te wisselen met een andere student.
-        Voorkeur: de wissel geeft zowel 'student' als de wisselpartner een attractie
-        die ze die dag nog niet gedaan hebben (via voorkeur_nieuwe_attractie=True).
-        Lukt dat nergens, dan wordt elke andere geldige 2-uurs-wissel aanvaard --
-        dat is nog steeds beter dan het blok van 4 uur aan één stuk te laten staan.
-        """
-        runs = get_runs_on_attr(student, attr)
-        for run in runs:
-            if len(run) != 4:
-                continue
-            for blok in (run[-2:], run[:2]):
-                if try_swap_specific_block(student, attr, blok, voorkeur_nieuwe_attractie=True):
-                    return True
-        return False
-
-    # Iteratief toepassen tot er niets meer verandert
-    max_4u_split_passes = 15
-    for _ in range(max_4u_split_passes):
-        wijziging_4u = False
-
-        for student in studenten_workend:
-            vier_uur_attracties = [
-                a for a in list(student["assigned_attracties"])
-                if any(len(r) == 4 for r in get_runs_on_attr(student, a))
-            ]
-
-            for attr in vier_uur_attracties:
-                if try_split_exact_4h_block(student, attr):
-                    wijziging_4u = True
-                    break
-
-        if not wijziging_4u:
-            break
 
 
 # -----------------------------
@@ -2201,14 +2150,16 @@ for attr in alle_actieve_attracties:
 # Pauzevlinders
 rij_out += 1
 pauzevlinder_namen_sorted = [pv["naam"] for pv in selected]
+_afgeknipte_pv_voor_weergave = pp2_bepaal_pv_voor_afknip(selected)
+_afgeknipte_pv_naam_weergave = _afgeknipte_pv_voor_weergave["naam"] if _afgeknipte_pv_voor_weergave else None
 
 for pv_idx, pvnaam in enumerate(pauzevlinder_namen_sorted, start=1):
     ws_out.cell(rij_out, 1, f"Pauzevlinder {pv_idx}").font = Font(bold=True)
     ws_out.cell(rij_out, 1).fill = white_fill
     ws_out.cell(rij_out, 1).border = thin_border
     for col_idx, uur in enumerate(sorted(open_uren), start=2):
-        # Laatste PV: toon niet bij de afgekapte uren
-        if pvnaam == selected[-1]["naam"] and uur in afgekapte_pv_uren:
+        # Afgeknipte PV: toon niet bij de afgekapte uren
+        if pvnaam == _afgeknipte_pv_naam_weergave and uur in afgekapte_pv_uren:
             naam = ""
         else:
             naam = pvnaam if uur in required_pauze_hours else ""
@@ -2671,20 +2622,7 @@ def vind_attractie_op_uur(naam, uur):
 ws_pauze_sheet = wb_out["Pauzevlinders"]
 witte_fill = PatternFill(start_color="FFFFFF", fill_type="solid")
 
-# --- VINKJE V3 + TEKST W3 in Aanpassingen ---
-vinkje_aanpassingen = ws_aanpassingen.cell(row=3, column=22).value  # V3
 
-if vinkje_aanpassingen in [1, True, "WAAR", "X"]:
-    waarde = ws_aanpassingen.cell(row=3, column=23).value  # W3 (samengevoegde cel)
-    if waarde:
-        regels = str(waarde).split("\n")
-        for i, regel in enumerate(regels):
-            regel = regel.strip()
-            if regel:
-                cel = ws_pauze_sheet.cell(row=14 + i, column=1, value=regel)
-                cel.fill = witte_fill
-                cel.border = thin_border
-                cel.alignment = Alignment(horizontal="left", vertical="center")
 # -------------------------------------
 
 
@@ -3396,6 +3334,17 @@ def maak_pp2_sheets(wb_arg, am_arg):
     # -----------------------------
     pauze_cols_pp2 = pp2_get_pauze_cols(ws_pp2)
     pv_rows_pp2 = pp2_get_pv_rows(ws_pp2, selected)
+
+    # Welke PV is de afgeknipte (indien van toepassing)? Die krijgt max 2
+    # open spots i.p.v. het normale aandeel, want die dient toch geen
+    # korte pauzes meer na de lange pauzes.
+    pp2_afgeknipte_pv_naam = None
+    if afgekapte_pv_uren:
+        _afknip_pv_obj = pp2_bepaal_pv_voor_afknip(selected)
+        if _afknip_pv_obj is not None:
+            pp2_afgeknipte_pv_naam = _afknip_pv_obj["naam"]
+    pp2_max_open_spots_afgeknipt = 2
+    pp2_open_spots_afgeknipte_teller = 0
     
     # Maak de grid leeg, maar behoud layout
     pp2_clear_pauze_grid(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
@@ -3409,7 +3358,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     pp2_closed_spots = set()  # set van (naam_rij, col)
     
     if afgekapte_pv_uren and selected:
-        laatste_pv = selected[-1]
+        laatste_pv = pp2_bepaal_pv_voor_afknip(selected)
         for pv, naam_rij in pv_rows_pp2:
             if pv["naam"] == laatste_pv["naam"]:
                 for col in pauze_cols_pp2:
@@ -3807,7 +3756,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             gewerkte_uren = werkduur_voor_pauze(naam)
             is_minderjarig = "-18" in str(naam)
     
-            if is_minderjarig and ((gewerkte_uren > 4) if PAUZE_STRIKT_BOVEN_4U else (gewerkte_uren >= 4)):
+            if is_minderjarig and gewerkte_uren >= 4:
                 if naam not in al_toegevoegd:
                     result.append(naam)
                     al_toegevoegd.add(naam)
@@ -3833,16 +3782,11 @@ def maak_pp2_sheets(wb_arg, am_arg):
         is_minderjarig = "-18" in str(naam)
     
         if is_minderjarig:
-            if is_minderjarig:
-                if PAUZE_STRIKT_BOVEN_4U:
-                    if gewerkte_uren <= 4:
-                        return 0
-                else:
-                    if gewerkte_uren < 4:
-                        return 0
-                if gewerkte_uren > 6:
-                    return 2
-                return 1
+            if gewerkte_uren < 4:
+                return 0
+            if gewerkte_uren > 6:
+                return 2
+            return 1
     
         if gewerkte_uren > 6:
             return 1
@@ -4409,6 +4353,39 @@ def maak_pp2_sheets(wb_arg, am_arg):
             lange_werkers_random=pp2_lange_werkers_random
         )
 
+    # Fallback: pauzevlinders wiens eigen rij (deels) afgeknipt is, en die
+    # dus geen lange pauze op hun eigen rij konden krijgen, alsnog een
+    # lange pauze geven bij een ANDERE pauzevlinder -- net als een gewone
+    # lange werker. Ze houden nog steeds recht op hun pauze.
+    for pv, pv_name_row in pv_rows_pp2:
+        naam = pv["naam"]
+        if naam not in pp2_lange_werkers_random:
+            continue
+        if naam in pp2_lange_pauze_ontvangers:
+            continue
+
+        gevonden = pp2_find_first_valid_long_block_any_row(
+            naam=naam, ws_sheet=ws_pp2, pv_rows=pv_rows_pp2, pauze_cols=pauze_cols_pp2
+        )
+        if gevonden is None:
+            pp2_niet_geplaatst.append({
+                "naam": naam,
+                "reden": "pauzevlinder (eigen rij afgeknipt): geen lange pauze gevonden bij een andere PV"
+            })
+            continue
+
+        _fallback_pv_row, col1, col2, conflict = gevonden
+        pp2_write_long_break(
+            ws_sheet=ws_pp2,
+            pv_row=_fallback_pv_row,
+            col1=col1,
+            col2=col2,
+            naam=naam,
+            leave_top_blank=False,
+            conflict=conflict
+        )
+        pp2_lange_pauze_ontvangers.add(naam)
+
     # ---- Harde 60%-afkapregel voor de NORMALE lange pauzes ----
     # Geen enkele normale lange pauze mag nog starten op of na 60% van de
     # pauzevlinderuren. Rijen waar minderjarigen al hun eerste halfuur
@@ -4679,17 +4656,12 @@ def maak_pp2_sheets(wb_arg, am_arg):
                         return 0
     
                 # Iedereen die echt >= 4u werkt krijgt een korte pauze
-                # (bij PAUZE_STRIKT_BOVEN_4U aangevinkt: pas vanaf MEER dan 4u)
-                if (echte_duur > 4) if PAUZE_STRIKT_BOVEN_4U else (echte_duur >= 4):
+                if echte_duur >= 4:
                     return 1
     
         # Fallback naar bestaande logica
-        if PAUZE_STRIKT_BOVEN_4U:
-            if werkduur_voor_pauze(naam) <= 4:
-                return 0
-        else:
-            if werkduur_voor_pauze(naam) < 4:
-                return 0
+        if werkduur_voor_pauze(naam) < 4:
+            return 0
         return 1
     
     
@@ -4892,6 +4864,38 @@ def maak_pp2_sheets(wb_arg, am_arg):
         cel.alignment = center_align
         cel.border = thin_border
         cel.fill = conflict_fill if conflict else lichtpaars_fill
+
+
+    def pp2_write_short_break_regular(ws_sheet, pv_row, col, naam, conflict=False):
+        """
+        Korte pauze voor gewone student:
+        - bovenliggende cel = attractie (rood bij conflict)
+        - naamcel:
+            * rood bij conflict (niet-gekwalificeerde PV)
+            * lichtgeel voor minderjarigen die >4u werken
+            * lichtpaars voor alle andere korte pauzes
+        """
+        header = ws_sheet.cell(1, col).value
+        uur = parse_header_uur(header)
+
+        attr = vind_attractie_op_uur(naam, uur) if uur is not None else None
+
+        top_cel = ws_sheet.cell(pv_row - 1, col)
+        top_cel.value = attr if attr else ""
+        top_cel.alignment = center_align
+        top_cel.border = thin_border
+        top_cel.fill = conflict_fill if conflict else PatternFill(fill_type=None)
+
+        cel = ws_sheet.cell(pv_row, col)
+        cel.value = naam
+        cel.alignment = center_align
+        cel.border = thin_border
+
+        if conflict:
+            cel.fill = conflict_fill
+        else:
+            cel.fill = lichtpaars_fill
+            
     
     
     def pp2_find_short_break_cols_for_pv(naam, pv_row, ws_sheet, pauze_cols, open_spots_set, needed_quarters):
@@ -4989,18 +4993,35 @@ def maak_pp2_sheets(wb_arg, am_arg):
             open_spots_set=pp2_open_spots,
             needed_quarters=resterend_nodig
         )
-    
-        if not gekozen_cols:
+
+        if gekozen_cols:
+            for col in gekozen_cols:
+                pp2_write_short_break_for_pv(ws_pp2, pv_row, col, naam)
+
+            pp2_pv_short_breaks_placed.append({
+                "naam": naam,
+                "pv_row": pv_row,
+                "kolommen": gekozen_cols,
+                "tijden": [ws_pp2.cell(1, col).value for col in gekozen_cols]
+            })
             continue
-    
-        for col in gekozen_cols:
-            pp2_write_short_break_for_pv(ws_pp2, pv_row, col, naam)
-    
-        pp2_pv_short_breaks_placed.append({
-            "naam": naam,
-            "kolommen": gekozen_cols,
-            "tijden": [ws_pp2.cell(1, col).value for col in gekozen_cols]
-        })
+
+        # Eigen rij lukt niet -> val terug op een andere pauzevlinder,
+        # net als bij lange pauzevlinders.
+        if resterend_nodig == 1:
+            _opties = pp2_verzamel_opties_alle_pvs_kort(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots)
+            for _start_min, _schaarste, _ander_pv, _ander_pv_row, _col in _opties:
+                _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
+                _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
+                if pp2_pv_kan_overname(_ander_pv, _attrs):
+                    pp2_write_short_break_regular(ws_sheet=ws_pp2, pv_row=_ander_pv_row, col=_col, naam=naam)
+                    pp2_pv_short_breaks_placed.append({
+                        "naam": naam,
+                        "pv_row": _ander_pv_row,
+                        "kolommen": [_col],
+                        "tijden": [ws_pp2.cell(1, _col).value]
+                    })
+                    break
     
     # -----------------------------
     # 2) Tellen hoeveel kwartierblokjes nog leeg zijn
@@ -5060,11 +5081,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         # Reset eerst eventuele eerder geplaatste korte pauzes van pauzevlinders
         for item in pp2_pv_short_breaks_placed:
             naam = item["naam"]
-    
-            pv_row = next(
-                pv_row for pv, pv_row in pv_rows_pp2
-                if pv["naam"] == naam
-            )
+            pv_row = item["pv_row"]
     
             for col in item["kolommen"]:
                 top_cel = ws_pp2.cell(pv_row - 1, col)
@@ -5092,6 +5109,13 @@ def maak_pp2_sheets(wb_arg, am_arg):
             for _pv, pv_row in pv_rows_pp2:
                 if len(pp2_open_spots) >= pp2_open_spots_count:
                     break
+
+                if (
+                    pp2_afgeknipte_pv_naam is not None
+                    and _pv["naam"] == pp2_afgeknipte_pv_naam
+                    and pp2_open_spots_afgeknipte_teller >= pp2_max_open_spots_afgeknipt
+                ):
+                    continue
     
                 lege_cols = pp2_get_empty_cols_for_pv_row(
                     ws_sheet=ws_pp2,
@@ -5107,6 +5131,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
                 pp2_open_spots.add((pv_row, gekozen_col))
                 pp2_mark_open_spot(ws_pp2, pv_row, gekozen_col)
+                if pp2_afgeknipte_pv_naam is not None and _pv["naam"] == pp2_afgeknipte_pv_naam:
+                    pp2_open_spots_afgeknipte_teller += 1
                 iets_geplaatst_deze_ronde = True
     
             if not iets_geplaatst_deze_ronde:
@@ -5144,25 +5170,41 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 open_spots_set=pp2_open_spots,
                 needed_quarters=resterend_nodig
             )
-    
-            if not gekozen_cols:
+
+            if gekozen_cols:
+                for col in gekozen_cols:
+                    pp2_write_short_break_for_pv(
+                        ws_sheet=ws_pp2,
+                        pv_row=pv_row,
+                        col=col,
+                        naam=naam
+                    )
+
+                pp2_pv_short_breaks_placed.append({
+                    "naam": naam,
+                    "pv_row": pv_row,
+                    "kolommen": gekozen_cols,
+                    "tijden": [
+                        ws_pp2.cell(1, col).value for col in gekozen_cols
+                    ]
+                })
                 continue
-    
-            for col in gekozen_cols:
-                pp2_write_short_break_for_pv(
-                    ws_sheet=ws_pp2,
-                    pv_row=pv_row,
-                    col=col,
-                    naam=naam
-                )
-    
-            pp2_pv_short_breaks_placed.append({
-                "naam": naam,
-                "kolommen": gekozen_cols,
-                "tijden": [
-                    ws_pp2.cell(1, col).value for col in gekozen_cols
-                ]
-            })
+
+            # Eigen rij lukt niet -> val terug op een andere pauzevlinder.
+            if resterend_nodig == 1:
+                _opties = pp2_verzamel_opties_alle_pvs_kort(naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots)
+                for _start_min, _schaarste, _ander_pv, _ander_pv_row, _col in _opties:
+                    _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
+                    _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
+                    if pp2_pv_kan_overname(_ander_pv, _attrs):
+                        pp2_write_short_break_regular(ws_sheet=ws_pp2, pv_row=_ander_pv_row, col=_col, naam=naam)
+                        pp2_pv_short_breaks_placed.append({
+                            "naam": naam,
+                            "pv_row": _ander_pv_row,
+                            "kolommen": [_col],
+                            "tijden": [ws_pp2.cell(1, _col).value]
+                        })
+                        break
     
     
     # ---------------------------------------------------
@@ -5181,6 +5223,14 @@ def maak_pp2_sheets(wb_arg, am_arg):
             for _pv, pv_row in pv_rows_pp2:
                 if len(pp2_open_spots) >= pp2_open_spots_count:
                     break
+
+                if (
+                    pp2_afgeknipte_pv_naam is not None
+                    and _pv["naam"] == pp2_afgeknipte_pv_naam
+                    and pp2_open_spots_afgeknipte_teller >= pp2_max_open_spots_afgeknipt
+                ):
+                    continue
+
                 lege_cols = pp2_get_empty_cols_for_pv_row(
                     ws_sheet=ws_pp2,
                     pv_row=pv_row,
@@ -5193,6 +5243,8 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 gekozen_col = lege_cols[-1]
                 pp2_open_spots.add((pv_row, gekozen_col))
                 pp2_mark_open_spot(ws_pp2, pv_row, gekozen_col)
+                if pp2_afgeknipte_pv_naam is not None and _pv["naam"] == pp2_afgeknipte_pv_naam:
+                    pp2_open_spots_afgeknipte_teller += 1
                 iets_geplaatst_deze_ronde = True
             if not iets_geplaatst_deze_ronde:
                 break
@@ -5245,36 +5297,6 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
         return result
     
-    
-    def pp2_write_short_break_regular(ws_sheet, pv_row, col, naam, conflict=False):
-        """
-        Korte pauze voor gewone student:
-        - bovenliggende cel = attractie (rood bij conflict)
-        - naamcel:
-            * rood bij conflict (niet-gekwalificeerde PV)
-            * lichtgeel voor minderjarigen die >4u werken
-            * lichtpaars voor alle andere korte pauzes
-        """
-        header = ws_sheet.cell(1, col).value
-        uur = parse_header_uur(header)
-
-        attr = vind_attractie_op_uur(naam, uur) if uur is not None else None
-
-        top_cel = ws_sheet.cell(pv_row - 1, col)
-        top_cel.value = attr if attr else ""
-        top_cel.alignment = center_align
-        top_cel.border = thin_border
-        top_cel.fill = conflict_fill if conflict else PatternFill(fill_type=None)
-
-        cel = ws_sheet.cell(pv_row, col)
-        cel.value = naam
-        cel.alignment = center_align
-        cel.border = thin_border
-
-        if conflict:
-            cel.fill = conflict_fill
-        else:
-            cel.fill = lichtpaars_fill
     
     
     def pp2_get_long_break_owners_on_row(ws_sheet, pv_row, pauze_cols):
@@ -5467,20 +5489,12 @@ def maak_pp2_sheets(wb_arg, am_arg):
         is_minor = pp2_is_minderjarig(naam)
     
         if is_minor:
-            if PAUZE_STRIKT_BOVEN_4U:
-                if gewerkte_uren <= 4:
-                    nodig = 0
-                elif gewerkte_uren <= 6:
-                    nodig = 1
-                else:
-                    nodig = 2
+            if gewerkte_uren < 4:
+                nodig = 0
+            elif gewerkte_uren <= 6:
+                nodig = 1
             else:
-                if gewerkte_uren < 4:
-                    nodig = 0
-                elif gewerkte_uren <= 6:
-                    nodig = 1
-                else:
-                    nodig = 2
+                nodig = 2
         else:
             nodig = 1 if gewerkte_uren > 6 else 0
     
@@ -5906,22 +5920,45 @@ def maak_pp2_sheets(wb_arg, am_arg):
             pauze_cols=pauze_cols_pp2,
             open_spots_set=pp2_open_spots
         )
-    
-        if not gekozen_cols:
+
+        if gekozen_cols:
+            for col in gekozen_cols:
+                pp2_write_short_break_for_pv(
+                    ws_sheet=ws_pp2,
+                    pv_row=pv_row,
+                    col=col,
+                    naam=naam
+                )
+
+            pp2_lange_pv_short_breaks_placed.append({
+                "naam": naam,
+                "tijden": [ws_pp2.cell(1, col).value for col in gekozen_cols]
+            })
             continue
-    
-        for col in gekozen_cols:
-            pp2_write_short_break_for_pv(
-                ws_sheet=ws_pp2,
-                pv_row=pv_row,
-                col=col,
-                naam=naam
-            )
-    
-        pp2_lange_pv_short_breaks_placed.append({
-            "naam": naam,
-            "tijden": [ws_pp2.cell(1, col).value for col in gekozen_cols]
-        })
+
+        # Eigen rij lukt niet (bv. (deels) afgeknipt) -> val terug op een
+        # andere pauzevlinder, net als een gewone lange werker.
+        _opties_fallback = pp2_verzamel_opties_alle_pvs_kort(
+            naam, ws_pp2, pv_rows_pp2, pauze_cols_pp2, pp2_open_spots
+        )
+        _geplaatst_fallback = False
+        for _start_min, _schaarste, _ander_pv, _ander_pv_row, _col in _opties_fallback:
+            _venster = pp2_tijdvenster_pauze([_col], ws_pp2)
+            _attrs = pp2_attracties_in_venster(naam, *_venster) if _venster else set()
+            if pp2_pv_kan_overname(_ander_pv, _attrs):
+                pp2_write_short_break_regular(ws_sheet=ws_pp2, pv_row=_ander_pv_row, col=_col, naam=naam)
+                pp2_lange_pv_short_breaks_placed.append({
+                    "naam": naam,
+                    "tijden": [ws_pp2.cell(1, _col).value]
+                })
+                _geplaatst_fallback = True
+                break
+
+        if not _geplaatst_fallback:
+            pp2_niet_geplaatst.append({
+                "naam": naam,
+                "reden": "pauzevlinder (eigen rij afgeknipt): geen kort kwartier gevonden bij een andere PV"
+            })
     
     
     # STAP 5 55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555
@@ -6472,9 +6509,56 @@ def maak_pp2_sheets(wb_arg, am_arg):
             row_fb2 += 1
     
         row_fb2 += 1
-    
-    pp2_rode_pauze_redenen = pp2_verzamel_rode_pauze_redenen(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
 
+    # -----------------------------------
+    # Korte samenvatting + Aanpassingen-info, op de Pauzeplanning-sheet
+    # zelf, onder de laatste pauzevlinderrij.
+    # -----------------------------------
+    if pv_rows_pp2:
+        _laatste_pv_naam_rij = max(row for _, row in pv_rows_pp2)
+
+        _samenvatting_lijnen = []
+        if pp2_lange_pauze_ontbreekt:
+            _namen_lang = sorted(pp2_lange_pauze_ontbreekt)
+            _samenvatting_lijnen.append(
+                f"{', '.join(_namen_lang)} kregen geen lange pauze"
+                if len(_namen_lang) > 1
+                else f"{_namen_lang[0]} kreeg geen lange pauze"
+            )
+        if pp2_korte_kwartieren_ontbreekt:
+            _namen_kort = sorted(n for n, _ in pp2_korte_kwartieren_ontbreekt)
+            _samenvatting_lijnen.append(
+                f"{', '.join(_namen_kort)} kregen geen korte pauze"
+                if len(_namen_kort) > 1
+                else f"{_namen_kort[0]} kreeg geen korte pauze"
+            )
+
+        _start_rij_samenvatting = _laatste_pv_naam_rij + 2
+        for i, _lijn in enumerate(_samenvatting_lijnen):
+            _cel = ws_pp2.cell(row=_start_rij_samenvatting + i, column=1, value=_lijn)
+            _cel.font = Font(bold=True)
+            _cel.border = thin_border
+            _cel.alignment = Alignment(horizontal="left", vertical="center")
+
+        if _samenvatting_lijnen:
+            _start_rij_aanpassingen = _start_rij_samenvatting + len(_samenvatting_lijnen) + 1
+        else:
+            _start_rij_aanpassingen = _laatste_pv_naam_rij + 3
+
+        _vinkje_aanpassingen_lokaal = ws_aanpassingen.cell(row=3, column=22).value  # V3
+        if _vinkje_aanpassingen_lokaal in [1, True, "WAAR", "X"]:
+            _waarde_aanpassingen = ws_aanpassingen.cell(row=3, column=23).value  # W3
+            if _waarde_aanpassingen:
+                for i, _regel in enumerate(str(_waarde_aanpassingen).split("\n")):
+                    _regel = _regel.strip()
+                    if _regel:
+                        _cel = ws_pp2.cell(row=_start_rij_aanpassingen + i, column=1, value=_regel)
+                        _cel.fill = witte_fill
+                        _cel.border = thin_border
+                        _cel.alignment = Alignment(horizontal="left", vertical="center")
+
+    pp2_rode_pauze_redenen = pp2_verzamel_rode_pauze_redenen(ws_pp2, pv_rows_pp2, pauze_cols_pp2)
+    
     if pp2_rode_pauze_redenen:
         _titel_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
         _kader_fill = PatternFill(start_color="FFF2F2", end_color="FFF2F2", fill_type="solid")
@@ -7478,9 +7562,9 @@ def lm5_bereken_pauze_counts(absentees_set, base_maps):
         is_minor = "-18" in str(naam)
         if n > 6:
             lange_pauzes += 1
-        if is_minor and ((n > 4) if PAUZE_STRIKT_BOVEN_4U else (n >= 4)):
+        if is_minor and n >= 4:
             lange_pauzes += 1
-        if (n > 4) if PAUZE_STRIKT_BOVEN_4U else (n >= 4):
+        if n >= 4:
             korte_pauzes += 1
 
     return lange_pauzes, korte_pauzes
@@ -8545,7 +8629,8 @@ def lm5_vrijgeven_afgekapte_pv_uren(ctx, start_uur):
     if not geschikte_uren:
         return
 
-    laatste_pv_naam = str(selected[-1]["naam"]).strip()
+    _afknip_pv = pp2_bepaal_pv_voor_afknip(selected)
+    laatste_pv_naam = str(_afknip_pv["naam"]).strip() if _afknip_pv else ""
     # Bepaal de effectieve persoon (zelf of vervanger)
     effectief_naam = ctx["pv_replacements"].get(laatste_pv_naam, laatste_pv_naam)
 
