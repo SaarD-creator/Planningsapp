@@ -883,10 +883,10 @@ if aantal_pv > 0 and aantal_pauze_uren > 0:
                 marge_totaal += min_open_spots_per_pv
 
         beschikbaar = open_spots - marge_totaal
-        if len(open_uren) <= 6 and beschikbaar >= 3:
+        if beschikbaar >= 3:
             overbodige_uren = 1 + max(0, math.floor((beschikbaar - 3) / 4))
         else:
-            overbodige_uren = max(0, math.floor(beschikbaar / 4))
+            overbodige_uren = 0
 
         pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         uren_te_verschuiven = min(overbodige_uren, len(pv_pauze_uren))
@@ -965,10 +965,10 @@ def herbereken_afgekapte_pv_uren(absentees_set=None, base_maps=None):
                 _marge_totaal += _min_open_spots_per_pv
 
         _beschikbaar = _open_spots - _marge_totaal
-        if len(open_uren) <= 6 and _beschikbaar >= 3:
+        if _beschikbaar >= 3:
             _overbodige = 1 + max(0, math.floor((_beschikbaar - 3) / 4))
         else:
-            _overbodige = max(0, math.floor(_beschikbaar / 4))
+            _overbodige = 0
 
         _pv_pauze_uren = sorted(required_pauze_hours, reverse=True)
         _uren_te_verschuiven = min(_overbodige, len(_pv_pauze_uren))
