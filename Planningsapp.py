@@ -67,6 +67,12 @@ _vinkje_y17 = ws_instellingen.cell(row=2, column=2).value   # B2
 FORCEER_EXHAUSTIEF = _vinkje_y17 in [1, True, "WAAR", "X"]
 # ------------------------------------------------------------------------
 
+# --- VINKJE B3 (Instellingen): pauze pas vanaf MEER dan 4 uur werk (i.p.v. vanaf 4 uur) ---
+_vinkje_b3 = ws_instellingen.cell(row=3, column=2).value   # B3
+PAUZE_STRIKT_BOVEN_4U = _vinkje_b3 in [1, True, "WAAR", "X"]
+# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------
+
 # -----------------------------
 # Datum op basis van W4 in Input_
 # -----------------------------
@@ -185,6 +191,15 @@ def compute_ideal_moments():
         for run in contiguous_runs(uren):
             shifts[(run[0], run[-1] + 1)] += 1   # (start, eind-marker)
 
+    # Aparte shiften-telling ZONDER pauzevlinders, uitsluitend voor de "forceer exhaustief"-berekening
+    shifts_zonder_pv = defaultdict(int)
+    for s in studenten_workend:
+        if s.get("is_pauzevlinder"):
+            continue
+        uren = sorted(u for u in s["uren_beschikbaar"] if u in open_uren)
+        for run in contiguous_runs(uren):
+            shifts_zonder_pv[(run[0], run[-1] + 1)] += 1
+
     if not shifts:
         return set()
 
@@ -287,9 +302,36 @@ def compute_ideal_moments():
     ]
     beste_paar = max(paren, key=lambda p: p[2]) if paren else None
 
-    # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften
-    if FORCEER_EXHAUSTIEF and beste_paar is not None:
-        return _half_grid((beste_paar[0], beste_paar[1]))
+    # --- Alles hieronder ENKEL voor FORCEER_EXHAUSTIEF: zelfde berekening, maar met de
+    #     pauzevlinders volledig uit de shiften-telling gehaald (shifts_zonder_pv). ---
+    if FORCEER_EXHAUSTIEF:
+        _m_kandidaten_ex = ({e for (s, e) in shifts_zonder_pv if s == open_start}
+                             & {s for (s, e) in shifts_zonder_pv if e == open_end})
+        paren_ex = [
+            ((open_start, m), (m, open_end), shifts_zonder_pv[(open_start, m)] + shifts_zonder_pv[(m, open_end)])
+            for m in _m_kandidaten_ex
+        ]
+        beste_paar_ex = max(paren_ex, key=lambda p: p[2]) if paren_ex else None
+
+        # Y17 aangevinkt -> altijd volgens de perfect exhaustieve shiften (pauzevlinders niet meegeteld)
+        if beste_paar_ex is not None:
+            return _half_grid((beste_paar_ex[0], beste_paar_ex[1]))
+
+        # Y17 aangevinkt maar geen echt complementair paar aanwezig (zonder pauzevlinders):
+        # zoek een halve-dag-shift die vanaf open_start vertrekt of op open_end eindigt,
+        # waarbij het resterende stuk van de dag minstens 4 uur bedraagt. Die shift wordt
+        # dan gebruikt om een geforceerd (virtueel) complementair paar te bouwen.
+        _halve_dag_kandidaten = []
+        for (s, e), aantal in shifts_zonder_pv.items():
+            if s == open_start and (open_end - e) >= 4:
+                _halve_dag_kandidaten.append((aantal, e))    # m = einde van de shift
+            if e == open_end and (s - open_start) >= 4:
+                _halve_dag_kandidaten.append((aantal, s))    # m = start van de shift
+        if _halve_dag_kandidaten:
+            _, _m_gedwongen = max(_halve_dag_kandidaten, key=lambda x: x[0])
+            return _half_grid(((open_start, _m_gedwongen), (_m_gedwongen, open_end)))
+        # geen geschikte halve-dag-shift gevonden (zonder pauzevlinders) -> val terug op de gewone logica hieronder
+
     if beste_paar:
         eenheden.append((beste_paar[2], "pair", (beste_paar[0], beste_paar[1])))
 
@@ -1665,7 +1707,7 @@ def can_use_block_as_swap_target(student, attr, block_hours):
             return False
     return True
 
-def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=False):
+def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=False, voorkeur_nieuwe_attractie=False):
     """
     Probeer één specifiek blok (eerste OF laatste) van student/attr te wisselen.
     Alleen als:
@@ -1677,6 +1719,11 @@ def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=
     - het totaal aantal >4u-problemen niet stijgt (of, als sta_toe_overflow_andere
       True is: enkel als laatste redmiddel, en enkel als het bij de andere
       student opgesplitst blijft i.p.v. een nieuw lang aaneengesloten blok)
+
+    voorkeur_nieuwe_attractie: als True, worden kandidaten die voor BEIDE studenten
+    een attractie opleveren die ze die dag nog niet deden eerst geprobeerd. Andere
+    (niet-ideale) kandidaten blijven nog steeds mogelijk als fallback, enkel later
+    in de volgorde.
     """
     if len(block_hours) not in [2, 3]:
         return False
@@ -1710,6 +1757,16 @@ def try_swap_specific_block(student, attr, block_hours, sta_toe_overflow_andere=
             continue
 
         kandidaten.append((andere_student["naam"], attr_b, andere_student))
+
+    if voorkeur_nieuwe_attractie:
+        # ideale kandidaten (nieuwe attractie voor BEIDE studenten die dag) eerst proberen;
+        # de rest blijft achteraan in de lijst staan als fallback
+        def _is_ideaal(kand):
+            _, attr_b, andere_student = kand
+            student_krijgt_nieuwe_attr = attr_b not in student["assigned_attracties"]
+            andere_krijgt_nieuwe_attr = attr not in andere_student["assigned_attracties"]
+            return 0 if (student_krijgt_nieuwe_attr and andere_krijgt_nieuwe_attr) else 1
+        kandidaten.sort(key=_is_ideaal)
 
     for _, attr_b, andere_student in kandidaten:
         orig_switches_b = count_attr_switches(andere_student)
@@ -1923,6 +1980,51 @@ for _ in range(max_block_swap_passes):
 
     if not wijziging:
         break
+
+
+# -----------------------------
+# Post-processing (ENKEL bij FORCEER_EXHAUSTIEF, Instellingen!B2):
+# probeer blokken van EXACT 4 uur aan één stuk ook op te splitsen in 2x 2 uur.
+# Staat het vakje niet aan, dan verandert hier niets.
+# -----------------------------
+if FORCEER_EXHAUSTIEF:
+
+    def try_split_exact_4h_block(student, attr):
+        """
+        Probeert een aaneengesloten blok van EXACT 4 uur op deze attractie op te
+        splitsen door de eerste of laatste 2 uur te wisselen met een andere student.
+        Voorkeur: de wissel geeft zowel 'student' als de wisselpartner een attractie
+        die ze die dag nog niet gedaan hebben (via voorkeur_nieuwe_attractie=True).
+        Lukt dat nergens, dan wordt elke andere geldige 2-uurs-wissel aanvaard --
+        dat is nog steeds beter dan het blok van 4 uur aan één stuk te laten staan.
+        """
+        runs = get_runs_on_attr(student, attr)
+        for run in runs:
+            if len(run) != 4:
+                continue
+            for blok in (run[-2:], run[:2]):
+                if try_swap_specific_block(student, attr, blok, voorkeur_nieuwe_attractie=True):
+                    return True
+        return False
+
+    # Iteratief toepassen tot er niets meer verandert
+    max_4u_split_passes = 15
+    for _ in range(max_4u_split_passes):
+        wijziging_4u = False
+
+        for student in studenten_workend:
+            vier_uur_attracties = [
+                a for a in list(student["assigned_attracties"])
+                if any(len(r) == 4 for r in get_runs_on_attr(student, a))
+            ]
+
+            for attr in vier_uur_attracties:
+                if try_split_exact_4h_block(student, attr):
+                    wijziging_4u = True
+                    break
+
+        if not wijziging_4u:
+            break
 
 
 # -----------------------------
@@ -3756,7 +3858,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             gewerkte_uren = werkduur_voor_pauze(naam)
             is_minderjarig = "-18" in str(naam)
     
-            if is_minderjarig and gewerkte_uren >= 4:
+            if is_minderjarig and ((gewerkte_uren > 4) if PAUZE_STRIKT_BOVEN_4U else (gewerkte_uren >= 4)):
                 if naam not in al_toegevoegd:
                     result.append(naam)
                     al_toegevoegd.add(naam)
@@ -3782,8 +3884,12 @@ def maak_pp2_sheets(wb_arg, am_arg):
         is_minderjarig = "-18" in str(naam)
     
         if is_minderjarig:
-            if gewerkte_uren < 4:
-                return 0
+            if PAUZE_STRIKT_BOVEN_4U:
+                if gewerkte_uren <= 4:
+                    return 0
+            else:
+                if gewerkte_uren < 4:
+                    return 0
             if gewerkte_uren > 6:
                 return 2
             return 1
@@ -4656,12 +4762,17 @@ def maak_pp2_sheets(wb_arg, am_arg):
                         return 0
     
                 # Iedereen die echt >= 4u werkt krijgt een korte pauze
-                if echte_duur >= 4:
+                # (bij PAUZE_STRIKT_BOVEN_4U aangevinkt: pas vanaf MEER dan 4u)
+                if (echte_duur > 4) if PAUZE_STRIKT_BOVEN_4U else (echte_duur >= 4):
                     return 1
     
         # Fallback naar bestaande logica
-        if werkduur_voor_pauze(naam) < 4:
-            return 0
+        if PAUZE_STRIKT_BOVEN_4U:
+            if werkduur_voor_pauze(naam) <= 4:
+                return 0
+        else:
+            if werkduur_voor_pauze(naam) < 4:
+                return 0
         return 1
     
     
@@ -5489,12 +5600,20 @@ def maak_pp2_sheets(wb_arg, am_arg):
         is_minor = pp2_is_minderjarig(naam)
     
         if is_minor:
-            if gewerkte_uren < 4:
-                nodig = 0
-            elif gewerkte_uren <= 6:
-                nodig = 1
+            if PAUZE_STRIKT_BOVEN_4U:
+                if gewerkte_uren <= 4:
+                    nodig = 0
+                elif gewerkte_uren <= 6:
+                    nodig = 1
+                else:
+                    nodig = 2
             else:
-                nodig = 2
+                if gewerkte_uren < 4:
+                    nodig = 0
+                elif gewerkte_uren <= 6:
+                    nodig = 1
+                else:
+                    nodig = 2
         else:
             nodig = 1 if gewerkte_uren > 6 else 0
     
@@ -7562,9 +7681,9 @@ def lm5_bereken_pauze_counts(absentees_set, base_maps):
         is_minor = "-18" in str(naam)
         if n > 6:
             lange_pauzes += 1
-        if is_minor and n >= 4:
+        if is_minor and ((n > 4) if PAUZE_STRIKT_BOVEN_4U else (n >= 4)):
             lange_pauzes += 1
-        if n >= 4:
+        if (n > 4) if PAUZE_STRIKT_BOVEN_4U else (n >= 4):
             korte_pauzes += 1
 
     return lange_pauzes, korte_pauzes
