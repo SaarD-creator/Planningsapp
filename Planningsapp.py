@@ -80,9 +80,12 @@ PAUZE_STRIKT_BOVEN_4U = _vinkje_b3 in [1, True, "WAAR", "X"]
 # -----------------------------
 _vandaag_datum = datetime.date.today()
 _morgen_datum = _vandaag_datum + datetime.timedelta(days=1)
+_overmorgen_datum = _vandaag_datum + datetime.timedelta(days=2)
 _w4 = str(ws_speciaal.cell(4, 23).value or "").strip().lower()
 if _w4 == "morgen":
     vandaag = _morgen_datum.strftime("%d-%m-%Y")
+elif _w4 == "overmorgen":
+    vandaag = _overmorgen_datum.strftime("%d-%m-%Y")
 else:
     vandaag = _vandaag_datum.strftime("%d-%m-%Y")
 vandaag_altijd_vandaag = _vandaag_datum.strftime("%d-%m-%Y")  # altijd vandaag, voor last-minute
