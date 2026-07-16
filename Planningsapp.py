@@ -90,6 +90,9 @@ else:
     vandaag = _vandaag_datum.strftime("%d-%m-%Y")
 vandaag_altijd_vandaag = _vandaag_datum.strftime("%d-%m-%Y")  # altijd vandaag, voor last-minute
 
+_w5 = str(ws_speciaal.cell(5, 23).value or "").strip().lower()
+RUSTIG_MODUS = (_w5 == "rustig")
+
 
 def parse_uur_waarde(val):
     """
@@ -651,7 +654,8 @@ for rij in range(3, 21):  # E3:F20 in Aanpassingen
             aantal = int(ws_aanpassingen.cell(rij, 6).value)  # kolom F
         except:
             aantal = 0
-        aantallen_raw[naam] = max(0, min(2, aantal))
+        max_toegestaan = 1 if RUSTIG_MODUS else 2
+        aantallen_raw[naam] = max(0, min(max_toegestaan, aantal))
         if aantallen_raw[naam] >= 1:
             attracties_te_plannen.append(naam)
 
