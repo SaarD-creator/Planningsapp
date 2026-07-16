@@ -1,3 +1,5 @@
+# fix open spots maar verdere testen nodig!
+# toevoegingen Antwerpen compleet
 # overall verbetering pauzeplanning
 # pauzevlindercheck is toegevoegd maar weinig getest
 # oplossing voor Antwerpen met introductie vinkje
@@ -4311,23 +4313,32 @@ def maak_pp2_sheets(wb_arg, am_arg):
     pp2_speciale_teller = 0
     for s in studenten:
         naam = s["naam"]
-        if naam in pauzevlinder_namen_set:
-            continue
         groep = pp2_speciale_groep(naam)
         if groep is None:
             continue
+
+        _is_pv = naam in pauzevlinder_namen_set
+        _eigen_rij_speciaal = None
+        if _is_pv:
+            _eigen_rij_speciaal = next((r for p, r in pv_rows_pp2 if p["naam"] == naam), None)
 
         theo_uren = pp2_get_student_work_hours(naam)
         eerste_uur = theo_uren[0] if theo_uren else None
         laatste_uur = theo_uren[-1] if theo_uren else None
 
         if groep == 1:
-            # Alleen lange pauze, verplicht tussen 12u en 14u
+            # Alleen lange pauze, verplicht tussen 12u en 14u.
+            # Pauzevlinders proberen EERST hun eigen rij, anders elke rij.
+            _pv_volgorde_g1 = (
+                [(p, r) for p, r in pv_rows_pp2 if r == _eigen_rij_speciaal]
+                + [(p, r) for p, r in pv_rows_pp2 if r != _eigen_rij_speciaal]
+                if _eigen_rij_speciaal is not None else pv_rows_pp2
+            )
             geplaatst = False
             for col1, col2 in pp2_halfuur_blokken(pauze_cols_pp2, ws_pp2):
                 if geplaatst:
                     break
-                for _pv, pv_name_row in pv_rows_pp2:
+                for _pv, pv_name_row in _pv_volgorde_g1:
                     if not pp2_is_beschikbaar(ws_pp2, pv_name_row, col1):
                         continue
                     if not pp2_is_beschikbaar(ws_pp2, pv_name_row, col2):
@@ -4337,7 +4348,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
                     pp2_write_long_break(
                         ws_sheet=ws_pp2, pv_row=pv_name_row,
                         col1=col1, col2=col2,
-                        naam=naam, leave_top_blank=False
+                        naam=naam, leave_top_blank=(pv_name_row == _eigen_rij_speciaal)
                     )
                     pp2_lange_pauze_ontvangers.add(naam)
                     geplaatst = True
@@ -4349,9 +4360,13 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 })
 
         elif groep == 2:
-            # Lange pauze tussen 12u-14u + korte pauze zo ver mogelijk van de lange pauze
-            pv_index = pp2_speciale_teller % len(pv_rows_pp2) if pv_rows_pp2 else 0
-            _pv_g2, pv_name_row = pv_rows_pp2[pv_index] if pv_rows_pp2 else (None, None)
+            # Lange pauze tussen 12u-14u + korte pauze zo ver mogelijk van de lange pauze.
+            # Pauzevlinders proberen EERST hun eigen rij, anders round-robin zoals voorheen.
+            if _eigen_rij_speciaal is not None:
+                pv_name_row = _eigen_rij_speciaal
+            else:
+                pv_index = pp2_speciale_teller % len(pv_rows_pp2) if pv_rows_pp2 else 0
+                _pv_g2, pv_name_row = pv_rows_pp2[pv_index] if pv_rows_pp2 else (None, None)
 
             # Pauze 1: lange pauze tussen 12u en 14u (zelfde logica als groep 1)
             col1_gekozen = None
@@ -4366,11 +4381,29 @@ def maak_pp2_sheets(wb_arg, am_arg):
                     col1_gekozen = col1
                     break
 
+            # Eigen rij lukt niet (pauzevlinder) -> val terug op een andere rij.
+            if col1_gekozen is None and _eigen_rij_speciaal is not None:
+                for _p2, _r2 in pv_rows_pp2:
+                    if _r2 == _eigen_rij_speciaal:
+                        continue
+                    for col1, col2 in pp2_halfuur_blokken(pauze_cols_pp2, ws_pp2):
+                        if not pp2_is_beschikbaar(ws_pp2, _r2, col1):
+                            continue
+                        if not pp2_is_beschikbaar(ws_pp2, _r2, col2):
+                            continue
+                        if not pp2_is_valid_long_break_12_14(naam, col1, col2, ws_pp2):
+                            continue
+                        pv_name_row = _r2
+                        col1_gekozen = col1
+                        break
+                    if col1_gekozen is not None:
+                        break
+
             if col1_gekozen is not None:
                 pp2_write_long_break(
                     ws_sheet=ws_pp2, pv_row=pv_name_row,
                     col1=col1_gekozen, col2=col1_gekozen + 1,
-                    naam=naam, leave_top_blank=False
+                    naam=naam, leave_top_blank=(pv_name_row == _eigen_rij_speciaal)
                 )
                 pp2_lange_pauze_ontvangers.add(naam)
 
