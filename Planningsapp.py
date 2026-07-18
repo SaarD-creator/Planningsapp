@@ -3198,7 +3198,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         - niet in eerste of laatste werkuur
         """
         werk_uren = pp2_get_student_work_hours(naam)
-        if (len(werk_uren) <= 4) if PAUZE_STRIKT_BOVEN_4U else (len(werk_uren) < 4):
+        if (werkduur_voor_pauze(naam) <= 4) if PAUZE_STRIKT_BOVEN_4U else (werkduur_voor_pauze(naam) < 4):
             return []
     
         first_hour = werk_uren[0]
@@ -3546,7 +3546,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             continue
     
         werk_uren = pp2_get_student_work_hours(naam)
-        if (len(werk_uren) <= 4) if PAUZE_STRIKT_BOVEN_4U else (len(werk_uren) < 4):
+        if (werkduur_voor_pauze(naam) <= 4) if PAUZE_STRIKT_BOVEN_4U else (werkduur_voor_pauze(naam) < 4):
             continue
     
         laatste_werkblok = max(werk_uren)
@@ -4970,7 +4970,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
             is_minor_early_stopper = (
                 pp2_is_minderjarig(naam)
-                and ((len(werk_uren) > 4) if PAUZE_STRIKT_BOVEN_4U else (len(werk_uren) >= 4))
+                and ((werkduur_voor_pauze(naam) > 4) if PAUZE_STRIKT_BOVEN_4U else (werkduur_voor_pauze(naam) >= 4))
                 and werk_uren
                 and max(werk_uren) <= 15
             )
@@ -5472,7 +5472,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             naam = s["naam"]
             werk_uren = pp2_get_student_work_hours(naam)
     
-            if (len(werk_uren) <= 4) if PAUZE_STRIKT_BOVEN_4U else (len(werk_uren) < 4):
+            if (werkduur_voor_pauze(naam) <= 4) if PAUZE_STRIKT_BOVEN_4U else (werkduur_voor_pauze(naam) < 4):
                 continue
     
             if max(werk_uren) < einduur_dag:
@@ -5752,7 +5752,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         s["naam"] for s in studenten
         if (
             pp2_is_minderjarig(s["naam"])
-            and ((len(pp2_get_student_work_hours(s["naam"])) > 4) if PAUZE_STRIKT_BOVEN_4U else (len(pp2_get_student_work_hours(s["naam"])) >= 4))
+            and ((werkduur_voor_pauze(s["naam"]) > 4) if PAUZE_STRIKT_BOVEN_4U else (werkduur_voor_pauze(s["naam"]) >= 4))
             and pp2_get_student_work_hours(s["naam"])
             and max(pp2_get_student_work_hours(s["naam"])) <= 15
         )
@@ -5864,7 +5864,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         and naam not in _pauzevlinder_namen_vroeg
         and not (
             pp2_is_minderjarig(naam)
-            and ((len(pp2_get_student_work_hours(naam)) > 4) if PAUZE_STRIKT_BOVEN_4U else (len(pp2_get_student_work_hours(naam)) >= 4))
+            and ((werkduur_voor_pauze(naam) > 4) if PAUZE_STRIKT_BOVEN_4U else (werkduur_voor_pauze(naam) >= 4))
             and pp2_get_student_work_hours(naam)
             and max(pp2_get_student_work_hours(naam)) <= 15
         )
@@ -6232,7 +6232,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             # Minderjarige vroege stoppers hier ook NIET meer meenemen
             if (
                 pp2_is_minderjarig(naam)
-                and ((len(pp2_get_student_work_hours(naam)) > 4) if PAUZE_STRIKT_BOVEN_4U else (len(pp2_get_student_work_hours(naam)) >= 4))
+                and ((werkduur_voor_pauze(naam) > 4) if PAUZE_STRIKT_BOVEN_4U else (werkduur_voor_pauze(naam) >= 4))
                 and pp2_get_student_work_hours(naam)
                 and max(pp2_get_student_work_hours(naam)) <= 15
             ):
