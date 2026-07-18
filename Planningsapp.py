@@ -3198,7 +3198,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
         - niet in eerste of laatste werkuur
         """
         werk_uren = pp2_get_student_work_hours(naam)
-        if len(werk_uren) < 4:
+        if (len(werk_uren) <= 4) if PAUZE_STRIKT_BOVEN_4U else (len(werk_uren) < 4):
             return []
     
         first_hour = werk_uren[0]
@@ -3546,7 +3546,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             continue
     
         werk_uren = pp2_get_student_work_hours(naam)
-        if len(werk_uren) < 4:
+        if (len(werk_uren) <= 4) if PAUZE_STRIKT_BOVEN_4U else (len(werk_uren) < 4):
             continue
     
         laatste_werkblok = max(werk_uren)
@@ -5472,7 +5472,7 @@ def maak_pp2_sheets(wb_arg, am_arg):
             naam = s["naam"]
             werk_uren = pp2_get_student_work_hours(naam)
     
-            if len(werk_uren) < 4:
+            if (len(werk_uren) <= 4) if PAUZE_STRIKT_BOVEN_4U else (len(werk_uren) < 4):
                 continue
     
             if max(werk_uren) < einduur_dag:
