@@ -1,4 +1,4 @@
-# fix open spots maar verdere testen nodig!
+# fix open spots maar verdere testen nodig! + open spots bij enkel lange pauzes ontbreken nog 
 # toevoegingen Antwerpen compleet
 # overall verbetering pauzeplanning
 # pauzevlindercheck is toegevoegd maar weinig getest
@@ -7466,6 +7466,108 @@ def maak_wisselplanning_sheet(wb_arg, am_arg):
 
 # ── oorspronkelijke aanroep (vervangt de oude losse code) ──
 maak_wisselplanning_sheet(wb_out, assigned_map)
+
+
+
+# ─────────────────────────────────────────────────────────────────
+# Werkblad Openingstijden attracties
+# ─────────────────────────────────────────────────────────────────
+def maak_openingstijden_sheet(wb_arg):
+    """
+    Bouw het 'Openingstijden attracties'-werkblad: per openingsuur een
+    duidelijk overzicht van gesloten en samengevoegde (wisselende) attracties.
+    """
+    if "Openingstijden attracties" in wb_arg.sheetnames:
+        del wb_arg["Openingstijden attracties"]
+
+    ws_open = wb_arg.create_sheet(title="Openingstijden attracties")
+
+    # Gesloten attracties per uur opnieuw inlezen uit Input_ (T-kolom = raw naam)
+    gesloten_per_uur = defaultdict(list)
+    for rij in range(17, 23):  # rij 17 t/m 22
+        attr_naam_raw = ws_speciaal.cell(rij, 20).value  # kolom T
+        if attr_naam_raw:
+            for col_idx in range(9, 20):  # kolom I t/m S
+                val = ws_speciaal.cell(rij, col_idx).value
+                if val in [1, True, "WAAR", "X"]:
+                    uur = col_to_uur_speciaal.get(col_idx)
+                    if uur:
+                        gesloten_per_uur[uur].append(str(attr_naam_raw).strip())
+
+    # Stijl
+    titel_fill  = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    uur_fill    = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    open_fill   = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+    gesloten_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+    wissel_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    dun_rand = Border(
+        left=Side(style="thin"), right=Side(style="thin"),
+        top=Side(style="thin"), bottom=Side(style="thin")
+    )
+    center = Alignment(horizontal="center", vertical="center")
+    links  = Alignment(horizontal="left", vertical="center", indent=1, wrap_text=True)
+
+    # Titel
+    ws_open.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
+    titel_cel = ws_open.cell(1, 1, "Openingstijden attracties")
+    titel_cel.font = Font(bold=True, size=14, color="FFFFFF")
+    titel_cel.fill = titel_fill
+    titel_cel.alignment = links
+    ws_open.row_dimensions[1].height = 28
+
+    current_row = 3
+    for uur in sorted(open_uren):
+        gesloten  = gesloten_per_uur.get(uur, [])
+        groepen   = uur_samenvoegingen.get(uur, [])
+        wisselend = [" + ".join(g) for g in groepen]
+
+        if not gesloten and not wisselend:
+            # 1 rij: alles open
+            uur_cel = ws_open.cell(current_row, 1, formatteer_uur(uur))
+            uur_cel.font = Font(bold=True)
+            uur_cel.fill = uur_fill
+            uur_cel.alignment = center
+            uur_cel.border = dun_rand
+
+            info_cel = ws_open.cell(current_row, 2, "Alle attracties geopend")
+            info_cel.font = Font(italic=True, color="375623")
+            info_cel.fill = open_fill
+            info_cel.alignment = links
+            info_cel.border = dun_rand
+            current_row += 1
+        else:
+            # 2 rijen: gesloten + wisselend
+            gesloten_tekst  = "Gesloten attracties: " + (" / ".join(gesloten) if gesloten else "geen")
+            wisselend_tekst = "Wisselende attracties: " + (" / ".join(wisselend) if wisselend else "geen")
+
+            ws_open.merge_cells(start_row=current_row, start_column=1, end_row=current_row + 1, end_column=1)
+            uur_cel = ws_open.cell(current_row, 1, formatteer_uur(uur))
+            uur_cel.font = Font(bold=True)
+            uur_cel.fill = uur_fill
+            uur_cel.alignment = center
+            uur_cel.border = dun_rand
+            ws_open.cell(current_row + 1, 1).border = dun_rand
+
+            gesloten_cel = ws_open.cell(current_row, 2, gesloten_tekst)
+            gesloten_cel.fill = gesloten_fill
+            gesloten_cel.alignment = links
+            gesloten_cel.border = dun_rand
+
+            wissel_cel = ws_open.cell(current_row + 1, 2, wisselend_tekst)
+            wissel_cel.fill = wissel_fill
+            wissel_cel.alignment = links
+            wissel_cel.border = dun_rand
+
+            current_row += 2
+
+    ws_open.column_dimensions["A"].width = 12
+    ws_open.column_dimensions["B"].width = 90
+    ws_open.freeze_panes = "A3"
+
+
+maak_openingstijden_sheet(wb_out)
+
+
 
 # -----------------------------
 # Werkblad Heropleidingen
