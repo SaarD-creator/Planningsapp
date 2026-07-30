@@ -7669,13 +7669,20 @@ def maak_openingstijden_sheet(wb_arg):
     def rest_van_dag_normaal(e_idx):
         return not any(i in alle_special_idx for i in range(e_idx + 1, analyse_n))
 
-    # --- wisselende attracties: opsplitsen in deel-van-dag (per tijdslot) / hele dag ---
+    # --- wisselende attracties: groepen met max. 2u 'apart' rekenen als hele dag,
+    #     de rest opsplitsen in specifieke tijdsloten ---
     wissel_per_slot = defaultdict(list)  # (start_idx, start_uur, eind_uur) -> [paar, ...]
     wissel_hele_dag = []
     max_groepsgrootte = 0
     for groep_set, idxset in wissel_idx_per_groep.items():
         max_groepsgrootte = max(max_groepsgrootte, len(groep_set))
         naam_paar = " en ".join(sorted(groep_set))
+        apart_idx = set(range(analyse_n)) - idxset
+        apart_uren = sum(volgend_uur(i) - sorted_open_uren[i] for i in apart_idx)
+        if apart_uren <= 2:
+            # Amper apart (max 2u) -> reken de groep gewoon bij 'hele dag'
+            wissel_hele_dag.append(naam_paar)
+            continue
         for (s_idx, e_idx, start, eind, hele_dag) in bereken_windows(idxset):
             if hele_dag:
                 wissel_hele_dag.append(naam_paar)
@@ -7683,7 +7690,6 @@ def maak_openingstijden_sheet(wb_arg):
                 wissel_per_slot[(s_idx, start, eind)].append(naam_paar)
 
     wissel_zinnen = []
-    heropen_zinnen = []
     wissel_fallback_gebruikt = False
 
     if wissel_per_slot or wissel_hele_dag:
@@ -7709,10 +7715,9 @@ def maak_openingstijden_sheet(wb_arg):
                     wissel_zinnen.append(
                         f"{label} zullen de volgende attracties {bijzin} afwisselend open zijn: {lijst_nl(paren)}."
                     )
-            heropen_uren = sorted({eind for (_s, _start, eind) in distinct_sloten if eind != sluitingsuur})
-            heropen_zinnen = [
-                f"Om {formatteer_uur(e)} openen de betrokken attracties gewoon apart." for e in heropen_uren
-            ]
+                # Heropen-zin meteen bij de bijhorende slot-zin, i.p.v. alles apart verzameld
+                if eind != sluitingsuur:
+                    wissel_zinnen.append(f"Om {formatteer_uur(eind)} openen de betrokken attracties gewoon apart.")
         else:
             wissel_fallback_gebruikt = True
             alle_paren = sorted(set(p for paren in wissel_per_slot.values() for p in paren) | set(wissel_hele_dag))
@@ -7796,7 +7801,7 @@ def maak_openingstijden_sheet(wb_arg):
         "Heb je toch nog vragen? Spreek gerust een medewerker aan."
     )
 
-    alle_zinnen = wissel_zinnen + heropen_zinnen + gesloten_kort_zinnen + gesloten_lang_zinnen + hele_dag_zinnen
+    alle_zinnen = wissel_zinnen + gesloten_kort_zinnen + gesloten_lang_zinnen + hele_dag_zinnen
     if alle_zinnen:
         toelichting = " ".join(alle_zinnen) + " " + vaste_afsluiter
     else:
