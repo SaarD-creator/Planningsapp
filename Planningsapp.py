@@ -7495,39 +7495,50 @@ def maak_openingstijden_sheet(wb_arg):
     # ---------- Zinnetjes inlezen uit tabblad 'Onthaal' in Input-excel ----------
     ws_zinnen = wb["Onthaal"] if "Onthaal" in wb.sheetnames else None
 
-    def T(rij, standaard):
+    def T(rij, veld_naam):
         if ws_zinnen is None:
-            return standaard
+            raise ValueError(
+                f"Tabblad 'Onthaal' niet gevonden in de Input-excel. "
+                f"Kan zinnetje '{veld_naam}' (rij {rij}, kolom B) niet inlezen."
+            )
         waarde = ws_zinnen.cell(rij, 2).value
-        return str(waarde).strip() if waarde not in (None, "") else standaard
+        if waarde in (None, ""):
+            raise ValueError(
+                f"Cel B{rij} ('{veld_naam}') in het tabblad 'Onthaal' is leeg. "
+                f"Vul deze cel in vooraleer het script te draaien."
+            )
+        return str(waarde).strip()
 
     def vul(template, vervang):
         for key, val in vervang.items():
             template = template.replace(f"[{key}]", str(val))
         return template
 
-    TXT_NIKS_BIJZONDERS      = T(19, "Alle attracties zijn de hele dag geopend.")
-    TXT_BEGIN                = T(20, "Hieronder vind je een overzicht van de attracties die vandaag niet volgens het normale schema geopend zijn.")
-    TXT_EIND                 = T(21, "Meer uitleg en concrete uren kan je aflezen op de kiosken bij elke attractie. Heb je toch nog vragen? Spreek gerust een medewerker aan.")
-    TXT_WISSEL_INTRO1        = T(25, "Wegens lage drukte zullen vandaag niet al onze attracties die een begeleider vereisen de hele dag open zijn.")
-    TXT_WISSEL_INTRO2        = T(26, "Onze medewerkers wisselen sommige uren af tussen [AANTAL] attracties.")
-    TXT_WISSEL_MULTI_1       = T(27, "Concreet zullen de volgende attracties [TIJDVAK] afwisselend open zijn: [ATTRACTIES].")
-    TXT_WISSEL_MULTI_2       = T(28, "Daarnaast zullen de volgende attracties [TIJDVAK] afwisselend open zijn: [ATTRACTIES].")
-    TXT_WISSEL_SINGLE_1      = T(29, "[TIJDVAK] zullen [PAAR] elkaar afwisselen.")
-    TXT_WISSEL_SINGLE_2      = T(30, "[TIJDVAK] zullen [PAAR] ook elkaar afwisselen.")
-    TXT_WISSEL_HEROPEN       = T(31, "Om [UUR] openen de betrokken attracties gewoon apart.")
-    TXT_WISSEL_FALLBACK      = T(32, "Zo zullen volgende attracties op verschillende momenten afwisselend open zijn: [ATTRACTIES].")
-    TXT_WISSEL_HELE_DAG      = T(33, "Daarnaast [WISSELT/WISSELEN] [ATTRACTIES] de hele dag door af: er is dan telkens maar één van deze attracties open.")
-    TXT_GESLOTEN_START_GLOB  = T(37, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten, maar vanaf [UUR] zijn al onze attracties geopend.")
-    TXT_GESLOTEN_START_LOK   = T(38, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten, maar openen om [UUR] voor de rest van de dag.")
-    TXT_GESLOTEN_START_GEEN  = T(39, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten.")
-    TXT_GESLOTEN_NIET_START  = T(40, "[TIJDVAK] [ZAL/ZULLEN] [ATTRACTIES] tijdelijk sluiten.")
-    TXT_GESLOTEN_FALLBACK    = T(41, "Daarnaast zijn vandaag op verschillende momenten volgende attracties tijdelijk gesloten: [ATTRACTIES].")
-    TXT_LANG_OPENT_OM        = T(42, "[ATTRACTIE] zal openen om [UUR].")
-    TXT_LANG_OPENT_TUSSEN    = T(43, "[ATTRACTIE] zal openen tussen [TIJDVAK].")
-    TXT_LANG_ENKEL_TOT       = T(44, "[ATTRACTIE] is vandaag enkel open tot [UUR].")
-    TXT_LANG_MEERDERE        = T(45, "[ATTRACTIE] zal openen tussen [TIJDVAKKEN].")
-    TXT_HELE_DAG_GESLOTEN    = T(46, "[ATTRACTIES] [BLIJFT/BLIJVEN] vandaag de hele dag gesloten.")
+    # Elke tekst wordt strikt uit het tabblad 'Onthaal' gelezen (kolom B, vaste rij).
+    # De tweede parameter is enkel een leesbare naam voor eventuele foutmeldingen,
+    # GEEN terugvaltekst.
+    TXT_NIKS_BIJZONDERS      = T(19, "niks bijzonders")
+    TXT_BEGIN                = T(20, "begintekstje")
+    TXT_EIND                 = T(21, "eindtekstje")
+    TXT_WISSEL_INTRO1        = T(25, "wissel intro 1")
+    TXT_WISSEL_INTRO2        = T(26, "wissel intro 2")
+    TXT_WISSEL_MULTI_1       = T(27, "wissel eerste tijdslot, meerdere paren")
+    TXT_WISSEL_MULTI_2       = T(28, "wissel tweede tijdslot, meerdere paren")
+    TXT_WISSEL_SINGLE_1      = T(29, "wissel eerste tijdslot, 1 paar")
+    TXT_WISSEL_SINGLE_2      = T(30, "wissel tweede tijdslot, 1 paar")
+    TXT_WISSEL_HEROPEN       = T(31, "wissel heropen-melding")
+    TXT_WISSEL_FALLBACK      = T(32, "wissel fallback (>2 tijdsloten)")
+    TXT_WISSEL_HELE_DAG      = T(33, "wissel hele dag")
+    TXT_GESLOTEN_START_GLOB  = T(37, "gesloten eerste uur, rest dag normaal")
+    TXT_GESLOTEN_START_LOK   = T(38, "gesloten eerste uur, rest dag niet normaal")
+    TXT_GESLOTEN_START_GEEN  = T(39, "gesloten eerste uur tot sluitingstijd")
+    TXT_GESLOTEN_NIET_START  = T(40, "gesloten, niet vanaf openingstijd")
+    TXT_GESLOTEN_FALLBACK    = T(41, "gesloten fallback (>2 tijdsloten)")
+    TXT_LANG_OPENT_OM        = T(42, "lang gesloten, opent om")
+    TXT_LANG_OPENT_TUSSEN    = T(43, "lang gesloten, opent tussen (1 venster)")
+    TXT_LANG_ENKEL_TOT       = T(44, "lang gesloten, enkel open tot")
+    TXT_LANG_MEERDERE        = T(45, "lang gesloten, meerdere vensters")
+    TXT_HELE_DAG_GESLOTEN    = T(46, "hele dag gesloten")
 
     # Gesloten attracties per uur opnieuw inlezen uit Input_ (T-kolom = raw naam)
     gesloten_per_uur = defaultdict(list)
@@ -7848,7 +7859,6 @@ def maak_openingstijden_sheet(wb_arg):
 
     geschatte_lijnen = max(1, (len(toelichting) // 90) + 1)
     ws_open.row_dimensions[tekst_row].height = max(20, geschatte_lijnen * 15)
-
 # -----------------------------
 # Werkblad Heropleidingen
 # -----------------------------
