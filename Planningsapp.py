@@ -7468,19 +7468,20 @@ def maak_wisselplanning_sheet(wb_arg, am_arg):
 maak_wisselplanning_sheet(wb_out, assigned_map)
 
 
-
 # ─────────────────────────────────────────────────────────────────
-# Werkblad Openingstijden attracties
+# Werkblad Onthaal (Openingstijden attracties)
 # ─────────────────────────────────────────────────────────────────
 def maak_openingstijden_sheet(wb_arg):
     """
-    Bouw het 'Openingstijden attracties'-werkblad: per openingsuur een
-    duidelijk overzicht van gesloten en samengevoegde (wisselende) attracties.
+    Bouw het 'Onthaal'-werkblad: per openingsuur een duidelijk overzicht
+    van gesloten en samengevoegde (wisselende) attracties, met daaronder
+    een vlot geschreven toelichting voor collega's en klanten.
     """
-    if "Openingstijden attracties" in wb_arg.sheetnames:
-        del wb_arg["Openingstijden attracties"]
+    if "Onthaal" in wb_arg.sheetnames:
+        del wb_arg["Onthaal"]
 
-    ws_open = wb_arg.create_sheet(title="Openingstijden attracties")
+    ws_open = wb_arg.create_sheet(title="Onthaal")
+    sorted_open_uren = sorted(open_uren)
 
     # Gesloten attracties per uur opnieuw inlezen uit Input_ (T-kolom = raw naam)
     gesloten_per_uur = defaultdict(list)
@@ -7494,20 +7495,57 @@ def maak_openingstijden_sheet(wb_arg):
                     if uur:
                         gesloten_per_uur[uur].append(str(attr_naam_raw).strip())
 
-    # Stijl
-    titel_fill  = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    uur_fill    = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-    open_fill   = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+    # ---------- Hulpfuncties ----------
+    def formatteer_interval(start_uur, eind_uur):
+        start_tekst = formatteer_uur(start_uur)
+        eind_tekst = formatteer_uur(eind_uur)
+        if start_tekst.endswith("u"):  # geen minuten -> "10-11u" ipv "10u-11u"
+            start_tekst = start_tekst[:-1]
+        return f"{start_tekst}-{eind_tekst}"
+
+    def volgend_uur(idx):
+        """Uur waarop het blok op index idx eindigt (= start volgend blok, of sluitingstijd)."""
+        huidig_uur = sorted_open_uren[idx]
+        if idx + 1 < len(sorted_open_uren):
+            return sorted_open_uren[idx + 1]
+        return huidig_uur + blok_durations.get(huidig_uur, 1.0)
+
+    def contiguous_ranges(idx_set):
+        idxs = sorted(idx_set)
+        ranges = []
+        if not idxs:
+            return ranges
+        start = prev = idxs[0]
+        for i in idxs[1:]:
+            if i == prev + 1:
+                prev = i
+            else:
+                ranges.append((start, prev))
+                start = prev = i
+        ranges.append((start, prev))
+        return ranges
+
+    # ---------- Stijl ----------
+    titel_fill    = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    uur_fill      = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    open_fill     = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
     gesloten_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
-    wissel_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-    dun_rand = Border(
-        left=Side(style="thin"), right=Side(style="thin"),
-        top=Side(style="thin"), bottom=Side(style="thin")
-    )
+    wissel_fill   = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+
+    dun    = Side(style="thin")
+    dik    = Side(style="medium")
     center = Alignment(horizontal="center", vertical="center")
     links  = Alignment(horizontal="left", vertical="center", indent=1, wrap_text=True)
 
-    # Titel
+    def kader(top=False, bottom=False, left=False, right=False):
+        return Border(
+            top=dik if top else dun,
+            bottom=dik if bottom else dun,
+            left=dik if left else dun,
+            right=dik if right else dun,
+        )
+
+    # ---------- Titel ----------
     ws_open.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
     titel_cel = ws_open.cell(1, 1, "Openingstijden attracties")
     titel_cel.font = Font(bold=True, size=14, color="FFFFFF")
@@ -7515,58 +7553,132 @@ def maak_openingstijden_sheet(wb_arg):
     titel_cel.alignment = links
     ws_open.row_dimensions[1].height = 28
 
+    # ---------- Overzicht per uur ----------
     current_row = 3
-    for uur in sorted(open_uren):
+    for idx, uur in enumerate(sorted_open_uren):
         gesloten  = gesloten_per_uur.get(uur, [])
         groepen   = uur_samenvoegingen.get(uur, [])
         wisselend = [" + ".join(g) for g in groepen]
+        interval_tekst = formatteer_interval(uur, volgend_uur(idx))
 
         if not gesloten and not wisselend:
-            # 1 rij: alles open
-            uur_cel = ws_open.cell(current_row, 1, formatteer_uur(uur))
+            uur_cel = ws_open.cell(current_row, 1, interval_tekst)
             uur_cel.font = Font(bold=True)
             uur_cel.fill = uur_fill
             uur_cel.alignment = center
-            uur_cel.border = dun_rand
+            uur_cel.border = kader(top=True, bottom=True, left=True)
 
             info_cel = ws_open.cell(current_row, 2, "Alle attracties geopend")
             info_cel.font = Font(italic=True, color="375623")
             info_cel.fill = open_fill
             info_cel.alignment = links
-            info_cel.border = dun_rand
+            info_cel.border = kader(top=True, bottom=True, right=True)
             current_row += 1
         else:
-            # 2 rijen: gesloten + wisselend
             gesloten_tekst  = "Gesloten attracties: " + (" / ".join(gesloten) if gesloten else "geen")
             wisselend_tekst = "Wisselende attracties: " + (" / ".join(wisselend) if wisselend else "geen")
 
             ws_open.merge_cells(start_row=current_row, start_column=1, end_row=current_row + 1, end_column=1)
-            uur_cel = ws_open.cell(current_row, 1, formatteer_uur(uur))
+            uur_cel = ws_open.cell(current_row, 1, interval_tekst)
             uur_cel.font = Font(bold=True)
             uur_cel.fill = uur_fill
             uur_cel.alignment = center
-            uur_cel.border = dun_rand
-            ws_open.cell(current_row + 1, 1).border = dun_rand
+            uur_cel.border = kader(top=True, left=True)
+            ws_open.cell(current_row + 1, 1).border = kader(bottom=True, left=True)
 
             gesloten_cel = ws_open.cell(current_row, 2, gesloten_tekst)
             gesloten_cel.fill = gesloten_fill
             gesloten_cel.alignment = links
-            gesloten_cel.border = dun_rand
+            gesloten_cel.border = kader(top=True, right=True)
 
             wissel_cel = ws_open.cell(current_row + 1, 2, wisselend_tekst)
             wissel_cel.fill = wissel_fill
             wissel_cel.alignment = links
-            wissel_cel.border = dun_rand
+            wissel_cel.border = kader(bottom=True, right=True)
 
             current_row += 2
 
-    ws_open.column_dimensions["A"].width = 12
+    ws_open.column_dimensions["A"].width = 14
     ws_open.column_dimensions["B"].width = 90
     ws_open.freeze_panes = "A3"
 
+    # ---------- Vlotte toelichting ----------
+    n = len(sorted_open_uren)
 
-maak_openingstijden_sheet(wb_out)
+    # Gesloten attracties groeperen per identieke reeks gesloten uren
+    gesloten_idx_per_attr = defaultdict(set)
+    for idx, uur in enumerate(sorted_open_uren):
+        for naam in gesloten_per_uur.get(uur, []):
+            gesloten_idx_per_attr[naam].add(idx)
 
+    groepen_per_reeks = defaultdict(list)
+    for naam, idxset in gesloten_idx_per_attr.items():
+        groepen_per_reeks[frozenset(idxset)].append(naam)
+
+    zinnen = []
+    for idxset, namen in groepen_per_reeks.items():
+        namen = sorted(namen)
+        meervoud = len(namen) > 1
+        onderwerp = " en ".join(namen)
+        ww_gaat, ww_blijft = ("gaan", "blijven") if meervoud else ("gaat", "blijft")
+        ww_is, ww_sluit = ("zijn", "sluiten") if meervoud else ("is", "sluit")
+
+        for (s_idx, e_idx) in contiguous_ranges(idxset):
+            start_uur = sorted_open_uren[s_idx]
+            eind_uur  = volgend_uur(e_idx)
+            begin_dag = (s_idx == 0)
+            eind_dag  = (e_idx == n - 1)
+
+            if begin_dag and eind_dag:
+                zinnen.append(f"{onderwerp} {ww_blijft} vandaag de hele dag gesloten.")
+            elif begin_dag:
+                zinnen.append(
+                    f"{onderwerp} {ww_gaat} om {formatteer_uur(eind_uur)} open en {ww_blijft} daarna de rest van de dag geopend."
+                )
+            elif eind_dag:
+                zinnen.append(f"{onderwerp} {ww_sluit} vanaf {formatteer_uur(start_uur)} voor de rest van de dag.")
+            else:
+                zinnen.append(
+                    f"{onderwerp} {ww_is} gesloten van {formatteer_uur(start_uur)} tot {formatteer_uur(eind_uur)}, en daarna gewoon weer geopend."
+                )
+
+    # Wisselende (samengevoegde) groepen
+    wissel_idx_per_groep = defaultdict(set)
+    for idx, uur in enumerate(sorted_open_uren):
+        for groep in uur_samenvoegingen.get(uur, []):
+            wissel_idx_per_groep[frozenset(groep)].add(idx)
+
+    for groep_set, idxset in wissel_idx_per_groep.items():
+        onderwerp = " en ".join(sorted(groep_set))
+        for (s_idx, e_idx) in contiguous_ranges(idxset):
+            if s_idx == 0 and e_idx == n - 1:
+                zinnen.append(
+                    f"{onderwerp} wisselen elkaar de hele dag af: er is telkens maar één van deze attracties open."
+                )
+            else:
+                start_uur = sorted_open_uren[s_idx]
+                eind_uur  = volgend_uur(e_idx)
+                zinnen.append(
+                    f"Van {formatteer_uur(start_uur)} tot {formatteer_uur(eind_uur)} wisselen {onderwerp} elkaar af: "
+                    f"er is dan telkens maar één van deze attracties open."
+                )
+
+    toelichting = " ".join(zinnen) if zinnen else \
+        "Vandaag zijn alle attracties de hele dag geopend, er zijn geen sluitingen of wisselingen."
+
+    header_row = current_row + 1
+    header_cel = ws_open.cell(header_row, 1, "Wat betekent dit?")
+    header_cel.font = Font(bold=True, size=12, color="1F3864")
+    ws_open.merge_cells(start_row=header_row, start_column=1, end_row=header_row, end_column=2)
+
+    tekst_row = header_row + 1
+    ws_open.merge_cells(start_row=tekst_row, start_column=1, end_row=tekst_row, end_column=2)
+    tekst_cel = ws_open.cell(tekst_row, 1, toelichting)
+    tekst_cel.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True, indent=1)
+    tekst_cel.font = Font(size=11)
+
+    geschatte_lijnen = max(1, (len(toelichting) // 90) + 1)
+    ws_open.row_dimensions[tekst_row].height = max(20, geschatte_lijnen * 15)
 
 
 # -----------------------------
@@ -7597,6 +7709,8 @@ if ws_bron:
 
 #NIEUWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
 #NIEUWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+
+maak_openingstijden_sheet(wb_out)
 
 # -----------------------------
 # Werkbladen altijd verbergen
