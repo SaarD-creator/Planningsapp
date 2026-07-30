@@ -7495,16 +7495,37 @@ def maak_openingstijden_sheet(wb_arg):
     # ---------- Zinnetjes inlezen uit tabblad 'Onthaal' in Input-excel ----------
     ws_zinnen = wb["Onthaal"] if "Onthaal" in wb.sheetnames else None
 
-    def T(rij, veld_naam):
+    def vind_categorie_start(koptekst):
+        for row in range(1, ws_zinnen.max_row + 1):
+            waarde = ws_zinnen.cell(row, 1).value
+            if waarde and str(waarde).strip() == koptekst:
+                return row
+        raise ValueError(
+            f"Kop '{koptekst}' niet gevonden in tabblad 'Onthaal'. "
+            f"Controleer of de rijstructuur nog intact is."
+        )
+
+    def vind_rij(vanaf_row, tot_row, fragment):
+        for row in range(vanaf_row, tot_row):
+            waarde = ws_zinnen.cell(row, 1).value
+            if waarde and fragment in str(waarde):
+                return row
+        raise ValueError(
+            f"Rij met beschrijving '{fragment}' niet gevonden in tabblad 'Onthaal' "
+            f"(tussen rij {vanaf_row} en {tot_row})."
+        )
+
+    def T(vanaf_row, tot_row, fragment):
         if ws_zinnen is None:
             raise ValueError(
                 f"Tabblad 'Onthaal' niet gevonden in de Input-excel. "
-                f"Kan zinnetje '{veld_naam}' (rij {rij}, kolom B) niet inlezen."
+                f"Kan zinnetje '{fragment}' niet inlezen."
             )
+        rij = vind_rij(vanaf_row, tot_row, fragment)
         waarde = ws_zinnen.cell(rij, 2).value
         if waarde in (None, ""):
             raise ValueError(
-                f"Cel B{rij} ('{veld_naam}') in het tabblad 'Onthaal' is leeg. "
+                f"Cel B{rij} (bij '{fragment}') in het tabblad 'Onthaal' is leeg. "
                 f"Vul deze cel in vooraleer het script te draaien."
             )
         return str(waarde).strip()
@@ -7514,31 +7535,39 @@ def maak_openingstijden_sheet(wb_arg):
             template = template.replace(f"[{key}]", str(val))
         return template
 
-    # Elke tekst wordt strikt uit het tabblad 'Onthaal' gelezen (kolom B, vaste rij).
-    # De tweede parameter is enkel een leesbare naam voor eventuele foutmeldingen,
-    # GEEN terugvaltekst.
-    TXT_NIKS_BIJZONDERS      = T(19, "niks bijzonders")
-    TXT_BEGIN                = T(20, "begintekstje")
-    TXT_EIND                 = T(21, "eindtekstje")
-    TXT_WISSEL_INTRO1        = T(25, "wissel intro 1")
-    TXT_WISSEL_INTRO2        = T(26, "wissel intro 2")
-    TXT_WISSEL_MULTI_1       = T(27, "wissel eerste tijdslot, meerdere paren")
-    TXT_WISSEL_MULTI_2       = T(28, "wissel tweede tijdslot, meerdere paren")
-    TXT_WISSEL_SINGLE_1      = T(29, "wissel eerste tijdslot, 1 paar")
-    TXT_WISSEL_SINGLE_2      = T(30, "wissel tweede tijdslot, 1 paar")
-    TXT_WISSEL_HEROPEN       = T(31, "wissel heropen-melding")
-    TXT_WISSEL_FALLBACK      = T(32, "wissel fallback (>2 tijdsloten)")
-    TXT_WISSEL_HELE_DAG      = T(33, "wissel hele dag")
-    TXT_GESLOTEN_START_GLOB  = T(37, "gesloten eerste uur, rest dag normaal")
-    TXT_GESLOTEN_START_LOK   = T(38, "gesloten eerste uur, rest dag niet normaal")
-    TXT_GESLOTEN_START_GEEN  = T(39, "gesloten eerste uur tot sluitingstijd")
-    TXT_GESLOTEN_NIET_START  = T(40, "gesloten, niet vanaf openingstijd")
-    TXT_GESLOTEN_FALLBACK    = T(41, "gesloten fallback (>2 tijdsloten)")
-    TXT_LANG_OPENT_OM        = T(42, "lang gesloten, opent om")
-    TXT_LANG_OPENT_TUSSEN    = T(43, "lang gesloten, opent tussen (1 venster)")
-    TXT_LANG_ENKEL_TOT       = T(44, "lang gesloten, enkel open tot")
-    TXT_LANG_MEERDERE        = T(45, "lang gesloten, meerdere vensters")
-    TXT_HELE_DAG_GESLOTEN    = T(46, "hele dag gesloten")
+    # Categorie-grenzen opzoeken (op basis van de koptekst in kolom A, niet op rijnummer)
+    if ws_zinnen is not None:
+        _alg_start     = vind_categorie_start("Algemeen")
+        _wissel_start  = vind_categorie_start("Wisselende (samengevoegde) attracties")
+        _gesloten_start = vind_categorie_start("Gesloten attracties")
+        _einde_sheet   = ws_zinnen.max_row + 1
+    else:
+        _alg_start = _wissel_start = _gesloten_start = _einde_sheet = 0
+
+    # Elke tekst wordt gezocht op basis van een unieke tekstflard in kolom A,
+    # binnen de juiste categorie (zodat gelijkaardige beschrijvingen niet botsen).
+    TXT_NIKS_BIJZONDERS      = T(_alg_start, _wissel_start, "gewoon de hele dag geopend")
+    TXT_BEGIN                = T(_alg_start, _wissel_start, "Begintekstje")
+    TXT_EIND                 = T(_alg_start, _wissel_start, "Eindtekstje")
+    TXT_WISSEL_INTRO1        = T(_wissel_start, _gesloten_start, "Introzin 1")
+    TXT_WISSEL_INTRO2        = T(_wissel_start, _gesloten_start, "Introzin 2")
+    TXT_WISSEL_MULTI_1       = T(_wissel_start, _gesloten_start, "Eerste tijdslot met meerdere paren")
+    TXT_WISSEL_MULTI_2       = T(_wissel_start, _gesloten_start, "Tweede tijdslot (indien van toepassing) met meerdere paren")
+    TXT_WISSEL_SINGLE_1      = T(_wissel_start, _gesloten_start, "Eerste tijdslot met slechts 1 paar")
+    TXT_WISSEL_SINGLE_2      = T(_wissel_start, _gesloten_start, "Tweede tijdslot (indien van toepassing) met slechts 1 paar")
+    TXT_WISSEL_HEROPEN       = T(_wissel_start, _gesloten_start, "heropen-melding")
+    TXT_WISSEL_FALLBACK      = T(_wissel_start, _gesloten_start, "Meer dan 2 verschillende tijdsloten")
+    TXT_WISSEL_HELE_DAG      = T(_wissel_start, _gesloten_start, "hele dag afwisselend open")
+    TXT_GESLOTEN_START_GLOB  = T(_gesloten_start, _einde_sheet, "verder die dag niets anders bijzonders")
+    TXT_GESLOTEN_START_LOK   = T(_gesloten_start, _einde_sheet, "nog andere bijzonderheden later op de dag")
+    TXT_GESLOTEN_START_GEEN  = T(_gesloten_start, _einde_sheet, "vanaf openingstijd tot aan sluitingstijd")
+    TXT_GESLOTEN_NIET_START  = T(_gesloten_start, _einde_sheet, "niet vanaf openingstijd")
+    TXT_GESLOTEN_FALLBACK    = T(_gesloten_start, _einde_sheet, "Meer dan 2 verschillende tijdsloten")
+    TXT_LANG_OPENT_OM        = T(_gesloten_start, _einde_sheet, "open vanaf een bepaald uur tot sluitingstijd")
+    TXT_LANG_OPENT_TUSSEN    = T(_gesloten_start, _einde_sheet, "1 open periode die niet tot sluitingstijd loopt")
+    TXT_LANG_ENKEL_TOT       = T(_gesloten_start, _einde_sheet, "sluit vroeger dan normaal")
+    TXT_LANG_MEERDERE        = T(_gesloten_start, _einde_sheet, "meerdere aparte open periodes")
+    TXT_HELE_DAG_GESLOTEN    = T(_gesloten_start, _einde_sheet, "De hele dag gesloten")
 
     # Gesloten attracties per uur opnieuw inlezen uit Input_ (T-kolom = raw naam)
     gesloten_per_uur = defaultdict(list)
@@ -7859,6 +7888,10 @@ def maak_openingstijden_sheet(wb_arg):
 
     geschatte_lijnen = max(1, (len(toelichting) // 90) + 1)
     ws_open.row_dimensions[tekst_row].height = max(20, geschatte_lijnen * 15)
+
+
+
+
 # -----------------------------
 # Werkblad Heropleidingen
 # -----------------------------
