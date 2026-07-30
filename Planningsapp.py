@@ -7476,6 +7476,11 @@ def maak_openingstijden_sheet(wb_arg):
     Bouw het 'Onthaal'-werkblad: per openingsuur een duidelijk overzicht
     van gesloten en samengevoegde (wisselende) attracties, met daaronder
     een vlot geschreven toelichting voor collega's en klanten.
+
+    De zinnetjes voor die toelichting worden ingelezen uit het tabblad
+    'Onthaal' in de Input-excel (kolom B, vaste rijnummers). Als dat
+    tabblad of een cel ontbreekt, valt de functie terug op een ingebouwde
+    standaardtekst.
     """
     if "Onthaal" in wb_arg.sheetnames:
         del wb_arg["Onthaal"]
@@ -7486,6 +7491,43 @@ def maak_openingstijden_sheet(wb_arg):
 
     # "Rustig"-vlag uit Input_ W5
     rustig = str(ws_speciaal.cell(5, 23).value).strip().lower() == "rustig"
+
+    # ---------- Zinnetjes inlezen uit tabblad 'Onthaal' in Input-excel ----------
+    ws_zinnen = wb["Onthaal"] if "Onthaal" in wb.sheetnames else None
+
+    def T(rij, standaard):
+        if ws_zinnen is None:
+            return standaard
+        waarde = ws_zinnen.cell(rij, 2).value
+        return str(waarde).strip() if waarde not in (None, "") else standaard
+
+    def vul(template, vervang):
+        for key, val in vervang.items():
+            template = template.replace(f"[{key}]", str(val))
+        return template
+
+    TXT_NIKS_BIJZONDERS      = T(19, "Alle attracties zijn de hele dag geopend.")
+    TXT_BEGIN                = T(20, "Hieronder vind je een overzicht van de attracties die vandaag niet volgens het normale schema geopend zijn.")
+    TXT_EIND                 = T(21, "Meer uitleg en concrete uren kan je aflezen op de kiosken bij elke attractie. Heb je toch nog vragen? Spreek gerust een medewerker aan.")
+    TXT_WISSEL_INTRO1        = T(25, "Wegens lage drukte zullen vandaag niet al onze attracties die een begeleider vereisen de hele dag open zijn.")
+    TXT_WISSEL_INTRO2        = T(26, "Onze medewerkers wisselen sommige uren af tussen [AANTAL] attracties.")
+    TXT_WISSEL_MULTI_1       = T(27, "Concreet zullen de volgende attracties [TIJDVAK] afwisselend open zijn: [ATTRACTIES].")
+    TXT_WISSEL_MULTI_2       = T(28, "Daarnaast zullen de volgende attracties [TIJDVAK] afwisselend open zijn: [ATTRACTIES].")
+    TXT_WISSEL_SINGLE_1      = T(29, "[TIJDVAK] zullen [PAAR] elkaar afwisselen.")
+    TXT_WISSEL_SINGLE_2      = T(30, "[TIJDVAK] zullen [PAAR] ook elkaar afwisselen.")
+    TXT_WISSEL_HEROPEN       = T(31, "Om [UUR] openen de betrokken attracties gewoon apart.")
+    TXT_WISSEL_FALLBACK      = T(32, "Zo zullen volgende attracties op verschillende momenten afwisselend open zijn: [ATTRACTIES].")
+    TXT_WISSEL_HELE_DAG      = T(33, "Daarnaast [WISSELT/WISSELEN] [ATTRACTIES] de hele dag door af: er is dan telkens maar één van deze attracties open.")
+    TXT_GESLOTEN_START_GLOB  = T(37, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten, maar vanaf [UUR] zijn al onze attracties geopend.")
+    TXT_GESLOTEN_START_LOK   = T(38, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten, maar openen om [UUR] voor de rest van de dag.")
+    TXT_GESLOTEN_START_GEEN  = T(39, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten.")
+    TXT_GESLOTEN_NIET_START  = T(40, "[TIJDVAK] [ZAL/ZULLEN] [ATTRACTIES] tijdelijk sluiten.")
+    TXT_GESLOTEN_FALLBACK    = T(41, "Daarnaast zijn vandaag op verschillende momenten volgende attracties tijdelijk gesloten: [ATTRACTIES].")
+    TXT_LANG_OPENT_OM        = T(42, "[ATTRACTIE] zal openen om [UUR].")
+    TXT_LANG_OPENT_TUSSEN    = T(43, "[ATTRACTIE] zal openen tussen [TIJDVAK].")
+    TXT_LANG_ENKEL_TOT       = T(44, "[ATTRACTIE] is vandaag enkel open tot [UUR].")
+    TXT_LANG_MEERDERE        = T(45, "[ATTRACTIE] zal openen tussen [TIJDVAKKEN].")
+    TXT_HELE_DAG_GESLOTEN    = T(46, "[ATTRACTIES] [BLIJFT/BLIJVEN] vandaag de hele dag gesloten.")
 
     # Gesloten attracties per uur opnieuw inlezen uit Input_ (T-kolom = raw naam)
     gesloten_per_uur = defaultdict(list)
@@ -7694,36 +7736,27 @@ def maak_openingstijden_sheet(wb_arg):
 
     if wissel_per_slot or wissel_hele_dag:
         aantal_tekst = "2 (of 3)" if max_groepsgrootte >= 3 else "2"
-        wissel_zinnen.append(
-            "Wegens lage drukte zullen vandaag niet al onze attracties die een begeleider vereisen "
-            "de hele dag open zijn."
-        )
-        wissel_zinnen.append(f"Onze medewerkers wisselen sommige uren af tussen {aantal_tekst} attracties.")
+        wissel_zinnen.append(TXT_WISSEL_INTRO1)
+        wissel_zinnen.append(vul(TXT_WISSEL_INTRO2, {"AANTAL": aantal_tekst}))
 
         distinct_sloten = sorted(wissel_per_slot.keys(), key=lambda t: t[1])
         if len(distinct_sloten) <= 2:
-            labels = ["Concreet", "Daarnaast"]
             for i, slot in enumerate(distinct_sloten):
                 s_idx, start, eind = slot
                 paren = wissel_per_slot[slot]
                 if len(paren) == 1:
-                    extra = "" if i == 0 else " ook"
-                    wissel_zinnen.append(f"{frag(s_idx, start, eind)} zullen {paren[0]}{extra} elkaar afwisselen.")
+                    sjabloon = TXT_WISSEL_SINGLE_1 if i == 0 else TXT_WISSEL_SINGLE_2
+                    wissel_zinnen.append(vul(sjabloon, {"TIJDVAK": frag(s_idx, start, eind), "PAAR": paren[0]}))
                 else:
-                    label = labels[i] if i < len(labels) else "Daarnaast"
+                    sjabloon = TXT_WISSEL_MULTI_1 if i == 0 else TXT_WISSEL_MULTI_2
                     bijzin = tijdsvak_bijzin(s_idx, start, eind)
-                    wissel_zinnen.append(
-                        f"{label} zullen de volgende attracties {bijzin} afwisselend open zijn: {lijst_nl(paren)}."
-                    )
-                # Heropen-zin meteen bij de bijhorende slot-zin, i.p.v. alles apart verzameld
+                    wissel_zinnen.append(vul(sjabloon, {"TIJDVAK": bijzin, "ATTRACTIES": lijst_nl(paren)}))
                 if eind != sluitingsuur:
-                    wissel_zinnen.append(f"Om {formatteer_uur(eind)} openen de betrokken attracties gewoon apart.")
+                    wissel_zinnen.append(vul(TXT_WISSEL_HEROPEN, {"UUR": formatteer_uur(eind)}))
         else:
             wissel_fallback_gebruikt = True
             alle_paren = sorted(set(p for paren in wissel_per_slot.values() for p in paren) | set(wissel_hele_dag))
-            wissel_zinnen.append(
-                f"Zo zullen volgende attracties op verschillende momenten afwisselend open zijn: {lijst_nl(alle_paren)}."
-            )
+            wissel_zinnen.append(vul(TXT_WISSEL_FALLBACK, {"ATTRACTIES": lijst_nl(alle_paren)}))
 
     # --- gesloten attracties: kort (<=2u, per tijdslot) / lang (>2u, focus op openen) / hele dag ---
     kort_per_slot = defaultdict(list)  # (start_idx, start_uur, eind_uur) -> [naam, ...]
@@ -7747,23 +7780,26 @@ def maak_openingstijden_sheet(wb_arg):
             namen = kort_per_slot[(s_idx, start, eind)]
             if s_idx == 0:
                 if eind == sluitingsuur:
-                    bonus = ""
+                    tekst = vul(TXT_GESLOTEN_START_GEEN, {"TIJDVAK": frag(s_idx, start, eind), "ATTRACTIES": lijst_nl(namen)})
                 else:
                     e_idx = sorted_open_uren.index(eind) - 1 if eind in sorted_open_uren else laatste_idx
                     if rest_van_dag_normaal(e_idx):
-                        bonus = f", maar vanaf {formatteer_uur(eind)} zijn al onze attracties geopend"
+                        tekst = vul(TXT_GESLOTEN_START_GLOB, {
+                            "TIJDVAK": frag(s_idx, start, eind), "ATTRACTIES": lijst_nl(namen), "UUR": formatteer_uur(eind)
+                        })
                     else:
-                        bonus = f", maar openen om {formatteer_uur(eind)} voor de rest van de dag"
-                gesloten_kort_zinnen.append(f"{frag(s_idx, start, eind)} zijn de attracties {lijst_nl(namen)} gesloten{bonus}.")
+                        tekst = vul(TXT_GESLOTEN_START_LOK, {
+                            "TIJDVAK": frag(s_idx, start, eind), "ATTRACTIES": lijst_nl(namen), "UUR": formatteer_uur(eind)
+                        })
+                gesloten_kort_zinnen.append(tekst)
             else:
                 hulp = "zal" if len(namen) == 1 else "zullen"
-                gesloten_kort_zinnen.append(f"{frag(s_idx, start, eind)} {hulp} {lijst_nl(namen)} tijdelijk sluiten.")
+                gesloten_kort_zinnen.append(vul(TXT_GESLOTEN_NIET_START, {
+                    "TIJDVAK": frag(s_idx, start, eind), "ZAL/ZULLEN": hulp, "ATTRACTIES": lijst_nl(namen)
+                }))
     else:
         alle_kort_namen = sorted(set(n for namen in kort_per_slot.values() for n in namen))
-        gesloten_kort_zinnen.append(
-            f"Daarnaast zijn vandaag op verschillende momenten volgende attracties tijdelijk gesloten: "
-            f"{lijst_nl(alle_kort_namen)}."
-        )
+        gesloten_kort_zinnen.append(vul(TXT_GESLOTEN_FALLBACK, {"ATTRACTIES": lijst_nl(alle_kort_namen)}))
 
     gesloten_lang_zinnen = []
     alle_indices = set(range(analyse_n))
@@ -7775,37 +7811,29 @@ def maak_openingstijden_sheet(wb_arg):
         if len(open_windows) == 1:
             start, eind = open_windows[0]
             if start == sorted_open_uren[0] and eind != sluitingsuur:
-                gesloten_lang_zinnen.append(f"{naam} is vandaag enkel open tot {formatteer_uur(eind)}.")
+                gesloten_lang_zinnen.append(vul(TXT_LANG_ENKEL_TOT, {"ATTRACTIE": naam, "UUR": formatteer_uur(eind)}))
             elif eind == sluitingsuur:
-                gesloten_lang_zinnen.append(f"{naam} zal openen om {formatteer_uur(start)}.")
+                gesloten_lang_zinnen.append(vul(TXT_LANG_OPENT_OM, {"ATTRACTIE": naam, "UUR": formatteer_uur(start)}))
             else:
-                gesloten_lang_zinnen.append(f"{naam} zal openen tussen {formatteer_interval(start, eind)}.")
+                gesloten_lang_zinnen.append(vul(TXT_LANG_OPENT_TUSSEN, {"ATTRACTIE": naam, "TIJDVAK": formatteer_interval(start, eind)}))
         else:
             vensters = [formatteer_interval(s, e) for (s, e) in open_windows]
-            gesloten_lang_zinnen.append(f"{naam} zal openen tussen {lijst_nl(vensters)}.")
+            gesloten_lang_zinnen.append(vul(TXT_LANG_MEERDERE, {"ATTRACTIE": naam, "TIJDVAKKEN": lijst_nl(vensters)}))
 
     # --- hele-dag samenvattingen (altijd als laatste) ---
     hele_dag_zinnen = []
     if wissel_hele_dag and not wissel_fallback_gebruikt:
         ww = "wisselt" if len(wissel_hele_dag) == 1 else "wisselen"
-        hele_dag_zinnen.append(
-            f"Daarnaast {ww} {lijst_nl(wissel_hele_dag)} de hele dag door af: "
-            f"er is dan telkens maar één van deze attracties open."
-        )
+        hele_dag_zinnen.append(vul(TXT_WISSEL_HELE_DAG, {"WISSELT/WISSELEN": ww, "ATTRACTIES": lijst_nl(wissel_hele_dag)}))
     if gesloten_hele_dag:
         ww = "blijft" if len(gesloten_hele_dag) == 1 else "blijven"
-        hele_dag_zinnen.append(f"{lijst_nl(gesloten_hele_dag)} {ww} vandaag de hele dag gesloten.")
-
-    vaste_afsluiter = (
-        "Meer uitleg en concrete uren kan je aflezen op de kiosken bij elke attractie. "
-        "Heb je toch nog vragen? Spreek gerust een medewerker aan."
-    )
+        hele_dag_zinnen.append(vul(TXT_HELE_DAG_GESLOTEN, {"BLIJFT/BLIJVEN": ww, "ATTRACTIES": lijst_nl(gesloten_hele_dag)}))
 
     alle_zinnen = wissel_zinnen + gesloten_kort_zinnen + gesloten_lang_zinnen + hele_dag_zinnen
     if alle_zinnen:
-        toelichting = " ".join(alle_zinnen) + " " + vaste_afsluiter
+        toelichting = TXT_BEGIN + " " + " ".join(alle_zinnen) + " " + TXT_EIND
     else:
-        toelichting = "Alle attracties zijn de hele dag geopend."
+        toelichting = TXT_NIKS_BIJZONDERS
 
     header_row = current_row + 1
     header_cel = ws_open.cell(header_row, 1, "Wat betekent dit?")
