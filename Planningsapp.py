@@ -7950,7 +7950,7 @@ def maak_openingstijden_sheet(wb_arg):
         toelichting = TXT_NIKS_BIJZONDERS
 
     header_row = current_row + 1
-    header_cel = ws_open.cell(header_row, 1, "Wat betekent dit?")
+    header_cel = ws_open.cell(header_row, 1, "In tekstvorm:")
     header_cel.font = Font(bold=True, size=12, color="1F3864")
     ws_open.merge_cells(start_row=header_row, start_column=1, end_row=header_row, end_column=2)
 
