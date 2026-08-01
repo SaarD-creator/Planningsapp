@@ -7555,6 +7555,7 @@ def maak_openingstijden_sheet(wb_arg):
     TXT_EIND                 = T(_alg_start, _wissel_start, "Eindtekstje")
     TXT_WISSEL_INTRO1        = T(_wissel_start, _gesloten_start, "Introzin 1")
     TXT_WISSEL_INTRO2        = T(_wissel_start, _gesloten_start, "Introzin 2")
+    TXT_WISSEL_INTRO2_ALT    = T(_wissel_start, _gesloten_start, "Introzin 2, indien niet vooraan")
     TXT_WISSEL_MULTI_1       = T(_wissel_start, _gesloten_start, "Eerste tijdslot met meerdere paren")
     TXT_WISSEL_MULTI_2       = T(_wissel_start, _gesloten_start, "Tweede tijdslot (indien van toepassing) met meerdere paren")
     TXT_WISSEL_SINGLE_1      = T(_wissel_start, _gesloten_start, "Eerste tijdslot met slechts 1 paar")
@@ -7781,10 +7782,13 @@ def maak_openingstijden_sheet(wb_arg):
     wissel_fallback_zinnen = []
     wissel_fallback_gebruikt = False
 
+    wissel_intro2_origineel = None
+    wissel_intro2_alt = None
     if wissel_per_slot or wissel_hele_dag:
         aantal_tekst = "2 (of 3)" if max_groepsgrootte >= 3 else "2"
         wissel_intro_zinnen.append(TXT_WISSEL_INTRO1)
-        wissel_intro_zinnen.append(vul(TXT_WISSEL_INTRO2, {"AANTAL": aantal_tekst}))
+        wissel_intro2_origineel = vul(TXT_WISSEL_INTRO2, {"AANTAL": aantal_tekst})
+        wissel_intro2_alt = vul(TXT_WISSEL_INTRO2_ALT, {"AANTAL": aantal_tekst})
 
         distinct_sloten = sorted(wissel_per_slot.keys(), key=lambda t: (t[1], t[2]))
         if len(distinct_sloten) <= 2:
@@ -7801,7 +7805,7 @@ def maak_openingstijden_sheet(wb_arg):
                     eenheid.append(vul(sjabloon, {"TIJDVAK": bijzin, "ATTRACTIES": lijst_nl(paren)}))
                 if eind != sluitingsuur and not onbekend_laatste_uur(eind):
                     eenheid.append(vul(TXT_WISSEL_HEROPEN, {"UUR": formatteer_uur(eind)}))
-                tijdlijn.append((start, eind, eenheid))
+                tijdlijn.append((start, eind, "wissel", eenheid))
         else:
             wissel_fallback_gebruikt = True
             alle_paren = sorted(set(p for paren in wissel_per_slot.values() for p in paren) | set(wissel_hele_dag))
@@ -7849,7 +7853,7 @@ def maak_openingstijden_sheet(wb_arg):
             else:
                 hulp = "zal" if len(namen) == 1 else "zullen"
                 tekst = vul(TXT_GESLOTEN_NIET_START, {**vervang_basis, "ZAL/ZULLEN": hulp})
-            tijdlijn.append((start, eind, [tekst]))
+            tijdlijn.append((start, eind, "gesloten", [tekst]))
     else:
         alle_kort_namen = sorted(set(n for namen in kort_per_slot.values() for n in namen))
         gesloten_fallback_zinnen.append(vul(TXT_GESLOTEN_FALLBACK, {"ATTRACTIES": lijst_nl(alle_kort_namen)}))
@@ -7874,24 +7878,46 @@ def maak_openingstijden_sheet(wb_arg):
         else:
             vensters = [formatteer_interval(s, e) for (s, e) in open_windows]
             zin = vul(TXT_LANG_MEERDERE, {"ATTRACTIE": naam, "TIJDVAKKEN": lijst_nl(vensters)})
-        tijdlijn.append((eerste_gesloten_start, 999, [zin]))
+        tijdlijn.append((eerste_gesloten_start, 999, "gesloten", [zin]))
 
-    # --- hele-dag samenvattingen (altijd als laatste) ---
-    hele_dag_zinnen = []
+    # intro2 ("Ook zullen onze medewerkers...") wordt pas ingevoegd vlak vóór het eerste
+    # wissel-gerelateerde element, ongeacht of dat een tijdlijn-zin, de fallback-zin of de
+    # hele-dag-zin is -- zodat hij nooit vóór gesloten-info komt te staan als die eerder valt.
+    def voeg_intro2_toe():
+        # Originele bewoording als er nog niets (buiten TXT_WISSEL_INTRO1) vooraf ging,
+        # anders de alternatieve "Ook zullen..."-bewoording.
+        vooraan = (len(volgorde) == len(wissel_intro_zinnen))
+        volgorde.append(wissel_intro2_origineel if vooraan else wissel_intro2_alt)
+
+    intro2_geplaatst = False
+    volgorde = list(wissel_intro_zinnen)  # enkel TXT_WISSEL_INTRO1, indien van toepassing
+
+    volgorde += gesloten_fallback_zinnen
+
+    if wissel_fallback_gebruikt:
+        voeg_intro2_toe()
+        intro2_geplaatst = True
+        volgorde += wissel_fallback_zinnen
+
+    tijdlijn.sort(key=lambda t: (t[0], t[1]))
+    for (_s, _e, type_, zinnen) in tijdlijn:
+        if type_ == "wissel" and not intro2_geplaatst:
+            voeg_intro2_toe()
+            intro2_geplaatst = True
+        volgorde += zinnen
+
     if wissel_hele_dag and not wissel_fallback_gebruikt:
+        if not intro2_geplaatst:
+            voeg_intro2_toe()
+            intro2_geplaatst = True
         ww = "wisselt" if len(wissel_hele_dag) == 1 else "wisselen"
-        hele_dag_zinnen.append(vul(TXT_WISSEL_HELE_DAG, {"WISSELT/WISSELEN": ww, "ATTRACTIES": lijst_nl(wissel_hele_dag)}))
+        volgorde.append(vul(TXT_WISSEL_HELE_DAG, {"WISSELT/WISSELEN": ww, "ATTRACTIES": lijst_nl(wissel_hele_dag)}))
     if gesloten_hele_dag:
         ww = "blijft" if len(gesloten_hele_dag) == 1 else "blijven"
-        hele_dag_zinnen.append(vul(TXT_HELE_DAG_GESLOTEN, {"BLIJFT/BLIJVEN": ww, "ATTRACTIES": lijst_nl(gesloten_hele_dag)}))
+        volgorde.append(vul(TXT_HELE_DAG_GESLOTEN, {"BLIJFT/BLIJVEN": ww, "ATTRACTIES": lijst_nl(gesloten_hele_dag)}))
 
-    # Chronologische tijdlijn samenvoegen (gesloten- en wissel-zinnen door elkaar, op tijdsvolgorde)
-    tijdlijn.sort(key=lambda t: (t[0], t[1]))
-    tijdlijn_zinnen = [zin for (_s, _e, zinnen) in tijdlijn for zin in zinnen]
-
-    alle_zinnen = wissel_intro_zinnen + wissel_fallback_zinnen + gesloten_fallback_zinnen + tijdlijn_zinnen + hele_dag_zinnen
-    if alle_zinnen:
-        toelichting = TXT_BEGIN + " " + " ".join(alle_zinnen) + " " + TXT_EIND
+    if volgorde:
+        toelichting = TXT_BEGIN + " " + " ".join(volgorde) + " " + TXT_EIND
     else:
         toelichting = TXT_NIKS_BIJZONDERS
 
@@ -7908,7 +7934,6 @@ def maak_openingstijden_sheet(wb_arg):
 
     geschatte_lijnen = max(1, (len(toelichting) // 90) + 1)
     ws_open.row_dimensions[tekst_row].height = max(20, geschatte_lijnen * 15)
-
 
 
 #wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
