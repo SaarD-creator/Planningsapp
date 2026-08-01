@@ -7495,79 +7495,39 @@ def maak_openingstijden_sheet(wb_arg):
     # ---------- Zinnetjes inlezen uit tabblad 'Onthaal' in Input-excel ----------
     ws_zinnen = wb["Onthaal"] if "Onthaal" in wb.sheetnames else None
 
-    def vind_categorie_start(koptekst):
-        for row in range(1, ws_zinnen.max_row + 1):
-            waarde = ws_zinnen.cell(row, 1).value
-            if waarde and str(waarde).strip() == koptekst:
-                return row
-        raise ValueError(
-            f"Kop '{koptekst}' niet gevonden in tabblad 'Onthaal'. "
-            f"Controleer of de rijstructuur nog intact is."
-        )
-
-    def vind_rij(vanaf_row, tot_row, fragment):
-        for row in range(vanaf_row, tot_row):
-            waarde = ws_zinnen.cell(row, 1).value
-            if waarde and fragment in str(waarde):
-                return row
-        raise ValueError(
-            f"Rij met beschrijving '{fragment}' niet gevonden in tabblad 'Onthaal' "
-            f"(tussen rij {vanaf_row} en {tot_row})."
-        )
-
-    def T(vanaf_row, tot_row, fragment):
+    def T(rij, standaard):
         if ws_zinnen is None:
-            raise ValueError(
-                f"Tabblad 'Onthaal' niet gevonden in de Input-excel. "
-                f"Kan zinnetje '{fragment}' niet inlezen."
-            )
-        rij = vind_rij(vanaf_row, tot_row, fragment)
+            return standaard
         waarde = ws_zinnen.cell(rij, 2).value
-        if waarde in (None, ""):
-            raise ValueError(
-                f"Cel B{rij} (bij '{fragment}') in het tabblad 'Onthaal' is leeg. "
-                f"Vul deze cel in vooraleer het script te draaien."
-            )
-        return str(waarde).strip()
+        return str(waarde).strip() if waarde not in (None, "") else standaard
 
     def vul(template, vervang):
         for key, val in vervang.items():
             template = template.replace(f"[{key}]", str(val))
         return template
 
-    # Categorie-grenzen opzoeken (op basis van de koptekst in kolom A, niet op rijnummer)
-    if ws_zinnen is not None:
-        _alg_start     = vind_categorie_start("Algemeen")
-        _wissel_start  = vind_categorie_start("Wisselende (samengevoegde) attracties")
-        _gesloten_start = vind_categorie_start("Gesloten attracties")
-        _einde_sheet   = ws_zinnen.max_row + 1
-    else:
-        _alg_start = _wissel_start = _gesloten_start = _einde_sheet = 0
-
-    # Elke tekst wordt gezocht op basis van een unieke tekstflard in kolom A,
-    # binnen de juiste categorie (zodat gelijkaardige beschrijvingen niet botsen).
-    TXT_NIKS_BIJZONDERS      = T(_alg_start, _wissel_start, "gewoon de hele dag geopend")
-    TXT_BEGIN                = T(_alg_start, _wissel_start, "Begintekstje")
-    TXT_EIND                 = T(_alg_start, _wissel_start, "Eindtekstje")
-    TXT_WISSEL_INTRO1        = T(_wissel_start, _gesloten_start, "Introzin 1")
-    TXT_WISSEL_INTRO2        = T(_wissel_start, _gesloten_start, "Introzin 2")
-    TXT_WISSEL_MULTI_1       = T(_wissel_start, _gesloten_start, "Eerste tijdslot met meerdere paren")
-    TXT_WISSEL_MULTI_2       = T(_wissel_start, _gesloten_start, "Tweede tijdslot (indien van toepassing) met meerdere paren")
-    TXT_WISSEL_SINGLE_1      = T(_wissel_start, _gesloten_start, "Eerste tijdslot met slechts 1 paar")
-    TXT_WISSEL_SINGLE_2      = T(_wissel_start, _gesloten_start, "Tweede tijdslot (indien van toepassing) met slechts 1 paar")
-    TXT_WISSEL_HEROPEN       = T(_wissel_start, _gesloten_start, "heropen-melding")
-    TXT_WISSEL_FALLBACK      = T(_wissel_start, _gesloten_start, "Meer dan 2 verschillende tijdsloten")
-    TXT_WISSEL_HELE_DAG      = T(_wissel_start, _gesloten_start, "hele dag afwisselend open")
-    TXT_GESLOTEN_START_GLOB  = T(_gesloten_start, _einde_sheet, "verder die dag niets anders bijzonders")
-    TXT_GESLOTEN_START_LOK   = T(_gesloten_start, _einde_sheet, "nog andere bijzonderheden later op de dag")
-    TXT_GESLOTEN_START_GEEN  = T(_gesloten_start, _einde_sheet, "vanaf openingstijd tot aan sluitingstijd")
-    TXT_GESLOTEN_NIET_START  = T(_gesloten_start, _einde_sheet, "niet vanaf openingstijd")
-    TXT_GESLOTEN_FALLBACK    = T(_gesloten_start, _einde_sheet, "Meer dan 2 verschillende tijdsloten")
-    TXT_LANG_OPENT_OM        = T(_gesloten_start, _einde_sheet, "open vanaf een bepaald uur tot sluitingstijd")
-    TXT_LANG_OPENT_TUSSEN    = T(_gesloten_start, _einde_sheet, "1 open periode die niet tot sluitingstijd loopt")
-    TXT_LANG_ENKEL_TOT       = T(_gesloten_start, _einde_sheet, "sluit vroeger dan normaal")
-    TXT_LANG_MEERDERE        = T(_gesloten_start, _einde_sheet, "meerdere aparte open periodes")
-    TXT_HELE_DAG_GESLOTEN    = T(_gesloten_start, _einde_sheet, "De hele dag gesloten")
+    TXT_NIKS_BIJZONDERS      = T(19, "Alle attracties zijn de hele dag geopend.")
+    TXT_BEGIN                = T(20, "Hieronder vind je een overzicht van de attracties die vandaag niet volgens het normale schema geopend zijn.")
+    TXT_EIND                 = T(21, "Meer uitleg en concrete uren kan je aflezen op de kiosken bij elke attractie. Heb je toch nog vragen? Spreek gerust een medewerker aan.")
+    TXT_WISSEL_INTRO1        = T(25, "Wegens lage drukte zullen vandaag niet al onze attracties die een begeleider vereisen de hele dag open zijn.")
+    TXT_WISSEL_INTRO2        = T(26, "Onze medewerkers wisselen sommige uren af tussen [AANTAL] attracties.")
+    TXT_WISSEL_MULTI_1       = T(27, "Concreet zullen de volgende attracties [TIJDVAK] afwisselend open zijn: [ATTRACTIES].")
+    TXT_WISSEL_MULTI_2       = T(28, "Daarnaast zullen de volgende attracties [TIJDVAK] afwisselend open zijn: [ATTRACTIES].")
+    TXT_WISSEL_SINGLE_1      = T(29, "[TIJDVAK] zullen [PAAR] elkaar afwisselen.")
+    TXT_WISSEL_SINGLE_2      = T(30, "[TIJDVAK] zullen [PAAR] ook elkaar afwisselen.")
+    TXT_WISSEL_HEROPEN       = T(31, "Om [UUR] openen de betrokken attracties gewoon apart.")
+    TXT_WISSEL_FALLBACK      = T(32, "Zo zullen volgende attracties op verschillende momenten afwisselend open zijn: [ATTRACTIES].")
+    TXT_WISSEL_HELE_DAG      = T(33, "Daarnaast [WISSELT/WISSELEN] [ATTRACTIES] de hele dag door af: er is dan telkens maar één van deze attracties open.")
+    TXT_GESLOTEN_START_GLOB  = T(37, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten, maar vanaf [UUR] zijn al onze attracties geopend.")
+    TXT_GESLOTEN_START_LOK   = T(38, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten, maar openen om [UUR] voor de rest van de dag.")
+    TXT_GESLOTEN_START_GEEN  = T(39, "[TIJDVAK] zijn de attracties [ATTRACTIES] gesloten.")
+    TXT_GESLOTEN_NIET_START  = T(40, "[TIJDVAK] [ZAL/ZULLEN] [ATTRACTIES] tijdelijk sluiten.")
+    TXT_GESLOTEN_FALLBACK    = T(41, "Daarnaast zijn vandaag op verschillende momenten volgende attracties tijdelijk gesloten: [ATTRACTIES].")
+    TXT_LANG_OPENT_OM        = T(42, "[ATTRACTIE] zal openen om [UUR].")
+    TXT_LANG_OPENT_TUSSEN    = T(43, "[ATTRACTIE] zal openen tussen [TIJDVAK].")
+    TXT_LANG_ENKEL_TOT       = T(44, "[ATTRACTIE] is vandaag enkel open tot [UUR].")
+    TXT_LANG_MEERDERE        = T(45, "[ATTRACTIE] zal openen tussen [TIJDVAKKEN].")
+    TXT_HELE_DAG_GESLOTEN    = T(46, "[ATTRACTIES] [BLIJFT/BLIJVEN] vandaag de hele dag gesloten.")
 
     # Gesloten attracties per uur opnieuw inlezen uit Input_ (T-kolom = raw naam)
     gesloten_per_uur = defaultdict(list)
@@ -7888,34 +7848,6 @@ def maak_openingstijden_sheet(wb_arg):
 
     geschatte_lijnen = max(1, (len(toelichting) // 90) + 1)
     ws_open.row_dimensions[tekst_row].height = max(20, geschatte_lijnen * 15)
-
-
-
-
-# -----------------------------
-# Werkblad Heropleidingen
-# -----------------------------
-from openpyxl.styles.proxy import StyleProxy
-from copy import copy
-
-ws_bron = wb.worksheets[[ws.title for ws in wb.worksheets].index("Heropleidingen")] if "Heropleidingen" in wb.sheetnames else None
-if ws_bron:
-    ws_hero = wb_out.create_sheet(title="Heropleidingen")
-    for rij in ws_bron.iter_rows():
-        for cel in rij:
-            nieuwe_cel = ws_hero.cell(row=cel.row, column=cel.column, value=cel.value)
-            if cel.has_style:
-                nieuwe_cel.font = copy(cel.font)
-                nieuwe_cel.fill = copy(cel.fill)
-                nieuwe_cel.border = copy(cel.border)
-                nieuwe_cel.alignment = copy(cel.alignment)
-                nieuwe_cel.number_format = cel.number_format
-    for kol, breedte in ws_bron.column_dimensions.items():
-        ws_hero.column_dimensions[kol].width = breedte.width
-        ws_hero.column_dimensions["A"].width = 11
-    for rij, hoogte in ws_bron.row_dimensions.items():
-        ws_hero.row_dimensions[rij].height = hoogte.height
-
 
 
 #NIEUWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
