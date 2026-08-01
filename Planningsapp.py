@@ -7695,8 +7695,11 @@ def maak_openingstijden_sheet(wb_arg):
     ws_open.freeze_panes = "A3"
 
     # ---------- Vlotte toelichting ----------
-    analyse_n = n_totaal - 1 if (rustig and n_totaal > 1) else n_totaal
-    laatste_idx = analyse_n - 1
+    laatste_uur_start = sorted_open_uren[n_totaal - 1]
+
+    def onbekend_laatste_uur(eind):
+        """True als deze eindtijd toevallig samenvalt met de start van het (bij Rustig) niet-besproken laatste uur."""
+        return rustig and eind == laatste_uur_start
 
     def bereken_windows(idx_set):
         """Lijst van (start_idx, eind_idx, start_uur, eind_uur, is_hele_dag) voor een set van indices."""
@@ -7704,7 +7707,7 @@ def maak_openingstijden_sheet(wb_arg):
         for (s_idx, e_idx) in contiguous_ranges(idx_set):
             start_uur = sorted_open_uren[s_idx]
             eind_uur  = volgend_uur(e_idx)
-            hele_dag  = (s_idx == 0 and e_idx == laatste_idx)
+            hele_dag  = (s_idx == 0 and e_idx == n_totaal - 1)
             windows.append((s_idx, e_idx, start_uur, eind_uur, hele_dag))
         return windows
 
@@ -7733,15 +7736,11 @@ def maak_openingstijden_sheet(wb_arg):
     # --- indexeren: wisselende groepen en gesloten attracties, rekening houdend met 'Rustig' ---
     wissel_idx_per_groep = defaultdict(set)
     for idx, uur in enumerate(sorted_open_uren):
-        if rustig and idx > laatste_idx:
-            continue
         for groep in uur_samenvoegingen.get(uur, []):
             wissel_idx_per_groep[frozenset(groep)].add(idx)
 
     gesloten_idx_per_attr = defaultdict(set)
     for idx, uur in enumerate(sorted_open_uren):
-        if rustig and idx > laatste_idx:
-            continue
         for naam in gesloten_per_uur.get(uur, []):
             gesloten_idx_per_attr[naam].add(idx)
 
@@ -7753,7 +7752,7 @@ def maak_openingstijden_sheet(wb_arg):
         alle_special_idx |= s
 
     def rest_van_dag_normaal(e_idx):
-        return not any(i in alle_special_idx for i in range(e_idx + 1, analyse_n))
+        return not any(i in alle_special_idx for i in range(e_idx + 1, n_totaal))
 
     # --- wisselende attracties: groepen met max. 2u 'apart' rekenen als hele dag,
     #     de rest opsplitsen in specifieke tijdsloten ---
@@ -7763,44 +7762,50 @@ def maak_openingstijden_sheet(wb_arg):
     for groep_set, idxset in wissel_idx_per_groep.items():
         max_groepsgrootte = max(max_groepsgrootte, len(groep_set))
         naam_paar = " en ".join(sorted(groep_set))
-        apart_idx = set(range(analyse_n)) - idxset
+        apart_idx = set(range(n_totaal)) - idxset
         apart_uren = sum(volgend_uur(i) - sorted_open_uren[i] for i in apart_idx)
         if apart_uren <= 2:
             # Amper apart (max 2u) -> reken de groep gewoon bij 'hele dag'
             wissel_hele_dag.append(naam_paar)
             continue
         for (s_idx, e_idx, start, eind, hele_dag) in bereken_windows(idxset):
+            if rustig and s_idx == n_totaal - 1:
+                continue  # uitsluitend binnen het laatste uur -> niet vermelden
             if hele_dag:
                 wissel_hele_dag.append(naam_paar)
             else:
                 wissel_per_slot[(s_idx, start, eind)].append(naam_paar)
 
-    wissel_zinnen = []
+    tijdlijn = []  # (sort_start, sort_eind, [zinnen]) -> op het einde chronologisch samengevoegd
+    wissel_intro_zinnen = []
+    wissel_fallback_zinnen = []
     wissel_fallback_gebruikt = False
 
     if wissel_per_slot or wissel_hele_dag:
         aantal_tekst = "2 (of 3)" if max_groepsgrootte >= 3 else "2"
-        wissel_zinnen.append(TXT_WISSEL_INTRO1)
-        wissel_zinnen.append(vul(TXT_WISSEL_INTRO2, {"AANTAL": aantal_tekst}))
+        wissel_intro_zinnen.append(TXT_WISSEL_INTRO1)
+        wissel_intro_zinnen.append(vul(TXT_WISSEL_INTRO2, {"AANTAL": aantal_tekst}))
 
-        distinct_sloten = sorted(wissel_per_slot.keys(), key=lambda t: t[1])
+        distinct_sloten = sorted(wissel_per_slot.keys(), key=lambda t: (t[1], t[2]))
         if len(distinct_sloten) <= 2:
             for i, slot in enumerate(distinct_sloten):
                 s_idx, start, eind = slot
                 paren = wissel_per_slot[slot]
+                eenheid = []
                 if len(paren) == 1:
                     sjabloon = TXT_WISSEL_SINGLE_1 if i == 0 else TXT_WISSEL_SINGLE_2
-                    wissel_zinnen.append(vul(sjabloon, {"TIJDVAK": frag(s_idx, start, eind), "PAAR": paren[0]}))
+                    eenheid.append(vul(sjabloon, {"TIJDVAK": frag(s_idx, start, eind), "PAAR": paren[0]}))
                 else:
                     sjabloon = TXT_WISSEL_MULTI_1 if i == 0 else TXT_WISSEL_MULTI_2
                     bijzin = tijdsvak_bijzin(s_idx, start, eind)
-                    wissel_zinnen.append(vul(sjabloon, {"TIJDVAK": bijzin, "ATTRACTIES": lijst_nl(paren)}))
-                if eind != sluitingsuur:
-                    wissel_zinnen.append(vul(TXT_WISSEL_HEROPEN, {"UUR": formatteer_uur(eind)}))
+                    eenheid.append(vul(sjabloon, {"TIJDVAK": bijzin, "ATTRACTIES": lijst_nl(paren)}))
+                if eind != sluitingsuur and not onbekend_laatste_uur(eind):
+                    eenheid.append(vul(TXT_WISSEL_HEROPEN, {"UUR": formatteer_uur(eind)}))
+                tijdlijn.append((start, eind, eenheid))
         else:
             wissel_fallback_gebruikt = True
             alle_paren = sorted(set(p for paren in wissel_per_slot.values() for p in paren) | set(wissel_hele_dag))
-            wissel_zinnen.append(vul(TXT_WISSEL_FALLBACK, {"ATTRACTIES": lijst_nl(alle_paren)}))
+            wissel_fallback_zinnen.append(vul(TXT_WISSEL_FALLBACK, {"ATTRACTIES": lijst_nl(alle_paren)}))
 
     # --- gesloten attracties: kort (<=2u, per tijdslot) / lang (>2u, focus op openen) / hele dag ---
     kort_per_slot = defaultdict(list)  # (start_idx, start_uur, eind_uur) -> [naam, ...]
@@ -7815,54 +7820,61 @@ def maak_openingstijden_sheet(wb_arg):
             lang_namen.append(naam)
         else:
             for (s_idx, e_idx, start, eind, _h) in windows:
+                if rustig and s_idx == n_totaal - 1:
+                    continue  # uitsluitend binnen het laatste uur -> niet vermelden
                 kort_per_slot[(s_idx, start, eind)].append(naam)
 
-    gesloten_kort_zinnen = []
-    distinct_sloten_g = sorted(kort_per_slot.keys(), key=lambda t: t[1])
+    gesloten_fallback_zinnen = []
+    distinct_sloten_g = sorted(kort_per_slot.keys(), key=lambda t: (t[1], t[2]))
     if len(distinct_sloten_g) <= 2:
         for (s_idx, start, eind) in distinct_sloten_g:
             namen = kort_per_slot[(s_idx, start, eind)]
+            meervoud = len(namen) > 1
+            vervang_basis = {
+                "TIJDVAK": frag(s_idx, start, eind),
+                "ATTRACTIES": lijst_nl(namen),
+                "IS/ZIJN": "zijn" if meervoud else "is",
+                "DE ATTRACTIE(S)": "de attracties" if meervoud else "de attractie",
+                "OPENT/OPENEN": "openen" if meervoud else "opent",
+            }
             if s_idx == 0:
-                if eind == sluitingsuur:
-                    tekst = vul(TXT_GESLOTEN_START_GEEN, {"TIJDVAK": frag(s_idx, start, eind), "ATTRACTIES": lijst_nl(namen)})
+                if eind == sluitingsuur or onbekend_laatste_uur(eind):
+                    tekst = vul(TXT_GESLOTEN_START_GEEN, vervang_basis)
                 else:
-                    e_idx = sorted_open_uren.index(eind) - 1 if eind in sorted_open_uren else laatste_idx
+                    e_idx = sorted_open_uren.index(eind) - 1 if eind in sorted_open_uren else n_totaal - 1
                     if rest_van_dag_normaal(e_idx):
-                        tekst = vul(TXT_GESLOTEN_START_GLOB, {
-                            "TIJDVAK": frag(s_idx, start, eind), "ATTRACTIES": lijst_nl(namen), "UUR": formatteer_uur(eind)
-                        })
+                        tekst = vul(TXT_GESLOTEN_START_GLOB, {**vervang_basis, "UUR": formatteer_uur(eind)})
                     else:
-                        tekst = vul(TXT_GESLOTEN_START_LOK, {
-                            "TIJDVAK": frag(s_idx, start, eind), "ATTRACTIES": lijst_nl(namen), "UUR": formatteer_uur(eind)
-                        })
-                gesloten_kort_zinnen.append(tekst)
+                        tekst = vul(TXT_GESLOTEN_START_LOK, {**vervang_basis, "UUR": formatteer_uur(eind)})
             else:
                 hulp = "zal" if len(namen) == 1 else "zullen"
-                gesloten_kort_zinnen.append(vul(TXT_GESLOTEN_NIET_START, {
-                    "TIJDVAK": frag(s_idx, start, eind), "ZAL/ZULLEN": hulp, "ATTRACTIES": lijst_nl(namen)
-                }))
+                tekst = vul(TXT_GESLOTEN_NIET_START, {**vervang_basis, "ZAL/ZULLEN": hulp})
+            tijdlijn.append((start, eind, [tekst]))
     else:
         alle_kort_namen = sorted(set(n for namen in kort_per_slot.values() for n in namen))
-        gesloten_kort_zinnen.append(vul(TXT_GESLOTEN_FALLBACK, {"ATTRACTIES": lijst_nl(alle_kort_namen)}))
+        gesloten_fallback_zinnen.append(vul(TXT_GESLOTEN_FALLBACK, {"ATTRACTIES": lijst_nl(alle_kort_namen)}))
 
-    gesloten_lang_zinnen = []
-    alle_indices = set(range(analyse_n))
+    alle_indices = set(range(n_totaal))
     for naam in sorted(lang_namen):
         open_idxset = alle_indices - gesloten_idx_per_attr[naam]
         open_windows = [(s, e) for (_s_idx, _e_idx, s, e, _h) in bereken_windows(open_idxset)]
         if not open_windows:
             continue
+        eerste_gesloten_start = min(
+            sorted_open_uren[s] for (s, _e) in contiguous_ranges(gesloten_idx_per_attr[naam])
+        )
         if len(open_windows) == 1:
             start, eind = open_windows[0]
             if start == sorted_open_uren[0] and eind != sluitingsuur:
-                gesloten_lang_zinnen.append(vul(TXT_LANG_ENKEL_TOT, {"ATTRACTIE": naam, "UUR": formatteer_uur(eind)}))
+                zin = vul(TXT_LANG_ENKEL_TOT, {"ATTRACTIE": naam, "UUR": formatteer_uur(eind)})
             elif eind == sluitingsuur:
-                gesloten_lang_zinnen.append(vul(TXT_LANG_OPENT_OM, {"ATTRACTIE": naam, "UUR": formatteer_uur(start)}))
+                zin = vul(TXT_LANG_OPENT_OM, {"ATTRACTIE": naam, "UUR": formatteer_uur(start)})
             else:
-                gesloten_lang_zinnen.append(vul(TXT_LANG_OPENT_TUSSEN, {"ATTRACTIE": naam, "TIJDVAK": formatteer_interval(start, eind)}))
+                zin = vul(TXT_LANG_OPENT_TUSSEN, {"ATTRACTIE": naam, "TIJDVAK": formatteer_interval(start, eind)})
         else:
             vensters = [formatteer_interval(s, e) for (s, e) in open_windows]
-            gesloten_lang_zinnen.append(vul(TXT_LANG_MEERDERE, {"ATTRACTIE": naam, "TIJDVAKKEN": lijst_nl(vensters)}))
+            zin = vul(TXT_LANG_MEERDERE, {"ATTRACTIE": naam, "TIJDVAKKEN": lijst_nl(vensters)})
+        tijdlijn.append((eerste_gesloten_start, 999, [zin]))
 
     # --- hele-dag samenvattingen (altijd als laatste) ---
     hele_dag_zinnen = []
@@ -7873,7 +7885,11 @@ def maak_openingstijden_sheet(wb_arg):
         ww = "blijft" if len(gesloten_hele_dag) == 1 else "blijven"
         hele_dag_zinnen.append(vul(TXT_HELE_DAG_GESLOTEN, {"BLIJFT/BLIJVEN": ww, "ATTRACTIES": lijst_nl(gesloten_hele_dag)}))
 
-    alle_zinnen = wissel_zinnen + gesloten_kort_zinnen + gesloten_lang_zinnen + hele_dag_zinnen
+    # Chronologische tijdlijn samenvoegen (gesloten- en wissel-zinnen door elkaar, op tijdsvolgorde)
+    tijdlijn.sort(key=lambda t: (t[0], t[1]))
+    tijdlijn_zinnen = [zin for (_s, _e, zinnen) in tijdlijn for zin in zinnen]
+
+    alle_zinnen = wissel_intro_zinnen + wissel_fallback_zinnen + gesloten_fallback_zinnen + tijdlijn_zinnen + hele_dag_zinnen
     if alle_zinnen:
         toelichting = TXT_BEGIN + " " + " ".join(alle_zinnen) + " " + TXT_EIND
     else:
@@ -7892,8 +7908,6 @@ def maak_openingstijden_sheet(wb_arg):
 
     geschatte_lijnen = max(1, (len(toelichting) // 90) + 1)
     ws_open.row_dimensions[tekst_row].height = max(20, geschatte_lijnen * 15)
-
-
 
 
 
