@@ -1,3 +1,4 @@
+# toevoeging werkblad "Onthaal", weinig getest
 # fix open spots maar verdere testen nodig! + open spots bij enkel lange pauzes ontbreken nog 
 # toevoegingen Antwerpen compleet
 # overall verbetering pauzeplanning
