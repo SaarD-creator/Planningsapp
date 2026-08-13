@@ -76,6 +76,18 @@ PAUZE_STRIKT_BOVEN_4U = _vinkje_b3 in [1, True, "WAAR", "X"]
 # ------------------------------------------------------------------------
 # ------------------------------------------------------------------------
 
+
+# --- Eerlijkheidsnummers (Instellingen C4:G4) waarvoor de gedoodverfde-logica geldt ---
+GEDOODVERFDE_TIE_BREAK_MODES = set()
+for _kol in range(3, 8):  # C4 t/m G4
+    _val = ws_instellingen.cell(row=4, column=_kol).value
+    if _val is not None:
+        try:
+            GEDOODVERFDE_TIE_BREAK_MODES.add(int(_val))
+        except (TypeError, ValueError):
+            continue
+# ------------------------------------------------------------------------
+
 # -----------------------------
 # Datum op basis van W4 in Input_
 # -----------------------------
@@ -540,6 +552,24 @@ for s in studenten:
 
 
 
+# -----------------------------
+# Globale schaarste per attractie (op basis van ALLE studenten, niet enkel wie vandaag werkt)
+# -----------------------------
+_globale_telling_per_attr = defaultdict(int)
+for _s in studenten:
+    for _a in _s["attracties"]:
+        _globale_telling_per_attr[_a] += 1
+
+_gemiddelde_telling = (
+    sum(_globale_telling_per_attr.values()) / len(_globale_telling_per_attr)
+    if _globale_telling_per_attr else 0
+)
+SCHAARSTE_DREMPEL = _gemiddelde_telling * 0.8
+
+schaarse_attracties_globaal = {
+    a for a, cnt in _globale_telling_per_attr.items() if cnt < SCHAARSTE_DREMPEL
+}
+
 
 # -----------------------------
 # Openingsuren
@@ -782,6 +812,63 @@ for uur in open_uren:
 studenten_workend = [
     s for s in studenten if any(u in open_uren for u in s["uren_beschikbaar"])
 ]
+
+
+# -----------------------------
+# Gedoodverfde kandidaten voor schaarse attracties (enkel wie vandaag werkt)
+# -----------------------------
+alle_open_attracties_vandaag = set()
+for _uur in open_uren:
+    alle_open_attracties_vandaag |= actieve_attracties_per_uur.get(_uur, set())
+
+gedoodverfde_kandidaten = set()
+for _s in studenten_workend:
+    _kan = set(_s["attracties"])
+    _kan_schaars = _kan & schaarse_attracties_globaal
+    _is_generalist = alle_open_attracties_vandaag.issubset(_kan)
+    if _kan_schaars and not _is_generalist:
+        gedoodverfde_kandidaten.add(_s["naam"])
+
+
+
+# -----------------------------
+# Per-uur check: genoeg niet-gedoodverfde alternatieven voor een schaarse attractie?
+# -----------------------------
+drempel_alternatieven = -(-len(open_uren) // 3)  # aantal openingsuren / 3, afgerond naar boven
+
+voldoende_alternatieven_per_attr_uur = {}
+for _attr in schaarse_attracties_globaal:
+    for _uur in open_uren:
+        if _attr not in actieve_attracties_per_uur.get(_uur, set()):
+            continue
+        _aantal_niet_gedoodverfd = sum(
+            1 for _s in studenten_workend
+            if _uur in _s["uren_beschikbaar"]
+            and _attr in _s["attracties"]
+            and _s["naam"] not in gedoodverfde_kandidaten
+        )
+        voldoende_alternatieven_per_attr_uur[(_attr, _uur)] = (
+            _aantal_niet_gedoodverfd >= drempel_alternatieven
+        )
+
+
+
+
+# -----------------------------
+# TIJDELIJK - test gedoodverfde-logica, achteraf verwijderen
+# -----------------------------
+with st.expander("🔍 Debug: gedoodverfde kandidaten", expanded=False):
+    st.write("Actief eerlijkheidsnummer vandaag:", tie_break_mode)
+    st.write("Logica actief voor dit nummer?", tie_break_mode in GEDOODVERFDE_TIE_BREAK_MODES)
+    st.write("Drempel schaarste (aantal studenten):", round(SCHAARSTE_DREMPEL, 1))
+    st.write("Schaarse attracties (globaal):", sorted(schaarse_attracties_globaal))
+    st.write("Aantal gedoodverfde kandidaten vandaag:", len(gedoodverfde_kandidaten))
+    st.write("Gedoodverfde kandidaten:", sorted(gedoodverfde_kandidaten))
+    st.write("Drempel alternatieven per uur:", drempel_alternatieven)
+    st.write(
+        "Per (attractie, uur) voldoende alternatieven?",
+        {f"{a} @ {formatteer_uur(u)}": ok for (a, u), ok in sorted(voldoende_alternatieven_per_attr_uur.items())}
+    )
 
 
 ideaalmomenten = compute_ideal_moments()  
@@ -1239,10 +1326,20 @@ def _try_place_block_any_attr(student, block_hours):
             elif breedte_profiel >= 5:  fairness_straf = 60
             elif breedte_profiel >= 4:  fairness_straf = 25
 
+        # ── NIEUW: gedoodverfde kandidaat - schaarse attractie achteraan duwen ──
+        geforceerd_achteraan = 0
+        if (
+            tie_break_mode in GEDOODVERFDE_TIE_BREAK_MODES
+            and student["naam"] in gedoodverfde_kandidaten
+            and attr in schaarse_attracties_globaal
+            and all(voldoende_alternatieven_per_attr_uur.get((attr, h), False) for h in block_hours)
+        ):
+            geforceerd_achteraan = 1
+
         hergebruik_straf = 1 if reeds_gebruikt else 0
         huidige_uren_op_attr = len(bestaande_uren)
 
-        return (fairness_straf, hergebruik_straf, huidige_uren_op_attr, schaarste, attr)
+        return (fairness_straf, geforceerd_achteraan, hergebruik_straf, huidige_uren_op_attr, schaarste, attr)
 
     candidate_attrs = [
         a for a in attracties_te_plannen
