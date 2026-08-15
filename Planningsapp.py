@@ -2180,6 +2180,133 @@ for _ in range(max_block_swap_passes):
         break
 
 
+
+
+
+# -----------------------------
+# Post-processing: gedoodverfde kandidaten wegschuiven van schaarse attracties
+# (enkel als het actieve eerlijkheidsnummer dit vraagt; pure verbetering, nooit een verslechtering)
+# -----------------------------
+def try_verplaats_gedoodverfde_van_schaarse_attractie(student, attr, block_hours):
+    orig_switches_a = count_attr_switches(student)
+    orig_problem_count_a = count_problem_attrs(student)
+
+    eerste_uur = block_hours[0]
+
+    for andere_student in studenten_workend:
+        if andere_student["naam"] == student["naam"]:
+            continue
+        if andere_student["naam"] in vaste_studenten:
+            continue
+        if andere_student["naam"] in gedoodverfde_kandidaten:
+            continue  # ruilpartner mag zelf geen gedoodverfde kandidaat zijn
+
+        attr_b = get_student_attr_on_hour(andere_student["naam"], eerste_uur)
+        if not attr_b or attr_b == attr:
+            continue
+        if attr_b in schaarse_attracties_globaal:
+            continue  # niet naar een andere schaarse attractie ruilen
+
+        if not can_use_block_as_swap_target(andere_student, attr_b, block_hours):
+            continue
+        if not is_valid_attr_for_student_on_hours(student, attr_b, block_hours):
+            continue
+        if not is_valid_attr_for_student_on_hours(andere_student, attr, block_hours):
+            continue
+
+        orig_switches_b = count_attr_switches(andere_student)
+        orig_problem_count_b = count_problem_attrs(andere_student)
+
+        # --- tijdelijke swap ---
+        for uur in block_hours:
+            remove_assignment(student, uur, attr)
+            remove_assignment(andere_student, uur, attr_b)
+        for uur in block_hours:
+            add_assignment(student, uur, attr_b)
+            add_assignment(andere_student, uur, attr)
+        rebuild_student_attrs(student)
+        rebuild_student_attrs(andere_student)
+
+        valid = True
+
+        # Regel: 0 extra wissels toegestaan (strenger dan elders in het script)
+        new_switches_a = count_attr_switches(student)
+        new_switches_b = count_attr_switches(andere_student)
+        if new_switches_a > orig_switches_a or new_switches_b > orig_switches_b:
+            valid = False
+
+        # Regel: geen enkele attractie mag boven de 6u-grens gaan
+        for s, a in [(student, attr), (student, attr_b), (andere_student, attr), (andere_student, attr_b)]:
+            if not respects_student_attr_rules(s, a):
+                valid = False
+
+        # Regel: geen nieuw blok van meer dan 4 uur bij geen van beide studenten
+        new_problem_count_a = count_problem_attrs(student)
+        new_problem_count_b = count_problem_attrs(andere_student)
+        if new_problem_count_a > orig_problem_count_a or new_problem_count_b > orig_problem_count_b:
+            valid = False
+
+        if valid:
+            return True
+
+        # --- rollback ---
+        for uur in block_hours:
+            remove_assignment(student, uur, attr_b)
+            remove_assignment(andere_student, uur, attr)
+        for uur in block_hours:
+            add_assignment(student, uur, attr)
+            add_assignment(andere_student, uur, attr_b)
+        rebuild_student_attrs(student)
+        rebuild_student_attrs(andere_student)
+
+    return False
+
+
+def try_verplaats_gedoodverfde_kandidaat(student, attr):
+    gewijzigd_ooit = False
+    while True:
+        runs = get_runs_on_attr(student, attr)
+        if not runs:
+            break
+
+        def kandidaat_blokken(run):
+            blokken = []
+            if len(run) >= 3:
+                blokken.append(run[-3:])
+                blokken.append(run[:3])
+            if len(run) >= 2:
+                blokken.append(run[-2:])
+                blokken.append(run[:2])
+            if len(run) == 1:
+                blokken.append(run)
+            return blokken
+
+        blok_gevonden = False
+        for run in runs:
+            for blok in kandidaat_blokken(run):
+                if try_verplaats_gedoodverfde_van_schaarse_attractie(student, attr, blok):
+                    blok_gevonden = True
+                    gewijzigd_ooit = True
+                    break
+            if blok_gevonden:
+                break
+
+        if not blok_gevonden:
+            break
+
+    return gewijzigd_ooit
+
+
+if tie_break_mode in GEDOODVERFDE_TIE_BREAK_MODES:
+    for _naam in sorted(gedoodverfde_kandidaten):
+        _student = get_student_by_name(_naam)
+        if not _student:
+            continue
+        for _attr in list(_student["assigned_attracties"]):
+            if _attr in schaarse_attracties_globaal:
+                try_verplaats_gedoodverfde_kandidaat(_student, _attr)
+                
+
 # -----------------------------
 # Post-processing (ENKEL bij FORCEER_EXHAUSTIEF, Instellingen!B2):
 # probeer blokken van EXACT 4 uur aan één stuk ook op te splitsen in 2x 2 uur.
