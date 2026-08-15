@@ -1420,6 +1420,129 @@ def _try_place_block_any_attr(student, block_hours):
     return False
 
 
+
+def _try_place_block_samenvoeging_transitie(student, block_hours, respecteer_fairness=True):
+    if len(block_hours) < 2:
+        return False
+
+    breedte_profiel = student.get("aantal_attracties", len(student.get("attracties", [])))
+
+    def fairness_ok(basis_attr, nieuwe_uren):
+        if not respecteer_fairness:
+            return True
+        bestaande = uren_bij_basis_attr(student, basis_attr)
+        totaal = len(bestaande | set(nieuwe_uren))
+        if totaal <= 4:
+            return True
+        # Zelfde drempels als candidate_score
+        if breedte_profiel >= 6: return False
+        if breedte_profiel >= 5: return False
+        if breedte_profiel >= 4: return False
+        return True  # weinig opties → toch toestaan
+
+    # ── Geval 1: eerste uur/uren zijn samenvoeging ──
+    eerste_uur = block_hours[0]
+    for sameng_attr in actieve_attracties_per_uur.get(eerste_uur, set()):
+        if " + " not in sameng_attr:
+            continue
+        if not student_kan_attr(student, sameng_attr):
+            continue
+
+        # Hoeveel opeenvolgende uren is de samenvoeging actief vanaf het begin?
+        sameng_uren = []
+        for h in block_hours:
+            if sameng_attr in actieve_attracties_per_uur.get(h, set()):
+                sameng_uren.append(h)
+            else:
+                break
+
+        rest_uren = [h for h in block_hours if h not in sameng_uren]
+        if not rest_uren:
+            continue
+
+        if not all(_has_capacity(sameng_attr, h) for h in sameng_uren):
+            continue
+
+        onderdelen = [o.strip() for o in sameng_attr.split("+")]
+
+        for onderdeel in onderdelen:
+            if not student_kan_attr(student, onderdeel):
+                continue
+            if not all(_has_capacity(onderdeel, h) for h in rest_uren):
+                continue
+
+            if len(uren_bij_basis_attr(student, onderdeel) | set(block_hours)) > 6:
+                continue
+            if not fairness_ok(onderdeel, block_hours):
+                continue
+
+            for h in sameng_uren:
+                assigned_map[(h, sameng_attr)].append(student["naam"])
+                per_hour_assigned_counts[h][sameng_attr] += 1
+                student["assigned_hours"].append(h)
+            student["assigned_attracties"].add(sameng_attr)
+
+            for h in rest_uren:
+                assigned_map[(h, onderdeel)].append(student["naam"])
+                per_hour_assigned_counts[h][onderdeel] += 1
+                student["assigned_hours"].append(h)
+            student["assigned_attracties"].add(onderdeel)
+
+            return True
+
+    # ── Geval 2: laatste uur/uren zijn samenvoeging ──
+    laatste_uur = block_hours[-1]
+    for sameng_attr in actieve_attracties_per_uur.get(laatste_uur, set()):
+        if " + " not in sameng_attr:
+            continue
+        if not student_kan_attr(student, sameng_attr):
+            continue
+
+        sameng_uren = []
+        for h in reversed(block_hours):
+            if sameng_attr in actieve_attracties_per_uur.get(h, set()):
+                sameng_uren.insert(0, h)
+            else:
+                break
+
+        vroege_uren = [h for h in block_hours if h not in sameng_uren]
+        if not vroege_uren:
+            continue
+
+        if not all(_has_capacity(sameng_attr, h) for h in sameng_uren):
+            continue
+
+        onderdelen = [o.strip() for o in sameng_attr.split("+")]
+
+        for onderdeel in onderdelen:
+            if not student_kan_attr(student, onderdeel):
+                continue
+            if not all(_has_capacity(onderdeel, h) for h in vroege_uren):
+                continue
+
+            # ── AANGEPAST: gebruik uren_bij_basis_attr + fairness check ──
+            if len(uren_bij_basis_attr(student, onderdeel) | set(block_hours)) > 6:
+                continue
+            if not fairness_ok(onderdeel, block_hours):
+                continue
+
+            for h in vroege_uren:
+                assigned_map[(h, onderdeel)].append(student["naam"])
+                per_hour_assigned_counts[h][onderdeel] += 1
+                student["assigned_hours"].append(h)
+            student["assigned_attracties"].add(onderdeel)
+
+            for h in sameng_uren:
+                assigned_map[(h, sameng_attr)].append(student["naam"])
+                per_hour_assigned_counts[h][sameng_attr] += 1
+                student["assigned_hours"].append(h)
+            student["assigned_attracties"].add(sameng_attr)
+
+            return True
+
+    return False
+    
+
 def _place_block_with_fallback(student, hours_seq, preferred_sizes=None, reset_sizes=None):
     if not hours_seq:
         return []
