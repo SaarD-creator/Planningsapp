@@ -552,6 +552,7 @@ for s in studenten:
 
 
 
+
 # -----------------------------
 # Globale schaarste per attractie (op basis van ALLE studenten, niet enkel wie vandaag werkt)
 # -----------------------------
@@ -566,8 +567,10 @@ _gemiddelde_telling = (
 )
 SCHAARSTE_DREMPEL = _gemiddelde_telling * 0.8
 
+# Een samengevoegde attractie met meer dan 2 onderdelen telt nooit als schaars
 schaarse_attracties_globaal = {
-    a for a, cnt in _globale_telling_per_attr.items() if cnt < SCHAARSTE_DREMPEL
+    a for a, cnt in _globale_telling_per_attr.items()
+    if cnt < SCHAARSTE_DREMPEL and len(a.split("+")) <= 2
 }
 
 
@@ -814,29 +817,69 @@ studenten_workend = [
 ]
 
 
+
+
 # -----------------------------
-# Gedoodverfde kandidaten voor schaarse attracties (enkel wie vandaag werkt)
+# Heropleidingen: tijdelijk geblokkeerde attracties per student
+# (enkel de "Belangrijk!"-sectie / >=6 maanden telt mee, "bijna"-sectie negeren we)
+# -----------------------------
+_HEROPLEIDING_NAAM_MAP = {"f1": "racen"}  # afwijkende naamgeving in Heropleidingen-sheet
+
+def _normaliseer_attr_naam(naam):
+    _n = str(naam).strip().lower()
+    return _HEROPLEIDING_NAAM_MAP.get(_n, _n)
+
+_attr_naam_lookup = {_normaliseer_attr_naam(a): a for a in attracties_te_plannen}
+
+heropleiding_per_student = defaultdict(set)
+ws_hero_bron = (
+    wb.worksheets[[ws.title for ws in wb.worksheets].index("Heropleidingen")]
+    if "Heropleidingen" in wb.sheetnames else None
+)
+if ws_hero_bron:
+    for _rij in ws_hero_bron.iter_rows():
+        if not _rij or _rij[0].value != "Belangrijk!":
+            continue
+        _naam = _rij[1].value if len(_rij) > 1 else None
+        _lijst = _rij[2].value if len(_rij) > 2 else None
+        if not _naam or not _lijst:
+            continue
+        for _ruwe_attr in str(_lijst).split(","):
+            _genorm = _normaliseer_attr_naam(_ruwe_attr)
+            if _genorm in _attr_naam_lookup:
+                heropleiding_per_student[str(_naam).strip()].add(_attr_naam_lookup[_genorm])
+
+# -----------------------------
+# Alle attracties die minstens één moment vandaag open zijn
 # -----------------------------
 alle_open_attracties_vandaag = set()
 for _uur in open_uren:
     alle_open_attracties_vandaag |= actieve_attracties_per_uur.get(_uur, set())
 
-gedoodverfde_kandidaten = set()
+# -----------------------------
+# Gedoodverfde kandidaten voor schaarse attracties (enkel wie vandaag werkt)
+# -----------------------------
+_gedoodverfd_ruw = []
 for _s in studenten_workend:
-    _kan = set(_s["attracties"])
+    _kan = set(_s["attracties"]) | heropleiding_per_student.get(_s["naam"], set())
     _kan_schaars = _kan & schaarse_attracties_globaal
     _is_generalist = alle_open_attracties_vandaag.issubset(_kan)
     if _kan_schaars and not _is_generalist:
-        gedoodverfde_kandidaten.add(_s["naam"])
+        _gedoodverfd_ruw.append((len(_kan), _s["naam"]))
 
-
+# Nooit meer gedoodverfde kandidaten dan er schaarse attracties zijn:
+# behoud enkel de smalste profielen (kleinste _kan eerst)
+_gedoodverfd_ruw.sort(key=lambda x: (x[0], x[1]))
+_max_gedoodverfd = len(schaarse_attracties_globaal)
+gedoodverfde_kandidaten = {naam for (_breedte, naam) in _gedoodverfd_ruw[:_max_gedoodverfd]}
 
 # -----------------------------
-# Per-uur check: genoeg niet-gedoodverfde alternatieven voor een schaarse attractie?
+# Per-uur gegevens voor de alternatievencheck (statisch, dag-specifiek)
 # -----------------------------
 drempel_alternatieven = -(-len(open_uren) // 3)  # aantal openingsuren / 3, afgerond naar boven
 
-voldoende_alternatieven_per_attr_uur = {}
+alternatieven_per_attr_uur = {}
+plekken_per_attr_uur = {}
 for _attr in schaarse_attracties_globaal:
     for _uur in open_uren:
         if _attr not in actieve_attracties_per_uur.get(_uur, set()):
@@ -847,12 +890,12 @@ for _attr in schaarse_attracties_globaal:
             and _attr in _s["attracties"]
             and _s["naam"] not in gedoodverfde_kandidaten
         )
-        voldoende_alternatieven_per_attr_uur[(_attr, _uur)] = (
-            _aantal_niet_gedoodverfd >= drempel_alternatieven
-        )
+        alternatieven_per_attr_uur[(_attr, _uur)] = _aantal_niet_gedoodverfd
 
-
-
+        _plekken = aantallen[_uur].get(_attr, 1)
+        if _attr in second_spot_blocked.get(_uur, set()):
+            _plekken = 1
+        plekken_per_attr_uur[(_attr, _uur)] = _plekken
 
 # -----------------------------
 # TIJDELIJK - test gedoodverfde-logica, achteraf verwijderen
@@ -862,13 +905,23 @@ with st.expander("🔍 Debug: gedoodverfde kandidaten", expanded=False):
     st.write("Logica actief voor dit nummer?", tie_break_mode in GEDOODVERFDE_TIE_BREAK_MODES)
     st.write("Drempel schaarste (aantal studenten):", round(SCHAARSTE_DREMPEL, 1))
     st.write("Schaarse attracties (globaal):", sorted(schaarse_attracties_globaal))
+    st.write("Max. aantal gedoodverfde kandidaten (= aantal schaarse attracties):", len(schaarse_attracties_globaal))
     st.write("Aantal gedoodverfde kandidaten vandaag:", len(gedoodverfde_kandidaten))
     st.write("Gedoodverfde kandidaten:", sorted(gedoodverfde_kandidaten))
+    st.write(
+        "Heropleiding-correcties vandaag:",
+        {k: sorted(v) for k, v in heropleiding_per_student.items() if k in [s['naam'] for s in studenten_workend]}
+    )
     st.write("Drempel alternatieven per uur:", drempel_alternatieven)
     st.write(
-        "Per (attractie, uur) voldoende alternatieven?",
-        {f"{a} @ {formatteer_uur(u)}": ok for (a, u), ok in sorted(voldoende_alternatieven_per_attr_uur.items())}
+        "Alternatieven per (attractie, uur):",
+        {f"{a} @ {formatteer_uur(u)}": n for (a, u), n in sorted(alternatieven_per_attr_uur.items())}
     )
+    st.write(
+        "Plekken per (attractie, uur):",
+        {f"{a} @ {formatteer_uur(u)}": p for (a, u), p in sorted(plekken_per_attr_uur.items())}
+    )
+
 
 
 ideaalmomenten = compute_ideal_moments()  
@@ -1310,6 +1363,19 @@ def _try_place_block_on_attr(student, block_hours, attr):
 
 
 def _try_place_block_any_attr(student, block_hours):
+    def _blok_heeft_voldoende_alternatieven(attr):
+        _uren_met_2_plekken = sum(
+            1 for h in block_hours if plekken_per_attr_uur.get((attr, h), 1) >= 2
+        )
+        _uren_met_1_plek = len(block_hours) - _uren_met_2_plekken
+        # Bonus enkel als het blok (bijna) volledig 2 plekken heeft: max 1 uur uitzondering
+        _bonus = 2 if _uren_met_2_plekken >= 1 and _uren_met_1_plek <= 1 else 0
+        _drempel = drempel_alternatieven + _bonus
+        return all(
+            alternatieven_per_attr_uur.get((attr, h), 0) >= _drempel
+            for h in block_hours
+        )
+
     def candidate_score(attr):
         schaarste = sum(1 for s in studenten_workend if attr in s["attracties"])
 
@@ -1332,7 +1398,7 @@ def _try_place_block_any_attr(student, block_hours):
             tie_break_mode in GEDOODVERFDE_TIE_BREAK_MODES
             and student["naam"] in gedoodverfde_kandidaten
             and attr in schaarse_attracties_globaal
-            and all(voldoende_alternatieven_per_attr_uur.get((attr, h), False) for h in block_hours)
+            and _blok_heeft_voldoende_alternatieven(attr)
         ):
             geforceerd_achteraan = 1
 
@@ -1349,129 +1415,6 @@ def _try_place_block_any_attr(student, block_hours):
 
     for attr in candidate_attrs:
         if _try_place_block_on_attr(student, block_hours, attr):
-            return True
-
-    return False
-    
-
-
-def _try_place_block_samenvoeging_transitie(student, block_hours, respecteer_fairness=True):
-    if len(block_hours) < 2:
-        return False
-
-    breedte_profiel = student.get("aantal_attracties", len(student.get("attracties", [])))
-
-    def fairness_ok(basis_attr, nieuwe_uren):
-        if not respecteer_fairness:
-            return True
-        bestaande = uren_bij_basis_attr(student, basis_attr)
-        totaal = len(bestaande | set(nieuwe_uren))
-        if totaal <= 4:
-            return True
-        # Zelfde drempels als candidate_score
-        if breedte_profiel >= 6: return False
-        if breedte_profiel >= 5: return False
-        if breedte_profiel >= 4: return False
-        return True  # weinig opties → toch toestaan
-
-    # ── Geval 1: eerste uur/uren zijn samenvoeging ──
-    eerste_uur = block_hours[0]
-    for sameng_attr in actieve_attracties_per_uur.get(eerste_uur, set()):
-        if " + " not in sameng_attr:
-            continue
-        if not student_kan_attr(student, sameng_attr):
-            continue
-
-        # Hoeveel opeenvolgende uren is de samenvoeging actief vanaf het begin?
-        sameng_uren = []
-        for h in block_hours:
-            if sameng_attr in actieve_attracties_per_uur.get(h, set()):
-                sameng_uren.append(h)
-            else:
-                break
-
-        rest_uren = [h for h in block_hours if h not in sameng_uren]
-        if not rest_uren:
-            continue
-
-        if not all(_has_capacity(sameng_attr, h) for h in sameng_uren):
-            continue
-
-        onderdelen = [o.strip() for o in sameng_attr.split("+")]
-
-        for onderdeel in onderdelen:
-            if not student_kan_attr(student, onderdeel):
-                continue
-            if not all(_has_capacity(onderdeel, h) for h in rest_uren):
-                continue
-
-            if len(uren_bij_basis_attr(student, onderdeel) | set(block_hours)) > 6:
-                continue
-            if not fairness_ok(onderdeel, block_hours):
-                continue
-
-            for h in sameng_uren:
-                assigned_map[(h, sameng_attr)].append(student["naam"])
-                per_hour_assigned_counts[h][sameng_attr] += 1
-                student["assigned_hours"].append(h)
-            student["assigned_attracties"].add(sameng_attr)
-
-            for h in rest_uren:
-                assigned_map[(h, onderdeel)].append(student["naam"])
-                per_hour_assigned_counts[h][onderdeel] += 1
-                student["assigned_hours"].append(h)
-            student["assigned_attracties"].add(onderdeel)
-
-            return True
-
-    # ── Geval 2: laatste uur/uren zijn samenvoeging ──
-    laatste_uur = block_hours[-1]
-    for sameng_attr in actieve_attracties_per_uur.get(laatste_uur, set()):
-        if " + " not in sameng_attr:
-            continue
-        if not student_kan_attr(student, sameng_attr):
-            continue
-
-        sameng_uren = []
-        for h in reversed(block_hours):
-            if sameng_attr in actieve_attracties_per_uur.get(h, set()):
-                sameng_uren.insert(0, h)
-            else:
-                break
-
-        vroege_uren = [h for h in block_hours if h not in sameng_uren]
-        if not vroege_uren:
-            continue
-
-        if not all(_has_capacity(sameng_attr, h) for h in sameng_uren):
-            continue
-
-        onderdelen = [o.strip() for o in sameng_attr.split("+")]
-
-        for onderdeel in onderdelen:
-            if not student_kan_attr(student, onderdeel):
-                continue
-            if not all(_has_capacity(onderdeel, h) for h in vroege_uren):
-                continue
-
-            # ── AANGEPAST: gebruik uren_bij_basis_attr + fairness check ──
-            if len(uren_bij_basis_attr(student, onderdeel) | set(block_hours)) > 6:
-                continue
-            if not fairness_ok(onderdeel, block_hours):
-                continue
-
-            for h in vroege_uren:
-                assigned_map[(h, onderdeel)].append(student["naam"])
-                per_hour_assigned_counts[h][onderdeel] += 1
-                student["assigned_hours"].append(h)
-            student["assigned_attracties"].add(onderdeel)
-
-            for h in sameng_uren:
-                assigned_map[(h, sameng_attr)].append(student["naam"])
-                per_hour_assigned_counts[h][sameng_attr] += 1
-                student["assigned_hours"].append(h)
-            student["assigned_attracties"].add(sameng_attr)
-
             return True
 
     return False
