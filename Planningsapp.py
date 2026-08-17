@@ -1230,7 +1230,9 @@ def _shift_aansluitings_score(student):
     student_uren_set = set(uren)
     deels, volledig = 0, 0
     for (a, b) in _dagblokken:
-        blok_uren = set(range(a, b))
+        blok_uren = {h for h in open_uren if a <= h < b}
+        if not blok_uren:
+            continue
         overlap = blok_uren & student_uren_set
         if not overlap:
             continue
