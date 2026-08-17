@@ -2139,7 +2139,8 @@ def try_swap_last_or_first_block(student, attr):
     eerste_run  = runs[0]
 
     def kandidaat_blokken(run):
-        """Geef blokken van 2 of 3 uur terug vanuit deze run (einde eerst)."""
+        """Geef blokken van 2 of 3 uur terug vanuit deze run (einde eerst),
+        met voorkeur voor een opsplitsing die aansluit bij een ideaalmoment."""
         blokken = []
         if len(run) >= 3:
             blokken.append(run[-3:])  # laatste 3
@@ -2149,6 +2150,11 @@ def try_swap_last_or_first_block(student, attr):
             blokken.append(run[:3])   # eerste 3
         if len(run) >= 2:
             blokken.append(run[:2])   # eerste 2
+
+        def sluit_aan_bij_ideaalmoment(blok):
+            return blok[0] in ideaalmomenten or (blok[-1] + 1) in ideaalmomenten
+
+        blokken.sort(key=lambda b: 0 if sluit_aan_bij_ideaalmoment(b) else 1)
         return blokken
 
     # ── Fase 1: strikte ruil ──
