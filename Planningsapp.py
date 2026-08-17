@@ -925,7 +925,7 @@ with st.expander("🔍 Debug: gedoodverfde kandidaten", expanded=False):
 
 
 ideaalmomenten = compute_ideal_moments()  
-
+st.write("DEBUG ideaalmomenten:", sorted(ideaalmomenten))
 
 # -----------------------------
 # Blacklist van attracties per student (BB16:BG79)
