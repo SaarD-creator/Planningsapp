@@ -1214,15 +1214,35 @@ for vp in vaste_plaatsingen:
 def student_tie_break_key(student):
     return naam_tie_break_key(student["naam"])
 
-def is_werkende_pauzevlinder(s):
-    """Geeft 1 als de student een pauzevlinder is die nog wél werkt, anders 0."""
-    if s["is_pauzevlinder"] and any(u in open_uren for u in s["uren_beschikbaar"]):
-        return 1
-    return 0
+_dagblokken = list(zip(sorted(ideaalmomenten), sorted(ideaalmomenten)[1:]))
+
+def _shift_aansluitings_score(student):
+    """
+    (aantal deels-gedekte dagblokken, -aantal volledig-gedekte dagblokken).
+    Lager = beter aansluitende shift = eerder in de plaatsingsvolgorde.
+    """
+    uren = sorted(u for u in student["uren_beschikbaar"] if u in open_uren)
+    if student["is_pauzevlinder"]:
+        uren = [u for u in uren if u not in required_pauze_hours]
+    if not uren:
+        return (0, 0)
+
+    student_uren_set = set(uren)
+    deels, volledig = 0, 0
+    for (a, b) in _dagblokken:
+        blok_uren = set(range(a, b))
+        overlap = blok_uren & student_uren_set
+        if not overlap:
+            continue
+        if overlap == blok_uren:
+            volledig += 1
+        else:
+            deels += 1
+    return (deels, -volledig)
 
 studenten_sorted = sorted(
     studenten_workend,
-    key=lambda s: (is_werkende_pauzevlinder(s), s["aantal_attracties"], student_tie_break_key(s))
+    key=lambda s: (s["aantal_attracties"], _shift_aansluitings_score(s), student_tie_break_key(s))
 )
 
 # -----------------------------
