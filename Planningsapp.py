@@ -897,35 +897,11 @@ for _attr in schaarse_attracties_globaal:
             _plekken = 1
         plekken_per_attr_uur[(_attr, _uur)] = _plekken
 
-# -----------------------------
-# TIJDELIJK - test gedoodverfde-logica, achteraf verwijderen
-# -----------------------------
-with st.expander("🔍 Debug: gedoodverfde kandidaten", expanded=False):
-    st.write("Actief eerlijkheidsnummer vandaag:", tie_break_mode)
-    st.write("Logica actief voor dit nummer?", tie_break_mode in GEDOODVERFDE_TIE_BREAK_MODES)
-    st.write("Drempel schaarste (aantal studenten):", round(SCHAARSTE_DREMPEL, 1))
-    st.write("Schaarse attracties (globaal):", sorted(schaarse_attracties_globaal))
-    st.write("Max. aantal gedoodverfde kandidaten (= aantal schaarse attracties):", len(schaarse_attracties_globaal))
-    st.write("Aantal gedoodverfde kandidaten vandaag:", len(gedoodverfde_kandidaten))
-    st.write("Gedoodverfde kandidaten:", sorted(gedoodverfde_kandidaten))
-    st.write(
-        "Heropleiding-correcties vandaag:",
-        {k: sorted(v) for k, v in heropleiding_per_student.items() if k in [s['naam'] for s in studenten_workend]}
-    )
-    st.write("Drempel alternatieven per uur:", drempel_alternatieven)
-    st.write(
-        "Alternatieven per (attractie, uur):",
-        {f"{a} @ {formatteer_uur(u)}": n for (a, u), n in sorted(alternatieven_per_attr_uur.items())}
-    )
-    st.write(
-        "Plekken per (attractie, uur):",
-        {f"{a} @ {formatteer_uur(u)}": p for (a, u), p in sorted(plekken_per_attr_uur.items())}
-    )
+
 
 
 
 ideaalmomenten = compute_ideal_moments()  
-st.write("DEBUG ideaalmomenten:", sorted(ideaalmomenten))
 
 # -----------------------------
 # Blacklist van attracties per student (BB16:BG79)
