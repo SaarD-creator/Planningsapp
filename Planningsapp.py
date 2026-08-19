@@ -598,6 +598,36 @@ open_uren = sorted(set(open_uren))
 
 
 # -----------------------------
+# Aanpassingen K3:M14 - ook toepassen op de gewone planning
+# -----------------------------
+_vinkje_g9 = ws_speciaal.cell(9, 7).value  # G9 in Input_
+GLOBALE_AANPASSINGEN_ACTIEF = _vinkje_g9 in [1, True, "WAAR", "X"]
+
+if GLOBALE_AANPASSINGEN_ACTIEF:
+    for _rij in range(3, 15):  # K3:M14 in Aanpassingen
+        _type_val  = ws_aanpassingen.cell(_rij, 11).value  # kolom K
+        _left_val  = ws_aanpassingen.cell(_rij, 12).value  # kolom L
+        _right_val = ws_aanpassingen.cell(_rij, 13).value  # kolom M
+
+        _type  = str(_type_val).strip().lower() if _type_val is not None else ""
+        _left  = str(_left_val).strip() if _left_val is not None and str(_left_val).strip() != "" else ""
+        _right = str(_right_val).strip() if _right_val is not None and str(_right_val).strip() != "" else ""
+
+        if not _left and not _right:
+            continue
+
+        if _type == "samen" and _left and _right:
+            _groep = [_left, _right]
+            for _uur in open_uren:
+                uur_samenvoegingen[_uur].append(_groep)
+            samengevoegde_attracties.add(" + ".join(_groep))
+        else:
+            for _attr in (_left, _right):
+                if _attr:
+                    dichte_uren_per_attr[normalize_attr(_attr)].update(open_uren)
+
+
+# -----------------------------
 # Sorteervolgorde studenten
 # Eerst op aantal attracties,
 # daarna op vaste tie-break regel uit BU2
@@ -8558,22 +8588,26 @@ def lm5_bereken_pauze_counts(absentees_set, base_maps):
 def lm5_extract_capacity_actions():
     result = []
 
-    # L3:M12 in Aanpassingen
-    for rij in range(3, 13):
-        left_source = ws_aanpassingen.cell(rij, 12).value   # kolom L
+    # K3:M14 in Aanpassingen
+    for rij in range(3, 15):
+        type_source  = ws_aanpassingen.cell(rij, 11).value  # kolom K
+        left_source  = ws_aanpassingen.cell(rij, 12).value  # kolom L
         right_source = ws_aanpassingen.cell(rij, 13).value  # kolom M
 
+        type_waarde = str(type_source).strip().lower() if type_source is not None else ""
         left = str(left_source).strip() if left_source is not None and str(left_source).strip() != "" else ""
         right = str(right_source).strip() if right_source is not None and str(right_source).strip() != "" else ""
 
         if not left and not right:
             continue
 
-        if left and not right:
-            result.append({"type": "disable", "attr": left, "source_row": rij})
-
-        elif left and right:
+        if type_waarde == "samen" and left and right:
             result.append({"type": "merge", "groep": [left, right], "source_row": rij})
+        else:
+            if left:
+                result.append({"type": "disable", "attr": left, "source_row": rij})
+            if right:
+                result.append({"type": "disable", "attr": right, "source_row": rij})
 
     return result
 
