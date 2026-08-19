@@ -1,3 +1,4 @@
+# gedoodverfde kandidaten + volgorde op basis van shiften
 # toevoeging werkblad "Onthaal", weinig getest
 # fix open spots maar verdere testen nodig! + open spots bij enkel lange pauzes ontbreken nog 
 # toevoegingen Antwerpen compleet
@@ -422,6 +423,122 @@ def normalize_attr(name):
         s = parts[0]
     return s.strip().lower()
 
+
+
+def lees_globale_capacity_acties():
+    """Leest Aanpassingen K3:M14 in: 'Samen' = samenvoegen, 'Uit' (of leeg) = uitschakelen."""
+    result = []
+    for rij in range(3, 15):  # K3:M14
+        type_val  = ws_aanpassingen.cell(rij, 11).value  # kolom K
+        left_val  = ws_aanpassingen.cell(rij, 12).value  # kolom L
+        right_val = ws_aanpassingen.cell(rij, 13).value  # kolom M
+
+        type_waarde = str(type_val).strip().lower() if type_val is not None else ""
+        left = str(left_val).strip() if left_val is not None and str(left_val).strip() != "" else ""
+        right = str(right_val).strip() if right_val is not None and str(right_val).strip() != "" else ""
+
+        if not left and not right:
+            continue
+
+        if type_waarde == "samen" and left and right:
+            result.append({"type": "merge", "groep": [left, right], "source_row": rij})
+        else:
+            if left:
+                result.append({"type": "disable", "attr": left, "source_row": rij})
+            if right:
+                result.append({"type": "disable", "attr": right, "source_row": rij})
+    return result
+
+
+_vinkje_g9 = ws_speciaal.cell(9, 7).value  # G9 in Input_
+GLOBALE_AANPASSINGEN_ACTIEF = _vinkje_g9 in [1, True, "WAAR", "X"]
+
+
+def _bepaal_forced_acties_voor_uur(uur, beschikbare_studenten, capacity_acties):
+    """
+    Bepaalt, enkel voor DIT uur, welke Aanpassingen-acties (samenvoegen/uitschakelen)
+    nodig zijn zodat het aantal actieve, losse attractie-plekken niet hoger ligt dan het
+    aantal beschikbare studenten. Volgt daarbij de volgorde uit Aanpassingen K3:M14.
+    Geeft (nieuwe_groepen, nieuwe_disables) terug, enkel voor dit uur.
+    """
+    counts = {}
+    active = set()
+    for a in attracties_te_plannen:
+        if " + " in str(a):
+            continue
+        if uur in dichte_uren_per_attr.get(normalize_attr(a), set()):
+            counts[a] = 0
+        elif aantallen_raw.get(a, 0) >= 1:
+            counts[a] = 1
+            active.add(a)
+        else:
+            counts[a] = 0
+
+    for groep in uur_samenvoegingen.get(uur, []):
+        g = [str(x).strip() for x in groep if x and str(x).strip()]
+        if len(g) < 2:
+            continue
+        sameng = " + ".join(g)
+        counts[sameng] = 1
+        active.add(sameng)
+        for onderdeel in g:
+            counts[onderdeel] = 0
+            active.discard(onderdeel)
+
+    def min_spots():
+        return sum(1 for a in active if counts.get(a, 0) >= 1)
+
+    nieuwe_groepen = []
+    nieuwe_disables = []
+
+    while min_spots() > beschikbare_studenten:
+        found = False
+        for actie in capacity_acties:
+            if min_spots() <= beschikbare_studenten:
+                break
+
+            if actie["type"] == "merge":
+                g = [str(x).strip() for x in actie["groep"] if x and str(x).strip()]
+                if len(g) < 2:
+                    continue
+                sameng = " + ".join(g)
+                if sameng in active and all(counts.get(a, 0) == 0 for a in g):
+                    continue
+                if not all(a in active for a in g):
+                    continue
+                before = min_spots()
+                after = before - len(g) + 1
+                if after >= before:
+                    continue
+                for onderdeel in g:
+                    counts[onderdeel] = 0
+                    active.discard(onderdeel)
+                counts[sameng] = 1
+                active.add(sameng)
+                nieuwe_groepen.append(g)
+                found = True
+                break
+
+            elif actie["type"] == "disable":
+                attr = str(actie["attr"]).strip()
+                if attr not in active or counts.get(attr, 0) < 1:
+                    continue
+                before = min_spots()
+                after = before - 1
+                if after >= before:
+                    continue
+                counts[attr] = 0
+                active.discard(attr)
+                nieuwe_disables.append(attr)
+                found = True
+                break
+
+        if not found:
+            break
+
+    return nieuwe_groepen, nieuwe_disables
+    
+
 def parse_header_uur(header):
     """Map headertekst (bv. '14u', '14:00', '14:30') naar het hele uur (14)."""
     if not header:
@@ -598,36 +715,6 @@ open_uren = sorted(set(open_uren))
 
 
 # -----------------------------
-# Aanpassingen K3:M14 - ook toepassen op de gewone planning
-# -----------------------------
-_vinkje_g9 = ws_speciaal.cell(9, 7).value  # G9 in Input_
-GLOBALE_AANPASSINGEN_ACTIEF = _vinkje_g9 in [1, True, "WAAR", "X"]
-
-if GLOBALE_AANPASSINGEN_ACTIEF:
-    for _rij in range(3, 15):  # K3:M14 in Aanpassingen
-        _type_val  = ws_aanpassingen.cell(_rij, 11).value  # kolom K
-        _left_val  = ws_aanpassingen.cell(_rij, 12).value  # kolom L
-        _right_val = ws_aanpassingen.cell(_rij, 13).value  # kolom M
-
-        _type  = str(_type_val).strip().lower() if _type_val is not None else ""
-        _left  = str(_left_val).strip() if _left_val is not None and str(_left_val).strip() != "" else ""
-        _right = str(_right_val).strip() if _right_val is not None and str(_right_val).strip() != "" else ""
-
-        if not _left and not _right:
-            continue
-
-        if _type == "samen" and _left and _right:
-            _groep = [_left, _right]
-            for _uur in open_uren:
-                uur_samenvoegingen[_uur].append(_groep)
-            samengevoegde_attracties.add(" + ".join(_groep))
-        else:
-            for _attr in (_left, _right):
-                if _attr:
-                    dichte_uren_per_attr[normalize_attr(_attr)].update(open_uren)
-
-
-# -----------------------------
 # Sorteervolgorde studenten
 # Eerst op aantal attracties,
 # daarna op vaste tie-break regel uit BU2
@@ -739,6 +826,33 @@ for nieuwe in samengevoegde_attracties:
     if nieuwe not in attracties_te_plannen:
         attracties_te_plannen.append(nieuwe)
     aantallen_raw[nieuwe] = 1
+
+
+# -----------------------------
+# Aanpassingen K3:M14 - ook voor de gewone planning,
+# maar ENKEL op de uren waar er niet genoeg studenten zijn (in volgorde)
+# -----------------------------
+if GLOBALE_AANPASSINGEN_ACTIEF:
+    _globale_capacity_acties = lees_globale_capacity_acties()
+    for _uur in open_uren:
+        _beschikbaar = sum(
+            1 for _s in studenten
+            if _uur in _s["uren_beschikbaar"] and not (
+                _s["is_pauzevlinder"] and _uur in required_pauze_hours
+            )
+        )
+        _nieuwe_groepen, _nieuwe_disables = _bepaal_forced_acties_voor_uur(
+            _uur, _beschikbaar, _globale_capacity_acties
+        )
+        for _g in _nieuwe_groepen:
+            uur_samenvoegingen[_uur].append(_g)
+            _sameng_naam = " + ".join(_g)
+            samengevoegde_attracties.add(_sameng_naam)
+            if _sameng_naam not in attracties_te_plannen:
+                attracties_te_plannen.append(_sameng_naam)
+            aantallen_raw[_sameng_naam] = 1
+        for _attr in _nieuwe_disables:
+            dichte_uren_per_attr[normalize_attr(_attr)].add(_uur)
 
 
 # -----------------------------
@@ -927,11 +1041,35 @@ for _attr in schaarse_attracties_globaal:
             _plekken = 1
         plekken_per_attr_uur[(_attr, _uur)] = _plekken
 
-
+# -----------------------------
+# TIJDELIJK - test gedoodverfde-logica, achteraf verwijderen
+# -----------------------------
+with st.expander("🔍 Debug: gedoodverfde kandidaten", expanded=False):
+    st.write("Actief eerlijkheidsnummer vandaag:", tie_break_mode)
+    st.write("Logica actief voor dit nummer?", tie_break_mode in GEDOODVERFDE_TIE_BREAK_MODES)
+    st.write("Drempel schaarste (aantal studenten):", round(SCHAARSTE_DREMPEL, 1))
+    st.write("Schaarse attracties (globaal):", sorted(schaarse_attracties_globaal))
+    st.write("Max. aantal gedoodverfde kandidaten (= aantal schaarse attracties):", len(schaarse_attracties_globaal))
+    st.write("Aantal gedoodverfde kandidaten vandaag:", len(gedoodverfde_kandidaten))
+    st.write("Gedoodverfde kandidaten:", sorted(gedoodverfde_kandidaten))
+    st.write(
+        "Heropleiding-correcties vandaag:",
+        {k: sorted(v) for k, v in heropleiding_per_student.items() if k in [s['naam'] for s in studenten_workend]}
+    )
+    st.write("Drempel alternatieven per uur:", drempel_alternatieven)
+    st.write(
+        "Alternatieven per (attractie, uur):",
+        {f"{a} @ {formatteer_uur(u)}": n for (a, u), n in sorted(alternatieven_per_attr_uur.items())}
+    )
+    st.write(
+        "Plekken per (attractie, uur):",
+        {f"{a} @ {formatteer_uur(u)}": p for (a, u), p in sorted(plekken_per_attr_uur.items())}
+    )
 
 
 
 ideaalmomenten = compute_ideal_moments()  
+st.write("DEBUG ideaalmomenten:", sorted(ideaalmomenten))
 
 # -----------------------------
 # Blacklist van attracties per student (BB16:BG79)
@@ -8586,30 +8724,7 @@ def lm5_bereken_pauze_counts(absentees_set, base_maps):
 
 
 def lm5_extract_capacity_actions():
-    result = []
-
-    # K3:M14 in Aanpassingen
-    for rij in range(3, 15):
-        type_source  = ws_aanpassingen.cell(rij, 11).value  # kolom K
-        left_source  = ws_aanpassingen.cell(rij, 12).value  # kolom L
-        right_source = ws_aanpassingen.cell(rij, 13).value  # kolom M
-
-        type_waarde = str(type_source).strip().lower() if type_source is not None else ""
-        left = str(left_source).strip() if left_source is not None and str(left_source).strip() != "" else ""
-        right = str(right_source).strip() if right_source is not None and str(right_source).strip() != "" else ""
-
-        if not left and not right:
-            continue
-
-        if type_waarde == "samen" and left and right:
-            result.append({"type": "merge", "groep": [left, right], "source_row": rij})
-        else:
-            if left:
-                result.append({"type": "disable", "attr": left, "source_row": rij})
-            if right:
-                result.append({"type": "disable", "attr": right, "source_row": rij})
-
-    return result
+    return lees_globale_capacity_acties()
 
 def lm5_all_single_attrs():
     return [a for a in attracties_te_plannen if " + " not in str(a)]
