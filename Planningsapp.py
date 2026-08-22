@@ -1,3 +1,4 @@
+# automatische uitschakeling en samenvoeging
 # gedoodverfde kandidaten + volgorde op basis van shiften
 # toevoeging werkblad "Onthaal", weinig getest
 # fix open spots maar verdere testen nodig! + open spots bij enkel lange pauzes ontbreken nog 
@@ -610,16 +611,17 @@ for rij in range(2, 500):
 dichte_uren_per_attr = defaultdict(set)
 # Input_: rijen 17 t/m 22, vakjes in I-S (kol 9-19), attractienaam in T (kol 20)
 
-for rij in range(17, 23):  # rij 17 t/m 22
-    attr_naam_raw = ws_speciaal.cell(rij, 20).value  # kolom T
-    if attr_naam_raw:
-        attr_naam = normalize_attr(attr_naam_raw)
-        for col_idx in range(9, 20):  # kolom I t/m S
-            val = ws_speciaal.cell(rij, col_idx).value
-            if val in [1, True, "WAAR", "X"]:
-                uur = col_to_uur_speciaal.get(col_idx)
-                if uur:
-                    dichte_uren_per_attr[attr_naam].add(uur)
+if not GLOBALE_AANPASSINGEN_ACTIEF:
+    for rij in range(17, 23):  # rij 17 t/m 22
+        attr_naam_raw = ws_speciaal.cell(rij, 20).value  # kolom T
+        if attr_naam_raw:
+            attr_naam = normalize_attr(attr_naam_raw)
+            for col_idx in range(9, 20):  # kolom I t/m S
+                val = ws_speciaal.cell(rij, col_idx).value
+                if val in [1, True, "WAAR", "X"]:
+                    uur = col_to_uur_speciaal.get(col_idx)
+                    if uur:
+                        dichte_uren_per_attr[attr_naam].add(uur)
 
 # -----------------------------
 # Samenvoeg-attracties (per uur)
@@ -630,19 +632,20 @@ for rij in range(17, 23):  # rij 17 t/m 22
 uur_samenvoegingen = defaultdict(list)
 # Input_: rijen 10 t/m 15, vakjes in I-S (kol 9-19), attractienamen in T-U-V (kol 20-22)
 
-for rij in range(10, 16):  # rij 10 t/m 15
-    groep = []
-    for col in range(20, 23):  # kolom T, U, V
-        val = ws_speciaal.cell(rij, col).value
-        if val:
-            groep.append(str(val).strip())
+if not GLOBALE_AANPASSINGEN_ACTIEF:
+    for rij in range(10, 16):  # rij 10 t/m 15
+        groep = []
+        for col in range(20, 23):  # kolom T, U, V
+            val = ws_speciaal.cell(rij, col).value
+            if val:
+                groep.append(str(val).strip())
 
-    if len(groep) > 1:
-        for col_idx in range(9, 20):  # kolom I t/m S
-            if ws_speciaal.cell(rij, col_idx).value in [1, True, "WAAR", "X"]:
-                uur = col_to_uur_speciaal.get(col_idx)
-                if uur:
-                    uur_samenvoegingen[uur].append(groep)
+        if len(groep) > 1:
+            for col_idx in range(9, 20):  # kolom I t/m S
+                if ws_speciaal.cell(rij, col_idx).value in [1, True, "WAAR", "X"]:
+                    uur = col_to_uur_speciaal.get(col_idx)
+                    if uur:
+                        uur_samenvoegingen[uur].append(groep)
 
 
 # -----------------------------
@@ -7260,34 +7263,36 @@ def pp2_tel_rode_cellen_extern(wb, conflict_rgb="00FFC7CE"):
 
 PP2_MAX_POGINGEN = 5
 _pp2_beste_aantal_rood = None
+GEEN_PAUZEVLINDERS_GESELECTEERD = not selected
 
-for _pp2_poging in range(PP2_MAX_POGINGEN):
-    maak_pp2_sheets(wb_out, assigned_map)
-    _pp2_aantal_rood = pp2_tel_rode_cellen_extern(wb_out)
+if selected:
+    for _pp2_poging in range(PP2_MAX_POGINGEN):
+        maak_pp2_sheets(wb_out, assigned_map)
+        _pp2_aantal_rood = pp2_tel_rode_cellen_extern(wb_out)
 
-    if _pp2_beste_aantal_rood is None or _pp2_aantal_rood < _pp2_beste_aantal_rood:
-        _pp2_beste_aantal_rood = _pp2_aantal_rood
+        if _pp2_beste_aantal_rood is None or _pp2_aantal_rood < _pp2_beste_aantal_rood:
+            _pp2_beste_aantal_rood = _pp2_aantal_rood
 
-        for _naam in ["Pauzeplanning_beste", "Feedback PP_beste"]:
-            if _naam in wb_out.sheetnames:
-                wb_out.remove(wb_out[_naam])
+            for _naam in ["Pauzeplanning_beste", "Feedback PP_beste"]:
+                if _naam in wb_out.sheetnames:
+                    wb_out.remove(wb_out[_naam])
 
-        _pp2_kopie_pp = wb_out.copy_worksheet(wb_out["Pauzeplanning"])
-        _pp2_kopie_pp.title = "Pauzeplanning_beste"
-        _pp2_kopie_fb = wb_out.copy_worksheet(wb_out["Feedback PP"])
-        _pp2_kopie_fb.title = "Feedback PP_beste"
+            _pp2_kopie_pp = wb_out.copy_worksheet(wb_out["Pauzeplanning"])
+            _pp2_kopie_pp.title = "Pauzeplanning_beste"
+            _pp2_kopie_fb = wb_out.copy_worksheet(wb_out["Feedback PP"])
+            _pp2_kopie_fb.title = "Feedback PP_beste"
 
-    if _pp2_beste_aantal_rood == 0:
-        break
+        if _pp2_beste_aantal_rood == 0:
+            break
 
-# De beste poging terugzetten onder de juiste, definitieve naam
-wb_out.remove(wb_out["Pauzeplanning"])
-wb_out.remove(wb_out["Feedback PP"])
+    # De beste poging terugzetten onder de juiste, definitieve naam
+    wb_out.remove(wb_out["Pauzeplanning"])
+    wb_out.remove(wb_out["Feedback PP"])
 
-_pp2_beste_pp = wb_out["Pauzeplanning_beste"]
-_pp2_beste_pp.title = "Pauzeplanning"
-_pp2_beste_fb = wb_out["Feedback PP_beste"]
-_pp2_beste_fb.title = "Feedback PP"
+    _pp2_beste_pp = wb_out["Pauzeplanning_beste"]
+    _pp2_beste_pp.title = "Pauzeplanning"
+    _pp2_beste_fb = wb_out["Feedback PP_beste"]
+    _pp2_beste_fb.title = "Feedback PP"
 
 
 # PART 6 6666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666
@@ -8474,6 +8479,8 @@ for rij in ws_hero.iter_rows():
 output = BytesIO()
 wb_out.save(output)
 output.seek(0)
+if GEEN_PAUZEVLINDERS_GESELECTEERD:
+    st.info("Je hebt geen pauzevlinders geselecteerd, de pauzeplanning zal niet beschikbaar zijn.")
 # st.success("Planning gegenereerd!")
 st.download_button(
     "Download planning",
