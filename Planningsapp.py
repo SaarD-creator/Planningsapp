@@ -2622,7 +2622,8 @@ for extra_idx, naam in enumerate(extras_flat, start=1):
 
 
 # --- Dikkere randen bij start en einde van een shift ---
-thick_side = Side(style="medium")
+start_side = Side(style="double")
+eind_side  = Side(style="thick")
 
 student_uren_cellen = defaultdict(list)
 for row in range(2, rij_out):
@@ -2638,15 +2639,14 @@ for naam, cellen in student_uren_cellen.items():
     eerste_cel = ws_out.cell(eerste_row, eerste_col)
     rand = eerste_cel.border
     eerste_cel.border = Border(
-        left=thick_side, right=rand.right, top=rand.top, bottom=rand.bottom
+        left=start_side, right=rand.right, top=rand.top, bottom=rand.bottom
     )
 
     laatste_cel = ws_out.cell(laatste_row, laatste_col)
     rand = laatste_cel.border
     laatste_cel.border = Border(
-        left=rand.left, right=thick_side, top=rand.top, bottom=rand.bottom
+        left=rand.left, right=eind_side, top=rand.top, bottom=rand.bottom
     )
-
 # Kolombreedte
 for col in range(1, len(open_uren) + 2):
     ws_out.column_dimensions[get_column_letter(col)].width = 18
