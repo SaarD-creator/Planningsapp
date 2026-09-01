@@ -2647,6 +2647,7 @@ for naam, cellen in student_uren_cellen.items():
     laatste_cel.border = Border(
         left=rand.left, right=eind_side, top=rand.top, bottom=rand.bottom
     )
+        laatste_cel.font = Font(bold=True)
 # Kolombreedte
 for col in range(1, len(open_uren) + 2):
     ws_out.column_dimensions[get_column_letter(col)].width = 18
