@@ -4267,31 +4267,31 @@ def maak_pp2_sheets(wb_arg, am_arg):
     
     
         def pp2_sort_step2_namen(namenlijst):
-        """
-        Sorteer voor stap 2:
-        - eerst wie vroeger stopt
-        - bij gelijke eindtijd: wie eerder START (echte begin_uur uit Studenten-blad)
-          krijgt ook eerder pauze
-        - bij gelijke start én eind: random volgorde (maakt niet uit wie eerst is)
-        """
-        per_einduur = defaultdict(list)
-        for naam in namenlijst:
-            werk_uren = pp2_get_student_work_hours(naam)
-            if werk_uren:
-                einduur = max(werk_uren)
-                per_einduur[einduur].append(naam)
-
-        def pp2_echte_begin(naam):
-            student = next((s for s in studenten if s["naam"] == naam), None)
-            return student.get("begin_uur") if student else None
-
-        resultaat = []
-        for einduur in sorted(per_einduur.keys()):
-            groep = per_einduur[einduur][:]
-            random.shuffle(groep)
-            groep.sort(key=lambda n: (pp2_echte_begin(n) is None, pp2_echte_begin(n)))
-            resultaat.extend(groep)
-        return resultaat
+            """
+            Sorteer voor stap 2:
+            - eerst wie vroeger stopt
+            - bij gelijke eindtijd: wie eerder START (echte begin_uur uit Studenten-blad)
+              krijgt ook eerder pauze
+            - bij gelijke start én eind: random volgorde (maakt niet uit wie eerst is)
+            """
+            per_einduur = defaultdict(list)
+            for naam in namenlijst:
+                werk_uren = pp2_get_student_work_hours(naam)
+                if werk_uren:
+                    einduur = max(werk_uren)
+                    per_einduur[einduur].append(naam)
+    
+            def pp2_echte_begin(naam):
+                student = next((s for s in studenten if s["naam"] == naam), None)
+                return student.get("begin_uur") if student else None
+    
+            resultaat = []
+            for einduur in sorted(per_einduur.keys()):
+                groep = per_einduur[einduur][:]
+                random.shuffle(groep)
+                groep.sort(key=lambda n: (pp2_echte_begin(n) is None, pp2_echte_begin(n)))
+                resultaat.extend(groep)
+            return resultaat
     
     def pp2_get_pv_row_for_name(naam, pv_rows):
         """
