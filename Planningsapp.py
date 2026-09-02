@@ -1,3 +1,5 @@
+# layout met eind en begin uur duidelijker 
+# eerlijkheidsvolgorde --> gedoodverfde kandidaten + logischere volgorde verdeling
 # toevoeging werkblad "Onthaal", weinig getest
 # fix open spots maar verdere testen nodig! + open spots bij enkel lange pauzes ontbreken nog 
 # toevoegingen Antwerpen compleet
@@ -4264,17 +4266,14 @@ def maak_pp2_sheets(wb_arg, am_arg):
         return 0
     
     
-    def pp2_sort_step2_namen(namenlijst):
+        def pp2_sort_step2_namen(namenlijst):
         """
         Sorteer voor stap 2:
         - eerst wie vroeger stopt
-        - bij gelijke eindtijd:
-            * wie tot het einduur van de dag werkt: wie eerder START,
-              krijgt ook eerder pauze (geen willekeur meer)
-            * anders: random volgorde (maakt niet uit wie eerst is)
+        - bij gelijke eindtijd: wie eerder START (echte begin_uur uit Studenten-blad)
+          krijgt ook eerder pauze
+        - bij gelijke start én eind: random volgorde (maakt niet uit wie eerst is)
         """
-        dag_eind_uur = max(open_uren) if open_uren else None
-
         per_einduur = defaultdict(list)
         for naam in namenlijst:
             werk_uren = pp2_get_student_work_hours(naam)
@@ -4282,14 +4281,15 @@ def maak_pp2_sheets(wb_arg, am_arg):
                 einduur = max(werk_uren)
                 per_einduur[einduur].append(naam)
 
+        def pp2_echte_begin(naam):
+            student = next((s for s in studenten if s["naam"] == naam), None)
+            return student.get("begin_uur") if student else None
+
         resultaat = []
         for einduur in sorted(per_einduur.keys()):
             groep = per_einduur[einduur][:]
-            if dag_eind_uur is not None and einduur == dag_eind_uur:
-                random.shuffle(groep)
-                groep.sort(key=lambda n: min(pp2_get_student_work_hours(n)))
-            else:
-                random.shuffle(groep)
+            random.shuffle(groep)
+            groep.sort(key=lambda n: (pp2_echte_begin(n) is None, pp2_echte_begin(n)))
             resultaat.extend(groep)
         return resultaat
     
