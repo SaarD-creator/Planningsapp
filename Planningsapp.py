@@ -746,6 +746,41 @@ if FREEPLAY_PER_VERDIEPING:
         (verdieping_3, grens_3),
     ]
 
+    # --- Noodgreep-acties uit Aanpassingen K3:M14 ("Samen" / "Uit") ---
+    def _lees_verdieping_capaciteit_acties():
+        result = []
+        for rij in range(3, 15):  # K3:M14
+            type_raw = ws_aanpassingen.cell(rij, 11).value   # kolom K
+            links_raw = ws_aanpassingen.cell(rij, 12).value  # kolom L
+            rechts_raw = ws_aanpassingen.cell(rij, 13).value  # kolom M
+
+            type_woord = str(type_raw).strip().lower() if type_raw else ""
+            links = str(links_raw).strip() if links_raw else ""
+            rechts = str(rechts_raw).strip() if rechts_raw else ""
+
+            if type_woord == "samen" and links and rechts:
+                result.append({"type": "merge", "groep": [links, rechts], "source_row": rij})
+            elif type_woord == "uit":
+                for attr in (links, rechts):
+                    if attr:
+                        result.append({"type": "disable", "attr": attr, "source_row": rij})
+        return result
+
+    verdieping_capaciteit_acties = _lees_verdieping_capaciteit_acties()
+
+    def _voeg_nieuwe_samenvoeging_toe(groep):
+        """Registreer een ad-hoc 'Samen'-koppel net zoals een vaste samenvoeging (incl. studentcapaciteit)."""
+        sameng_naam = " + ".join(groep)
+        if sameng_naam not in attracties_te_plannen:
+            attracties_te_plannen.append(sameng_naam)
+        aantallen_raw[sameng_naam] = 1
+        samengevoegde_attracties.add(sameng_naam)
+        for s in studenten:
+            huidige = set(s["attracties"])
+            if all(o in huidige for o in groep) and sameng_naam not in s["attracties"]:
+                s["attracties"].append(sameng_naam)
+        return sameng_naam
+
     dag_beginuur = min(open_uren) if open_uren else None
     vorige_grens = dag_beginuur
 
@@ -755,12 +790,63 @@ if FREEPLAY_PER_VERDIEPING:
                 break  # geen (verdere) grens ingevuld --> vanaf hier alles normaal open
 
             for uur in open_uren:
-                if vorige_grens <= uur < grens:
-                    for a in attracties_te_plannen:
-                        if " + " in a:
-                            continue  # samengevoegde attracties hier niet aanraken
-                        if normalize_attr(a) not in lijst:
-                            dichte_uren_per_attr[normalize_attr(a)].add(uur)
+                if not (vorige_grens <= uur < grens):
+                    continue
+
+                # 1. Sluit alle attracties die niet op deze verdieping staan
+                for a in attracties_te_plannen:
+                    if " + " in a:
+                        continue
+                    if normalize_attr(a) not in lijst:
+                        dichte_uren_per_attr[normalize_attr(a)].add(uur)
+
+                # 2. Check of er genoeg studenten zijn voor wat er nog open staat op deze verdieping
+                actief_op_verdieping = [
+                    a for a in attracties_te_plannen
+                    if " + " not in a
+                    and normalize_attr(a) in lijst
+                    and uur not in dichte_uren_per_attr.get(normalize_attr(a), set())
+                ]
+
+                student_count = sum(
+                    1 for s in studenten
+                    if uur in s["uren_beschikbaar"] and not (
+                        s["is_pauzevlinder"] and uur in required_pauze_hours
+                    )
+                )
+
+                # 3. Te weinig studenten? Loop rij per rij door K3:M14, top naar onder
+                while len(actief_op_verdieping) > student_count:
+                    gevonden = False
+                    for actie in verdieping_capaciteit_acties:
+                        actieve_genormaliseerd = [normalize_attr(x) for x in actief_op_verdieping]
+
+                        if actie["type"] == "merge":
+                            groep = actie["groep"]
+                            if all(normalize_attr(g) in actieve_genormaliseerd for g in groep):
+                                for onderdeel in actief_op_verdieping[:]:
+                                    if normalize_attr(onderdeel) in [normalize_attr(g) for g in groep]:
+                                        actief_op_verdieping.remove(onderdeel)
+                                sameng_naam = _voeg_nieuwe_samenvoeging_toe(groep)
+                                uur_samenvoegingen[uur].append(groep)
+                                actief_op_verdieping.append(sameng_naam)
+                                gevonden = True
+                                break
+
+                        elif actie["type"] == "disable":
+                            attr = actie["attr"]
+                            match = next(
+                                (x for x in actief_op_verdieping if normalize_attr(x) == normalize_attr(attr)),
+                                None
+                            )
+                            if match:
+                                actief_op_verdieping.remove(match)
+                                dichte_uren_per_attr[normalize_attr(match)].add(uur)
+                                gevonden = True
+                                break
+
+                    if not gevonden:
+                        break  # geen enkele rij helpt nog -- tekort blijft bestaan
 
             vorige_grens = grens
 # ------------------------------------------------------------------------
