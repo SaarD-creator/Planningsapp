@@ -1,3 +1,4 @@
+# update pauzeplanning vroeger beginuur, nog niet aangepast in huidige versie
 # layout met eind en begin uur duidelijker 
 # eerlijkheidsvolgorde --> gedoodverfde kandidaten + logischere volgorde verdeling
 # toevoeging werkblad "Onthaal", weinig getest
@@ -107,6 +108,11 @@ vandaag_altijd_vandaag = _vandaag_datum.strftime("%d-%m-%Y")  # altijd vandaag, 
 
 _w5 = str(ws_speciaal.cell(5, 23).value or "").strip().lower()
 RUSTIG_MODUS = (_w5 == "rustig")
+
+# --- VINKJE Y3/Z3 (Input_, samengevoegde cel): freeplay per verdieping ---
+_vinkje_verdieping = ws_speciaal.cell(3, 25).value  # Y3 (samengevoegd met Z3)
+FREEPLAY_PER_VERDIEPING = _vinkje_verdieping in [1, True, "WAAR", "X"]
+# ------------------------------------------------------------------------
 
 
 def parse_uur_waarde(val):
@@ -711,6 +717,53 @@ for nieuwe in samengevoegde_attracties:
     if nieuwe not in attracties_te_plannen:
         attracties_te_plannen.append(nieuwe)
     aantallen_raw[nieuwe] = 1
+
+
+# -----------------------------
+# Freeplay per verdieping (optioneel, via vinkje Input_ Y3/Z3)
+# -----------------------------
+if FREEPLAY_PER_VERDIEPING:
+
+    def _lees_verdieping_lijst(kolom, rij_start, rij_eind):
+        namen = []
+        for rij in range(rij_start, rij_eind + 1):
+            val = ws_aanpassingen.cell(rij, kolom).value
+            if val and str(val).strip():
+                namen.append(normalize_attr(val))
+        return namen
+
+    verdieping_1 = _lees_verdieping_lijst(31, 4, 13)   # AE4:AE13
+    verdieping_2 = _lees_verdieping_lijst(32, 4, 13)   # AF4:AF13
+    verdieping_3 = _lees_verdieping_lijst(33, 4, 13)   # AG4:AG13
+
+    grens_1 = parse_uur_waarde(ws_aanpassingen.cell(14, 31).value)  # AE14
+    grens_2 = parse_uur_waarde(ws_aanpassingen.cell(14, 32).value)  # AF14
+    grens_3 = parse_uur_waarde(ws_aanpassingen.cell(14, 33).value)  # AG14
+
+    verdiepingen = [
+        (verdieping_1, grens_1),
+        (verdieping_2, grens_2),
+        (verdieping_3, grens_3),
+    ]
+
+    dag_beginuur = min(open_uren) if open_uren else None
+    vorige_grens = dag_beginuur
+
+    if dag_beginuur is not None:
+        for lijst, grens in verdiepingen:
+            if grens is None:
+                break  # geen (verdere) grens ingevuld --> vanaf hier alles normaal open
+
+            for uur in open_uren:
+                if vorige_grens <= uur < grens:
+                    for a in attracties_te_plannen:
+                        if " + " in a:
+                            continue  # samengevoegde attracties hier niet aanraken
+                        if normalize_attr(a) not in lijst:
+                            dichte_uren_per_attr[normalize_attr(a)].add(uur)
+
+            vorige_grens = grens
+# ------------------------------------------------------------------------
 
 
 # -----------------------------
