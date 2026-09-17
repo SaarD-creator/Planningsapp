@@ -528,6 +528,8 @@ for rij in range(10, 16):  # rij 10 t/m 15
         if val:
             groep.append(str(val).strip())
 
+    groep = sorted(groep, key=lambda x: normalize_attr(x))  # A + B = B + A
+
     if len(groep) > 1:
         for col_idx in range(9, 20):  # kolom I t/m S
             if ws_speciaal.cell(rij, col_idx).value in [1, True, "WAAR", "X"]:
@@ -759,7 +761,8 @@ if FREEPLAY_PER_VERDIEPING:
             rechts = str(rechts_raw).strip() if rechts_raw else ""
 
             if type_woord == "samen" and links and rechts:
-                result.append({"type": "merge", "groep": [links, rechts], "source_row": rij})
+                groep = sorted([links, rechts], key=lambda x: normalize_attr(x))
+                result.append({"type": "merge", "groep": groep, "source_row": rij})
             elif type_woord == "uit":
                 for attr in (links, rechts):
                     if attr:
@@ -8926,7 +8929,10 @@ def lm5_rebuild_hour_state(uur, available_attraction_students, capacity_actions)
                 break
 
             if entry["type"] == "merge":
-                g = [str(x).strip() for x in entry["groep"] if x and str(x).strip()]
+                g = sorted(
+                    (str(x).strip() for x in entry["groep"] if x and str(x).strip()),
+                    key=lambda x: normalize_attr(x)
+                )
                 sameng = samengestelde_naam_van_groep(g)
                 source_row = entry.get("source_row", "?")
 
