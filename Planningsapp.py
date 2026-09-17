@@ -7382,7 +7382,7 @@ while afgekapte_pv_uren and _pp2_heeft_korte_pauze_tekort(wb_out):
                     break
 
     # 3. Herbouw enkel de pauzeplanning-bladen met het teruggegeven uur
-    for _sheetnaam in ("Pauzevlinders", "Pauzeplanning", "Feedback PP"):
+    for _sheetnaam in ("Pauzeplanning", "Feedback PP"):
         if _sheetnaam in wb_out.sheetnames:
             del wb_out[_sheetnaam]
 
