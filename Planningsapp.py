@@ -7316,6 +7316,79 @@ _pp2_beste_pp.title = "Pauzeplanning"
 _pp2_beste_fb = wb_out["Feedback PP_beste"]
 _pp2_beste_fb.title = "Feedback PP"
 
+# -----------------------------------------------------------------
+# Vangnet: enkel als er na de pauzeplanning nog studenten zonder
+# korte pauze zijn, probeer afgeknipte pauzevlinder-uren 1 voor 1
+# terug te geven -- maar alleen als de vlinder dat uur nog gewoon
+# los in een 'Extra'-rij staat (dus niemand raakt onbemand).
+# Verandert niets als er geen tekort is.
+# -----------------------------------------------------------------
+def _pp2_heeft_korte_pauze_tekort(wb_check):
+    if "Feedback PP" not in wb_check.sheetnames:
+        return False
+    ws_fb = wb_check["Feedback PP"]
+    for row in ws_fb.iter_rows(values_only=True):
+        for waarde in row:
+            if isinstance(waarde, str) and waarde.startswith("✗ Ontbrekende korte kwartieren"):
+                return True
+    return False
+
+_pp2_niet_veilig_terug_te_geven = set()
+
+while afgekapte_pv_uren and _pp2_heeft_korte_pauze_tekort(wb_out):
+    _pp2_pv_afknip = pp2_bepaal_pv_voor_afknip(selected)
+    if _pp2_pv_afknip is None:
+        break
+
+    # Meest recent afgeknipte uur het eerst proberen terug te geven,
+    # maar enkel als de vlinder daar nog gewoon los staat.
+    _pp2_kandidaat_uur = None
+    for _pp2_uur in sorted(afgekapte_pv_uren, reverse=True):
+        if _pp2_uur in _pp2_niet_veilig_terug_te_geven:
+            continue
+        if _pp2_pv_afknip["naam"] in extra_assignments[_pp2_uur]:
+            _pp2_kandidaat_uur = _pp2_uur
+            break
+        _pp2_niet_veilig_terug_te_geven.add(_pp2_uur)
+
+    if _pp2_kandidaat_uur is None:
+        break  # geen enkel afgeknipt uur is nog veilig terug te geven
+
+    afgekapte_pv_uren.discard(_pp2_kandidaat_uur)
+    extra_assignments[_pp2_kandidaat_uur].remove(_pp2_pv_afknip["naam"])
+
+    _pp2_kolom = None
+    for _c in range(2, ws_planning.max_column + 1):
+        if ws_planning.cell(1, _c).value == formatteer_uur(_pp2_kandidaat_uur):
+            _pp2_kolom = _c
+            break
+
+    if _pp2_kolom is not None:
+        # 1. Haal de vlinder weg uit haar 'Extra'-rij voor dit uur
+        for _r in range(2, ws_planning.max_row + 1):
+            _label = ws_planning.cell(_r, 1).value
+            if _label and str(_label).startswith("Extra") \
+               and ws_planning.cell(_r, _pp2_kolom).value == _pp2_pv_afknip["naam"]:
+                ws_planning.cell(_r, _pp2_kolom).value = ""
+                break
+
+        # 2. Zet ze terug in haar eigen 'Pauzevlinder N'-rij voor dit uur
+        _pauzevlinder_namen_sorted = [pv["naam"] for pv in selected]
+        if _pp2_pv_afknip["naam"] in _pauzevlinder_namen_sorted:
+            _pv_idx = _pauzevlinder_namen_sorted.index(_pp2_pv_afknip["naam"]) + 1
+            for _r in range(2, ws_planning.max_row + 1):
+                if ws_planning.cell(_r, 1).value == f"Pauzevlinder {_pv_idx}":
+                    ws_planning.cell(_r, _pp2_kolom).value = _pp2_pv_afknip["naam"]
+                    break
+
+    # 3. Herbouw enkel de pauzeplanning-bladen met het teruggegeven uur
+    for _sheetnaam in ("Pauzevlinders", "Pauzeplanning", "Feedback PP"):
+        if _sheetnaam in wb_out.sheetnames:
+            del wb_out[_sheetnaam]
+
+    maak_pp2_sheets(wb_out, assigned_map)
+# ------------------------------------------------------------------------
+
 
 # PART 6 6666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666
 # PART 6 666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666
