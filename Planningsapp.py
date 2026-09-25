@@ -204,7 +204,7 @@ def max_consecutive_hours(urenlijst):
 
 
 
-def compute_ideal_moments():
+def _compute_ideal_moments_op_index():
     """
     Nieuwe ideaalmomenten o.b.v. de echte shiften van de studenten.
     - shift = aaneensluitend werkinterval (PV-uren eruit geknipt)
@@ -383,6 +383,29 @@ def compute_ideal_moments():
     if beste_paar:
         kandidaat_grids.append(_half_grid((beste_paar[0], beste_paar[1])))
     return min(kandidaat_grids, key=_kwaliteit)
+    
+
+def compute_ideal_moments():
+    """Rekent de ideaalmomenten op blokposities (0,1,2,...) i.p.v. klokuren,
+    zodat starten om bv. 10u15 of halve blokken het grid niet meer verschuiven."""
+    global open_uren, required_pauze_hours, studenten_workend
+    echte_uren = sorted(open_uren)
+    if not echte_uren:
+        return set()
+    naar_idx = {u: i for i, u in enumerate(echte_uren)}
+    eind_dag = echte_uren[-1] + blok_durations.get(echte_uren[-1], 1.0)
+    bewaard = (open_uren, required_pauze_hours, studenten_workend)
+    try:
+        open_uren = list(range(len(echte_uren)))
+        required_pauze_hours = [naar_idx[u] for u in bewaard[1] if u in naar_idx]
+        studenten_workend = [
+            {**s, "uren_beschikbaar": [naar_idx[u] for u in s["uren_beschikbaar"] if u in naar_idx]}
+            for s in bewaard[2]
+        ]
+        grid_idx = _compute_ideal_moments_op_index()
+    finally:
+        open_uren, required_pauze_hours, studenten_workend = bewaard
+    return {echte_uren[i] if i < len(echte_uren) else eind_dag for i in grid_idx}
     
 
 def partition_run_lengths(run_hours, ideal_moments=None):
@@ -2273,7 +2296,9 @@ def try_swap_last_or_first_block(student, attr):
             blokken.append(run[:2])   # eerste 2
 
         def sluit_aan_bij_ideaalmoment(blok):
-            return blok[0] in ideaalmomenten or (blok[-1] + 1) in ideaalmomenten
+            volgend_uur = next((u for u in sorted(open_uren) if u > blok[-1]),
+                               blok[-1] + blok_durations.get(blok[-1], 1.0))
+            return blok[0] in ideaalmomenten or volgend_uur in ideaalmomenten
 
         blokken.sort(key=lambda b: 0 if sluit_aan_bij_ideaalmoment(b) else 1)
         return blokken
@@ -2537,6 +2562,46 @@ for uur in open_uren:
     alle_actieve_attracties |= actieve_attracties_per_uur.get(uur, set())
 
 alle_actieve_attracties = sorted(alle_actieve_attracties, key=attractie_prioriteit)
+
+
+# -----------------------------
+# Laatste vangnet: Extra's rechtstreeks op nog lege attractieplekken zetten
+# (na alle post-processing, zodat ook gaten uit wissels opgevuld worden)
+# -----------------------------
+def vul_lege_plekken_met_extras():
+    gesorteerd = sorted(open_uren)
+    for i, uur in enumerate(gesorteerd):
+        vorig_uur = gesorteerd[i - 1] if i > 0 else None
+        volgend_uur = gesorteerd[i + 1] if i + 1 < len(gesorteerd) else None
+        for attr in sorted(actieve_attracties_per_uur.get(uur, set()), key=attractie_prioriteit):
+            if attr in red_spots.get(uur, set()):
+                continue
+            while len(assigned_map.get((uur, attr), [])) < _max_spots_for(attr, uur):
+                kandidaten = []
+                for extra_naam in extra_assignments[uur]:
+                    extra_student = get_student_by_name(extra_naam)
+                    if not extra_student or not student_kan_attr(extra_student, attr):
+                        continue
+                    if len(uren_bij_basis_attr(extra_student, attr) | {uur}) > 6:
+                        continue
+                    # voorkeur: iemand die er net voor/na al staat (geen extra wissel)
+                    sluit_aan = (
+                        extra_naam in assigned_map.get((vorig_uur, attr), [])
+                        or extra_naam in assigned_map.get((volgend_uur, attr), [])
+                    )
+                    kandidaten.append((0 if sluit_aan else 1, extra_naam, extra_student))
+                if not kandidaten:
+                    break
+                kandidaten.sort(key=lambda k: (k[0], k[1]))
+                _, gekozen_naam, gekozen = kandidaten[0]
+                extra_assignments[uur].remove(gekozen_naam)
+                assigned_map[(uur, attr)].append(gekozen_naam)
+                per_hour_assigned_counts[uur][attr] = per_hour_assigned_counts[uur].get(attr, 0) + 1
+                gekozen["assigned_hours"].append(uur)
+                gekozen["assigned_attracties"].add(attr)
+
+vul_lege_plekken_met_extras()
+
 
 def stabiliseer_assigned_map_voor_output():
     gesorteerde_uren = sorted(open_uren)
